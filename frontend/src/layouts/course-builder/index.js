@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
+import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
 import Dialog from "@mui/material/Dialog";
@@ -13,6 +14,7 @@ import Icon from "@mui/material/Icon";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import Radio from "@mui/material/Radio";
 
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
@@ -141,6 +143,27 @@ function normalizeQuestionForm(question = {}, index = 0) {
   };
 }
 
+function asText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.join(", ");
+  return JSON.stringify(value);
+}
+
+function optionLabel(index) {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return letters[index] || `${index + 1}`;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function activityToManagerForm(activity) {
   const content = activity?.content || {};
   return {
@@ -166,8 +189,9 @@ function activityToManagerForm(activity) {
   };
 }
 
-function RichContentEditor({ value, onChange }) {
+function RichContentEditor({ value, onChange, onImageUpload }) {
   const editorRef = useRef(null);
+  const imageInputRef = useRef(null);
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== (value || "")) {
@@ -181,6 +205,8 @@ function RichContentEditor({ value, onChange }) {
     onChange(editorRef.current?.innerHTML || "");
   };
 
+  const insertHtml = (html) => runCommand("insertHTML", html);
+
   const insertTable = () => {
     runCommand(
       "insertHTML",
@@ -193,23 +219,41 @@ function RichContentEditor({ value, onChange }) {
     if (url) runCommand("createLink", url);
   };
 
-  const insertImage = () => {
+  const insertImageLink = () => {
     const url = window.prompt("Paste the image URL");
-    if (url) runCommand("insertImage", url);
+    if (url) insertHtml(`<img src="${url}" alt="" />`);
+  };
+
+  const uploadImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      window.alert("Image uploads are capped at 2MB.");
+      return;
+    }
+    const url = await onImageUpload(file);
+    insertHtml(`<img src="${url}" alt="${file.name}" />`);
   };
 
   const insertEmbed = () => {
-    const url = window.prompt("Paste an embed URL");
+    const url = window.prompt("Paste a video or resource URL");
     if (!url) return;
-    runCommand(
-      "insertHTML",
-      `<iframe src="${url}" style="width:100%;min-height:260px;border:0;border-radius:8px" allowfullscreen></iframe>`
+    insertHtml(
+      `<p><a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;text-decoration:none">Open video/resource</a></p>`
     );
   };
 
   return (
     <MDBox>
-      <MDBox display="flex" gap={0.5} flexWrap="wrap" mb={1}>
+      <MDBox
+        display="flex"
+        gap={0.5}
+        flexWrap="wrap"
+        mb={1}
+        py={0.5}
+        sx={{ position: "sticky", top: 0, zIndex: 2, bgcolor: "#ffffff" }}
+      >
         {[
           ["formatBlock", "H2", "title"],
           ["bold", null, "format_bold"],
@@ -234,13 +278,41 @@ function RichContentEditor({ value, onChange }) {
         <IconButton onClick={insertLink}>
           <Icon>link</Icon>
         </IconButton>
-        <IconButton onClick={insertImage}>
+        <IconButton onClick={insertImageLink}>
           <Icon>image</Icon>
+        </IconButton>
+        <IconButton onClick={() => imageInputRef.current?.click()}>
+          <Icon>upload</Icon>
+        </IconButton>
+        <IconButton
+          onClick={() =>
+            insertHtml(
+              "<code style='background:#f1f5f9;padding:2px 5px;border-radius:4px'>code</code>"
+            )
+          }
+        >
+          <Icon>code</Icon>
+        </IconButton>
+        <IconButton
+          onClick={() =>
+            insertHtml(
+              "<pre style='background:#111827;color:#e5e7eb;padding:12px;border-radius:8px;overflow:auto'><code>Code block</code></pre>"
+            )
+          }
+        >
+          <Icon>data_object</Icon>
         </IconButton>
         <IconButton onClick={insertEmbed}>
           <Icon>smart_display</Icon>
         </IconButton>
       </MDBox>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp"
+        hidden
+        onChange={uploadImage}
+      />
       <MDBox
         ref={editorRef}
         contentEditable
@@ -261,7 +333,7 @@ function RichContentEditor({ value, onChange }) {
   );
 }
 
-function ActivityManagerDialog({ activity, open, saving, onClose, onSave }) {
+function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload, onSave }) {
   const [form, setForm] = useState(activityToManagerForm(activity));
   const [csvText, setCsvText] = useState("");
 
@@ -302,6 +374,29 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onSave }) {
       })),
     }));
     setCsvText("");
+  };
+
+  const addOption = (index) => {
+    updateQuestion(index, {
+      options: [
+        ...form.questions[index].options,
+        `Option ${form.questions[index].options.length + 1}`,
+      ],
+    });
+  };
+
+  const toggleCorrectOption = (index, option) => {
+    const question = form.questions[index];
+    if (question.question_type === "multi_select") {
+      const current = Array.isArray(question.correct_answer) ? question.correct_answer : [];
+      updateQuestion(index, {
+        correct_answer: current.includes(option)
+          ? current.filter((item) => item !== option)
+          : [...current, option],
+      });
+      return;
+    }
+    updateQuestion(index, { correct_answer: option });
   };
 
   const save = () => {
@@ -457,30 +552,21 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onSave }) {
                       </Grid>
                       <Grid item xs={12} md={3}>
                         <MDInput
-                          label="Options separated by |"
+                          select
+                          label="Answer mode"
                           fullWidth
-                          value={question.options.join("|")}
+                          value={question.question_type}
                           onChange={(event) =>
-                            updateQuestion(index, {
-                              options: event.target.value
-                                .split("|")
-                                .map((option) => option.trim())
-                                .filter(Boolean),
-                            })
+                            updateQuestion(index, { question_type: event.target.value })
                           }
-                        />
+                          SelectProps={{ native: true }}
+                        >
+                          <option value="multiple_choice">Choose one</option>
+                          <option value="multi_select">Choose many</option>
+                          <option value="short_answer">Short answer</option>
+                        </MDInput>
                       </Grid>
-                      <Grid item xs={8} md={3}>
-                        <MDInput
-                          label="Correct answer"
-                          fullWidth
-                          value={question.correct_answer}
-                          onChange={(event) =>
-                            updateQuestion(index, { correct_answer: event.target.value })
-                          }
-                        />
-                      </Grid>
-                      <Grid item xs={4} md={1}>
+                      <Grid item xs={6} md={2}>
                         <MDInput
                           label="Marks"
                           type="number"
@@ -489,6 +575,97 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onSave }) {
                           onChange={(event) =>
                             updateQuestion(index, { points: event.target.value })
                           }
+                        />
+                      </Grid>
+                      <Grid item xs={6} md={2}>
+                        <MDInput
+                          label="Position"
+                          type="number"
+                          fullWidth
+                          value={question.position}
+                          onChange={(event) =>
+                            updateQuestion(index, { position: event.target.value })
+                          }
+                        />
+                      </Grid>
+                      {question.question_type === "short_answer" ? (
+                        <Grid item xs={12}>
+                          <MDInput
+                            label="Correct answer"
+                            fullWidth
+                            value={question.correct_answer}
+                            onChange={(event) =>
+                              updateQuestion(index, { correct_answer: event.target.value })
+                            }
+                          />
+                        </Grid>
+                      ) : (
+                        <Grid item xs={12}>
+                          <MDBox display="flex" flexDirection="column" gap={1}>
+                            {question.options.map((option, optionIndex) => {
+                              const checked =
+                                question.question_type === "multi_select"
+                                  ? (question.correct_answer || []).includes(option)
+                                  : question.correct_answer === option;
+                              return (
+                                <MDBox
+                                  key={`${question.id}-${optionIndex}`}
+                                  display="flex"
+                                  alignItems="center"
+                                  gap={1}
+                                  p={1}
+                                  border="1px solid #e5e7eb"
+                                  borderRadius="md"
+                                >
+                                  <MDTypography variant="button" fontWeight="bold">
+                                    {optionLabel(optionIndex)}
+                                  </MDTypography>
+                                  {question.question_type === "multi_select" ? (
+                                    <Checkbox
+                                      checked={checked}
+                                      onChange={() => toggleCorrectOption(index, option)}
+                                    />
+                                  ) : (
+                                    <Radio
+                                      checked={checked}
+                                      onChange={() => toggleCorrectOption(index, option)}
+                                    />
+                                  )}
+                                  <MDInput
+                                    label={`Option ${optionLabel(optionIndex)}`}
+                                    fullWidth
+                                    value={option}
+                                    onChange={(event) => {
+                                      const nextOptions = [...question.options];
+                                      const oldOption = nextOptions[optionIndex];
+                                      nextOptions[optionIndex] = event.target.value;
+                                      const nextPatch = { options: nextOptions };
+                                      if (question.correct_answer === oldOption) {
+                                        nextPatch.correct_answer = event.target.value;
+                                      }
+                                      updateQuestion(index, nextPatch);
+                                    }}
+                                  />
+                                </MDBox>
+                              );
+                            })}
+                            <MDButton
+                              variant="outlined"
+                              color="info"
+                              size="small"
+                              onClick={() => addOption(index)}
+                            >
+                              Add Option
+                            </MDButton>
+                          </MDBox>
+                        </Grid>
+                      )}
+                      <Grid item xs={12}>
+                        <MDInput
+                          label="Correct option summary"
+                          fullWidth
+                          value={asText(question.correct_answer)}
+                          disabled
                         />
                       </Grid>
                     </Grid>
@@ -527,6 +704,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onSave }) {
               </MDTypography>
               <RichContentEditor
                 value={form.rich_html}
+                onImageUpload={onImageUpload}
                 onChange={(richHtml) => setForm({ ...form, rich_html: richHtml })}
               />
             </Grid>
@@ -617,6 +795,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onSave }) {
 }
 
 RichContentEditor.propTypes = {
+  onImageUpload: PropTypes.func.isRequired,
   onChange: PropTypes.func.isRequired,
   value: PropTypes.string,
 };
@@ -639,6 +818,7 @@ ActivityManagerDialog.propTypes = {
     title: PropTypes.string,
   }),
   onClose: PropTypes.func.isRequired,
+  onImageUpload: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
   open: PropTypes.bool.isRequired,
   saving: PropTypes.bool.isRequired,
@@ -954,6 +1134,15 @@ function CourseBuilder() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const uploadActivityImage = async (file) => {
+    const dataUrl = await readFileAsDataUrl(file);
+    const response = await apiClient.post("/courses/activity-images", {
+      fileName: file.name,
+      dataUrl,
+    });
+    return response.url;
   };
 
   const deleteActivity = async (activity) => {
@@ -1709,6 +1898,7 @@ function CourseBuilder() {
           open={activityManagerOpen}
           saving={saving}
           onClose={() => setActivityManagerOpen(false)}
+          onImageUpload={uploadActivityImage}
           onSave={saveManagedActivity}
         />
       </MDBox>

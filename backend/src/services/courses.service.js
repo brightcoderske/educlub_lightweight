@@ -533,6 +533,36 @@ async function ensureDiscussion(activity, user = {}) {
   return created.rows[0];
 }
 
+async function syncDiscussionSetup(activity, user = {}) {
+  if (activity.activity_type !== "discussion") return null;
+  const content = activity.content || {};
+  const prompt =
+    content.discussion_prompt ||
+    content.prompt ||
+    content.description ||
+    "Share your thoughts with the class.";
+
+  const existing = await query(
+    "SELECT * FROM discussions WHERE activity_id = $1 LIMIT 1",
+    [activity.id],
+  );
+
+  if (existing.rows[0]) {
+    const result = await query(
+      `UPDATE discussions
+       SET prompt = $1,
+           allow_peer_replies = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING *`,
+      [prompt, content.allow_peer_replies !== false, existing.rows[0].id],
+    );
+    return result.rows[0];
+  }
+
+  return ensureDiscussion(activity, user);
+}
+
 async function getActivityDiscussion(activityId, user = {}) {
   const { activity } = await assertActivityAccess(activityId, user);
   if (!activity) throw new Error("Activity not found or not available.");
@@ -591,6 +621,41 @@ async function addDiscussionReply(activityId, user = {}, data = {}) {
     await upsertActivityProgress(activityId, user, { status: "submitted" });
   }
 
+  return result.rows[0];
+}
+
+async function submitActivityWork(activityId, user = {}, data = {}) {
+  const { activity, learner } = await assertActivityAccess(activityId, user);
+  if (!activity) throw new Error("Activity not found or not available.");
+  if (!learner) throw new Error("Learner profile is required.");
+
+  const allowedTypes = new Set(["assignment", "project", "reflection", "coding"]);
+  if (!allowedTypes.has(activity.activity_type)) {
+    throw new Error("This activity does not accept submissions.");
+  }
+
+  const submissionType = data.submission_type || (activity.activity_type === "coding" ? "code" : "text");
+  const result = await query(
+    `INSERT INTO activity_submissions (
+       learner_id, activity_id, submission_type, content, submitted_at, status
+     )
+     VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, 'submitted')
+     ON CONFLICT (learner_id, activity_id)
+     DO UPDATE SET
+       submission_type = EXCLUDED.submission_type,
+       content = EXCLUDED.content,
+       submitted_at = CURRENT_TIMESTAMP,
+       status = 'submitted'
+     RETURNING *`,
+    [
+      learner.id,
+      activityId,
+      submissionType,
+      JSON.stringify(data.content || {}),
+    ],
+  );
+
+  await upsertActivityProgress(activityId, user, { status: "submitted" });
   return result.rows[0];
 }
 
@@ -883,6 +948,7 @@ async function createManagedActivity(moduleId, user = {}, data = {}) {
   if (!allowed) throw new Error("You cannot edit this module.");
 
   const activity = await createActivity(moduleId, data);
+  await syncDiscussionSetup(activity, user);
   await bumpSchoolCourseVersion(courseId);
   return activity;
 }
@@ -928,6 +994,9 @@ async function updateActivity(activityId, user = {}, data = {}) {
       activityId,
     ],
   );
+  if (result.rows[0]) {
+    await syncDiscussionSetup(result.rows[0], user);
+  }
   await bumpSchoolCourseVersion(courseId);
   return result.rows[0];
 }
@@ -970,6 +1039,7 @@ module.exports = {
   deleteActivity,
   getActivityDiscussion,
   addDiscussionReply,
+  submitActivityWork,
   submitQuiz,
   syncSchoolCourse: courseTemplatesService.syncSchoolCourse,
   rollbackSchoolCourse: courseTemplatesService.rollbackSchoolCourse,

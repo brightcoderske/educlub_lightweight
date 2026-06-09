@@ -1557,6 +1557,10 @@ CREATE POLICY discussions_staff_write ON discussions
   FOR ALL
   USING ((SELECT public.educlub_role()) IN ('system_admin', 'school_admin', 'teacher'))
   WITH CHECK ((SELECT public.educlub_role()) IN ('system_admin', 'school_admin', 'teacher'));
+DROP POLICY IF EXISTS discussions_participant_insert ON discussions;
+CREATE POLICY discussions_participant_insert ON discussions
+  FOR INSERT
+  WITH CHECK ((SELECT public.educlub_role()) IN ('system_admin', 'school_admin', 'teacher', 'learner'));
 
 DROP POLICY IF EXISTS discussion_replies_access ON discussion_replies;
 CREATE POLICY discussion_replies_access ON discussion_replies

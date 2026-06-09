@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
+import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid";
 import Icon from "@mui/material/Icon";
 import IconButton from "@mui/material/IconButton";
+import Radio from "@mui/material/Radio";
 
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
@@ -37,14 +39,32 @@ function asText(value) {
   return JSON.stringify(value, null, 2);
 }
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function ActivityBody({
   activity,
   answers,
   discussion,
   discussionReply,
+  submissionText,
+  submissionFile,
+  codeDraft,
+  codeOutput,
   quizResult,
   saving,
   onAnswerChange,
+  onCodeChange,
+  onRunCode,
+  onSubmissionFileChange,
+  onSubmissionTextChange,
+  onSubmitWork,
   onDiscussionReplyChange,
   onSubmitDiscussionReply,
   onSubmitQuiz,
@@ -55,11 +75,11 @@ function ActivityBody({
   const code = content.starter_code || content.code || content.template;
   const questions = Array.isArray(content.questions) ? content.questions : [];
   const richHtml = content.rich_html || "";
-  const prompt =
-    content.discussion_prompt ||
-    content.reflection_prompt ||
-    content.project_brief ||
-    content.submission_instructions;
+  const discussionPrompt = content.discussion_prompt || "";
+  const activityPrompt =
+    content.reflection_prompt || content.project_brief || content.submission_instructions;
+  const prompt = activity.activity_type === "discussion" ? discussionPrompt : activityPrompt;
+  const showLearningContent = activity.activity_type !== "discussion";
 
   return (
     <MDBox>
@@ -73,7 +93,7 @@ function ActivityBody({
       {description && (
         <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
           <MDTypography variant="caption" color="text" fontWeight="bold" textTransform="uppercase">
-            Overview
+            {activity.activity_type === "discussion" ? "Instructions" : "Overview"}
           </MDTypography>
           <MDTypography variant="body2" color="text" sx={{ whiteSpace: "pre-wrap" }}>
             {asText(description)}
@@ -81,37 +101,47 @@ function ActivityBody({
         </MDBox>
       )}
 
-      <MDBox mt={2}>
-        {(richHtml || body) && (
-          <MDTypography variant="caption" color="text" fontWeight="bold" textTransform="uppercase">
-            Learning Content
-          </MDTypography>
-        )}
-        {richHtml ? (
-          <MDBox
-            mt={1}
-            sx={{
-              color: "#344767",
-              "& img": { maxWidth: "100%", borderRadius: "8px" },
-              "& iframe": { maxWidth: "100%" },
-              "& table": { width: "100%", borderCollapse: "collapse" },
-              "& td, & th": { border: "1px solid #d1d5db", padding: "6px" },
-            }}
-            dangerouslySetInnerHTML={{ __html: richHtml }}
-          />
-        ) : body ? (
-          <MDTypography variant="body2" color="text" mt={1} sx={{ whiteSpace: "pre-wrap" }}>
-            {asText(body)}
-          </MDTypography>
-        ) : !description && !prompt ? (
-          <MDTypography variant="body2" color="text">
-            This activity is ready for the course builder content.
-          </MDTypography>
-        ) : null}
-      </MDBox>
+      {showLearningContent && (
+        <MDBox mt={2}>
+          {(richHtml || body) && (
+            <MDTypography
+              variant="caption"
+              color="text"
+              fontWeight="bold"
+              textTransform="uppercase"
+            >
+              Learning Content
+            </MDTypography>
+          )}
+          {richHtml ? (
+            <MDBox
+              mt={1}
+              sx={{
+                color: "#344767",
+                "& img": { maxWidth: "100%", borderRadius: "8px" },
+                "& iframe": { maxWidth: "100%" },
+                "& table": { width: "100%", borderCollapse: "collapse" },
+                "& td, & th": { border: "1px solid #d1d5db", padding: "6px" },
+              }}
+              dangerouslySetInnerHTML={{ __html: richHtml }}
+            />
+          ) : body ? (
+            <MDTypography variant="body2" color="text" mt={1} sx={{ whiteSpace: "pre-wrap" }}>
+              {asText(body)}
+            </MDTypography>
+          ) : !description && !prompt ? (
+            <MDTypography variant="body2" color="text">
+              This activity is ready for the course builder content.
+            </MDTypography>
+          ) : null}
+        </MDBox>
+      )}
 
       {prompt && (
         <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
+          <MDTypography variant="caption" color="text" fontWeight="bold" textTransform="uppercase">
+            {activity.activity_type === "discussion" ? "Discussion Prompt" : "Task"}
+          </MDTypography>
           <MDTypography variant="body2" color="text" sx={{ whiteSpace: "pre-wrap" }}>
             {asText(prompt)}
           </MDTypography>
@@ -127,16 +157,26 @@ function ActivityBody({
               </MDTypography>
               <MDBox mt={1} display="flex" flexDirection="column" gap={0.75}>
                 {(question.options || []).map((option) => (
-                  <MDButton
+                  <MDBox
                     key={option}
-                    variant={answers[question.id] === option ? "gradient" : "outlined"}
-                    color={answers[question.id] === option ? "info" : "dark"}
-                    size="small"
-                    onClick={() => onAnswerChange(question.id, option)}
-                    sx={{ justifyContent: "flex-start" }}
+                    display="flex"
+                    alignItems="center"
+                    gap={1}
+                    p={1}
+                    border="1px solid #d8dee9"
+                    borderRadius="md"
+                    sx={{ cursor: "pointer", bgcolor: "#ffffff" }}
+                    onClick={() => onAnswerChange(question.id, option, question.question_type)}
                   >
-                    {option}
-                  </MDButton>
+                    {question.question_type === "multi_select" ? (
+                      <Checkbox checked={(answers[question.id] || []).includes(option)} />
+                    ) : (
+                      <Radio checked={answers[question.id] === option} />
+                    )}
+                    <MDTypography variant="body2" color="text">
+                      {option}
+                    </MDTypography>
+                  </MDBox>
                 ))}
                 {(!question.options || question.options.length === 0) && (
                   <MDInput
@@ -204,7 +244,93 @@ function ActivityBody({
         </MDBox>
       )}
 
-      {code && (
+      {["assignment", "project", "reflection"].includes(activity.activity_type) && (
+        <MDBox
+          mt={3}
+          p={2}
+          borderRadius="md"
+          sx={{ bgcolor: "#ffffff", border: "1px solid #e5e7eb" }}
+        >
+          <MDTypography variant="button" fontWeight="bold">
+            Submit Your Work
+          </MDTypography>
+          <MDBox mt={1.5}>
+            <MDInput
+              label="Notes or answer"
+              multiline
+              rows={4}
+              fullWidth
+              value={submissionText}
+              onChange={(event) => onSubmissionTextChange(event.target.value)}
+            />
+          </MDBox>
+          <MDBox mt={1.5} display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+            <MDButton variant="outlined" color="dark" component="label">
+              Upload File
+              <input
+                hidden
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={(event) => onSubmissionFileChange(event.target.files?.[0] || null)}
+              />
+            </MDButton>
+            <MDTypography variant="caption" color="text">
+              {submissionFile?.name || "No file selected"}
+            </MDTypography>
+          </MDBox>
+          <MDButton
+            variant="gradient"
+            color="success"
+            disabled={saving || (!submissionText.trim() && !submissionFile)}
+            sx={{ mt: 1.5 }}
+            onClick={onSubmitWork}
+          >
+            Submit Work
+          </MDButton>
+        </MDBox>
+      )}
+
+      {activity.activity_type === "coding" && (
+        <MDBox mt={3}>
+          <MDTypography variant="button" fontWeight="bold">
+            Code Workspace
+          </MDTypography>
+          <MDInput
+            multiline
+            rows={10}
+            fullWidth
+            value={codeDraft}
+            onChange={(event) => onCodeChange(event.target.value)}
+            sx={{ mt: 1, "& textarea": { fontFamily: "monospace" } }}
+          />
+          <MDBox mt={1.5} display="flex" gap={1} flexWrap="wrap">
+            <MDButton variant="gradient" color="info" disabled={saving} onClick={onRunCode}>
+              Run Code
+            </MDButton>
+            <MDButton variant="outlined" color="success" disabled={saving} onClick={onSubmitWork}>
+              Submit Code
+            </MDButton>
+          </MDBox>
+          <MDBox
+            component="pre"
+            mt={1.5}
+            p={2}
+            borderRadius="md"
+            sx={{
+              bgcolor: "#0f172a",
+              color: "#e2e8f0",
+              minHeight: 90,
+              overflow: "auto",
+              fontSize: 13,
+              lineHeight: 1.6,
+            }}
+          >
+            {codeOutput || "Output will appear here."}
+          </MDBox>
+        </MDBox>
+      )}
+
+      {code && activity.activity_type !== "coding" && (
         <MDBox
           component="pre"
           mt={2}
@@ -235,17 +361,27 @@ ActivityBody.propTypes = {
   }).isRequired,
   discussion: PropTypes.object,
   discussionReply: PropTypes.string.isRequired,
+  codeDraft: PropTypes.string.isRequired,
+  codeOutput: PropTypes.string.isRequired,
+  onCodeChange: PropTypes.func.isRequired,
   onAnswerChange: PropTypes.func.isRequired,
   onDiscussionReplyChange: PropTypes.func.isRequired,
+  onRunCode: PropTypes.func.isRequired,
+  onSubmissionFileChange: PropTypes.func.isRequired,
+  onSubmissionTextChange: PropTypes.func.isRequired,
   onSubmitDiscussionReply: PropTypes.func.isRequired,
   onSubmitQuiz: PropTypes.func.isRequired,
+  onSubmitWork: PropTypes.func.isRequired,
   quizResult: PropTypes.object,
   saving: PropTypes.bool.isRequired,
+  submissionFile: PropTypes.object,
+  submissionText: PropTypes.string.isRequired,
 };
 
 ActivityBody.defaultProps = {
   discussion: null,
   quizResult: null,
+  submissionFile: null,
 };
 
 function CompletionCelebration({ data, onNext, onClose }) {
@@ -328,6 +464,10 @@ function ModuleLearn() {
   const [answers, setAnswers] = useState({});
   const [discussion, setDiscussion] = useState(null);
   const [discussionReply, setDiscussionReply] = useState("");
+  const [submissionText, setSubmissionText] = useState("");
+  const [submissionFile, setSubmissionFile] = useState(null);
+  const [codeDraft, setCodeDraft] = useState("");
+  const [codeOutput, setCodeOutput] = useState("");
   const [quizResult, setQuizResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -362,6 +502,10 @@ function ModuleLearn() {
     setQuizResult(null);
     setDiscussion(null);
     setDiscussionReply("");
+    setSubmissionText("");
+    setSubmissionFile(null);
+    setCodeDraft(activeActivity?.content?.starter_code || activeActivity?.content?.code || "");
+    setCodeOutput("");
 
     async function loadDiscussion() {
       if (activeActivity?.activity_type !== "discussion") return;
@@ -401,6 +545,21 @@ function ModuleLearn() {
     }
   };
 
+  const updateAnswer = (questionId, value, questionType) => {
+    setAnswers((current) => {
+      if (questionType === "multi_select") {
+        const currentValues = current[questionId] || [];
+        return {
+          ...current,
+          [questionId]: currentValues.includes(value)
+            ? currentValues.filter((item) => item !== value)
+            : [...currentValues, value],
+        };
+      }
+      return { ...current, [questionId]: value };
+    });
+  };
+
   const submitQuiz = async () => {
     if (!activeActivity) return;
     setSaving(true);
@@ -418,6 +577,61 @@ function ModuleLearn() {
       setError(err.message || "Failed to submit quiz");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const submitWork = async () => {
+    if (!activeActivity) return;
+    setSaving(true);
+    setError("");
+    try {
+      let fileContent = null;
+      if (submissionFile) {
+        const dataUrl = await readFileAsDataUrl(submissionFile);
+        const uploaded = await apiClient.post("/courses/submission-files", {
+          fileName: submissionFile.name,
+          dataUrl,
+        });
+        fileContent = {
+          name: submissionFile.name,
+          url: uploaded.url,
+          size: submissionFile.size,
+          type: submissionFile.type,
+        };
+      }
+      await apiClient.post(`/courses/activities/${activeActivity.id}/submissions`, {
+        submission_type:
+          activeActivity.activity_type === "coding" ? "code" : fileContent ? "file" : "text",
+        content: {
+          text: activeActivity.activity_type === "coding" ? codeDraft : submissionText,
+          file: fileContent,
+          output: activeActivity.activity_type === "coding" ? codeOutput : null,
+        },
+      });
+      await loadModule();
+    } catch (err) {
+      setError(err.message || "Failed to submit work");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runCode = () => {
+    if (!activeActivity) return;
+    const language = activeActivity.content?.language || "javascript";
+    if (!["javascript", "js"].includes(language.toLowerCase())) {
+      setCodeOutput(`Running ${language} code will be supported in the server runner later.`);
+      return;
+    }
+    const logs = [];
+    try {
+      const runner = new Function("console", `${codeDraft}\n//# sourceURL=educlub-activity.js`);
+      runner({
+        log: (...items) => logs.push(items.map((item) => asText(item)).join(" ")),
+      });
+      setCodeOutput(logs.join("\n") || "Code ran successfully.");
+    } catch (err) {
+      setCodeOutput(err.message || "Code failed to run.");
     }
   };
 
@@ -460,7 +674,7 @@ function ModuleLearn() {
   }
 
   return (
-    <MDBox minHeight="100vh" bgColor="light">
+    <MDBox minHeight="100vh" sx={{ bgcolor: "#eef4f8" }}>
       <MDBox
         px={{ xs: 2, md: 3 }}
         py={1.5}
@@ -489,7 +703,7 @@ function ModuleLearn() {
         </IconButton>
       </MDBox>
 
-      <MDBox px={{ xs: 2, md: 3 }} py={3}>
+      <MDBox px={{ xs: 2, md: 4, lg: 8 }} py={3} maxWidth="1480px" mx="auto">
         {error && (
           <MDBox mb={2} p={2} borderRadius="md" sx={{ bgcolor: "#fee2e2" }}>
             <MDTypography variant="body2" color="error" fontWeight="medium">
@@ -498,7 +712,7 @@ function ModuleLearn() {
           </MDBox>
         )}
 
-        <Grid container spacing={2}>
+        <Grid container spacing={2.5}>
           <Grid item xs={12} md={3}>
             <Card>
               <MDBox p={2}>
@@ -535,7 +749,7 @@ function ModuleLearn() {
 
           <Grid item xs={12} md={9}>
             <Card>
-              <MDBox p={{ xs: 2, md: 3 }}>
+              <MDBox p={{ xs: 2.5, md: 4 }}>
                 {activeActivity ? (
                   <>
                     <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -555,12 +769,19 @@ function ModuleLearn() {
                       discussionReply={discussionReply}
                       quizResult={quizResult}
                       saving={saving}
-                      onAnswerChange={(questionId, value) =>
-                        setAnswers((current) => ({ ...current, [questionId]: value }))
-                      }
+                      submissionText={submissionText}
+                      submissionFile={submissionFile}
+                      codeDraft={codeDraft}
+                      codeOutput={codeOutput}
+                      onAnswerChange={updateAnswer}
+                      onCodeChange={setCodeDraft}
                       onDiscussionReplyChange={setDiscussionReply}
+                      onRunCode={runCode}
+                      onSubmissionFileChange={setSubmissionFile}
+                      onSubmissionTextChange={setSubmissionText}
                       onSubmitDiscussionReply={submitDiscussionReply}
                       onSubmitQuiz={submitQuiz}
+                      onSubmitWork={submitWork}
                     />
                     <MDBox
                       display="flex"

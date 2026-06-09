@@ -1,4 +1,43 @@
 const coursesService = require("../services/courses.service");
+const fs = require("fs");
+const path = require("path");
+
+function getPublicUploadUrl(req, relativePath) {
+  const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.API_PUBLIC_URL;
+  if (publicBaseUrl) {
+    return `${publicBaseUrl.replace(/\/$/, "")}${relativePath}`;
+  }
+  return `${req.protocol}://${req.get("host")}${relativePath}`;
+}
+
+function saveDataUpload(req, folder, options = {}) {
+  const { fileName, dataUrl } = req.body || {};
+  const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl || "");
+  if (!match) throw new Error(options.error || "Please upload a valid file.");
+
+  const mimeType = match[1].toLowerCase();
+  const allowedTypes = options.allowedTypes || [];
+  if (allowedTypes.length && !allowedTypes.includes(mimeType)) {
+    throw new Error(options.error || "This file type is not allowed.");
+  }
+
+  const buffer = Buffer.from(match[2], "base64");
+  if (buffer.length > options.maxBytes) {
+    throw new Error(options.sizeError || "This file is too large.");
+  }
+
+  const extension =
+    path.extname(fileName || "").replace(".", "") ||
+    mimeType.split("/")[1].replace("jpeg", "jpg");
+  const safeName = `${Date.now()}-${(fileName || options.defaultName || "upload")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-z0-9_-]/gi, "-")
+    .toLowerCase()}.${extension}`;
+  const uploadDir = path.join(__dirname, "../../uploads", folder);
+  fs.mkdirSync(uploadDir, { recursive: true });
+  fs.writeFileSync(path.join(uploadDir, safeName), buffer);
+  return getPublicUploadUrl(req, `/uploads/${folder}/${safeName}`);
+}
 
 async function getAllCourses(req, res) {
   try {
@@ -164,6 +203,68 @@ async function submitQuiz(req, res) {
   }
 }
 
+async function submitActivityWork(req, res) {
+  try {
+    const submission = await coursesService.submitActivityWork(
+      req.params.activityId,
+      req.user,
+      req.body,
+    );
+    res.status(201).json(submission);
+  } catch (error) {
+    console.error("Submit activity work error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to submit activity work" });
+  }
+}
+
+async function uploadActivityImage(req, res) {
+  try {
+    const url = saveDataUpload(req, "activity-images", {
+      allowedTypes: ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"],
+      defaultName: "activity-image",
+      error: "Please upload a PNG, JPG, GIF, or WebP image.",
+      maxBytes: 2 * 1024 * 1024,
+      sizeError: "Image uploads are capped at 2MB.",
+    });
+    res.status(201).json({ url });
+  } catch (error) {
+    console.error("Upload activity image error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to upload activity image" });
+  }
+}
+
+async function uploadSubmissionFile(req, res) {
+  try {
+    const url = saveDataUpload(req, "activity-submissions", {
+      allowedTypes: [
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "text/plain",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ],
+      defaultName: "activity-submission",
+      error: "Upload an image, PDF, text file, or Word document.",
+      maxBytes: 5 * 1024 * 1024,
+      sizeError: "Submission uploads are capped at 5MB.",
+    });
+    res.status(201).json({ url });
+  } catch (error) {
+    console.error("Upload submission file error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to upload submission file" });
+  }
+}
+
 async function createModule(req, res) {
   try {
     const module = await coursesService.createManagedModule(
@@ -290,6 +391,9 @@ module.exports = {
   getActivityDiscussion,
   addDiscussionReply,
   submitQuiz,
+  submitActivityWork,
+  uploadActivityImage,
+  uploadSubmissionFile,
   createModule,
   updateModule,
   deleteModule,

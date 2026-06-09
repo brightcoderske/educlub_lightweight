@@ -47,6 +47,22 @@ router.post(
   coursesController.submitQuiz,
 );
 router.post(
+  "/activities/:activityId/submissions",
+  authenticateToken,
+  coursesController.submitActivityWork,
+);
+router.post(
+  "/activity-images",
+  authenticateToken,
+  canManageCourse,
+  coursesController.uploadActivityImage,
+);
+router.post(
+  "/submission-files",
+  authenticateToken,
+  coursesController.uploadSubmissionFile,
+);
+router.post(
   "/:id/modules",
   authenticateToken,
   canManageCourse,
