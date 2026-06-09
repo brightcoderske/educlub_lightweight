@@ -117,6 +117,53 @@ async function updateActivityProgress(req, res) {
   }
 }
 
+async function getActivityDiscussion(req, res) {
+  try {
+    const discussion = await coursesService.getActivityDiscussion(
+      req.params.activityId,
+      req.user,
+    );
+    res.json(discussion);
+  } catch (error) {
+    console.error("Get activity discussion error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to load discussion" });
+  }
+}
+
+async function addDiscussionReply(req, res) {
+  try {
+    const reply = await coursesService.addDiscussionReply(
+      req.params.activityId,
+      req.user,
+      req.body,
+    );
+    res.status(201).json(reply);
+  } catch (error) {
+    console.error("Add discussion reply error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to add reply" });
+  }
+}
+
+async function submitQuiz(req, res) {
+  try {
+    const result = await coursesService.submitQuiz(
+      req.params.activityId,
+      req.user,
+      req.body,
+    );
+    res.json(result);
+  } catch (error) {
+    console.error("Submit quiz error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to submit quiz" });
+  }
+}
+
 async function createModule(req, res) {
   try {
     const module = await coursesService.createManagedModule(
@@ -240,6 +287,9 @@ module.exports = {
   getLearningOverview,
   getModuleLearning,
   updateActivityProgress,
+  getActivityDiscussion,
+  addDiscussionReply,
+  submitQuiz,
   createModule,
   updateModule,
   deleteModule,

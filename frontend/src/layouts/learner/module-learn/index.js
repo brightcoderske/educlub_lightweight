@@ -9,6 +9,7 @@ import IconButton from "@mui/material/IconButton";
 
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
+import MDInput from "components/MDInput";
 import MDProgress from "components/MDProgress";
 import MDTypography from "components/MDTypography";
 import { apiClient } from "lib/api";
@@ -36,11 +37,29 @@ function asText(value) {
   return JSON.stringify(value, null, 2);
 }
 
-function ActivityBody({ activity }) {
+function ActivityBody({
+  activity,
+  answers,
+  discussion,
+  discussionReply,
+  quizResult,
+  saving,
+  onAnswerChange,
+  onDiscussionReplyChange,
+  onSubmitDiscussionReply,
+  onSubmitQuiz,
+}) {
   const content = activity?.content || {};
-  const body = content.body || content.text || content.instructions || content.description;
+  const description = content.description || "";
+  const body = content.body || content.text || content.instructions || "";
   const code = content.starter_code || content.code || content.template;
   const questions = Array.isArray(content.questions) ? content.questions : [];
+  const richHtml = content.rich_html || "";
+  const prompt =
+    content.discussion_prompt ||
+    content.reflection_prompt ||
+    content.project_brief ||
+    content.submission_instructions;
 
   return (
     <MDBox>
@@ -51,27 +70,137 @@ function ActivityBody({ activity }) {
         {activity.activity_type} | {activity.points || 0} marks
       </MDTypography>
 
-      <MDBox mt={2}>
-        {body ? (
+      {description && (
+        <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
+          <MDTypography variant="caption" color="text" fontWeight="bold" textTransform="uppercase">
+            Overview
+          </MDTypography>
           <MDTypography variant="body2" color="text" sx={{ whiteSpace: "pre-wrap" }}>
+            {asText(description)}
+          </MDTypography>
+        </MDBox>
+      )}
+
+      <MDBox mt={2}>
+        {(richHtml || body) && (
+          <MDTypography variant="caption" color="text" fontWeight="bold" textTransform="uppercase">
+            Learning Content
+          </MDTypography>
+        )}
+        {richHtml ? (
+          <MDBox
+            mt={1}
+            sx={{
+              color: "#344767",
+              "& img": { maxWidth: "100%", borderRadius: "8px" },
+              "& iframe": { maxWidth: "100%" },
+              "& table": { width: "100%", borderCollapse: "collapse" },
+              "& td, & th": { border: "1px solid #d1d5db", padding: "6px" },
+            }}
+            dangerouslySetInnerHTML={{ __html: richHtml }}
+          />
+        ) : body ? (
+          <MDTypography variant="body2" color="text" mt={1} sx={{ whiteSpace: "pre-wrap" }}>
             {asText(body)}
           </MDTypography>
-        ) : (
+        ) : !description && !prompt ? (
           <MDTypography variant="body2" color="text">
             This activity is ready for the course builder content.
           </MDTypography>
-        )}
+        ) : null}
       </MDBox>
 
-      {questions.length > 0 && (
+      {prompt && (
+        <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
+          <MDTypography variant="body2" color="text" sx={{ whiteSpace: "pre-wrap" }}>
+            {asText(prompt)}
+          </MDTypography>
+        </MDBox>
+      )}
+
+      {activity.activity_type === "quiz" && questions.length > 0 && (
         <MDBox mt={2}>
           {questions.map((question, index) => (
             <MDBox key={`${question.id || index}`} py={1.25} borderTop="1px solid #eef0f2">
               <MDTypography variant="button" fontWeight="medium">
                 {index + 1}. {question.prompt || question.question || "Question"}
               </MDTypography>
+              <MDBox mt={1} display="flex" flexDirection="column" gap={0.75}>
+                {(question.options || []).map((option) => (
+                  <MDButton
+                    key={option}
+                    variant={answers[question.id] === option ? "gradient" : "outlined"}
+                    color={answers[question.id] === option ? "info" : "dark"}
+                    size="small"
+                    onClick={() => onAnswerChange(question.id, option)}
+                    sx={{ justifyContent: "flex-start" }}
+                  >
+                    {option}
+                  </MDButton>
+                ))}
+                {(!question.options || question.options.length === 0) && (
+                  <MDInput
+                    label="Your answer"
+                    fullWidth
+                    value={answers[question.id] || ""}
+                    onChange={(event) => onAnswerChange(question.id, event.target.value)}
+                  />
+                )}
+              </MDBox>
             </MDBox>
           ))}
+          <MDBox mt={2}>
+            <MDButton variant="gradient" color="success" disabled={saving} onClick={onSubmitQuiz}>
+              Submit Quiz
+            </MDButton>
+          </MDBox>
+          {quizResult && (
+            <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#ecfdf5" }}>
+              <MDTypography variant="body2" color="success" fontWeight="bold">
+                Score: {quizResult.score}% ({quizResult.earned_points}/{quizResult.total_points}{" "}
+                marks)
+              </MDTypography>
+            </MDBox>
+          )}
+        </MDBox>
+      )}
+
+      {activity.activity_type === "discussion" && (
+        <MDBox mt={3}>
+          <MDTypography variant="button" fontWeight="bold">
+            Class Discussion
+          </MDTypography>
+          <MDBox mt={1.5} display="flex" flexDirection="column" gap={1}>
+            {(discussion?.replies || []).map((reply) => (
+              <MDBox key={reply.id} p={1.5} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
+                <MDTypography variant="caption" color="text" fontWeight="bold">
+                  {reply.author_name}
+                </MDTypography>
+                <MDTypography variant="body2" color="text" sx={{ whiteSpace: "pre-wrap" }}>
+                  {reply.body}
+                </MDTypography>
+              </MDBox>
+            ))}
+          </MDBox>
+          <MDBox mt={2}>
+            <MDInput
+              label="Reply"
+              multiline
+              rows={3}
+              fullWidth
+              value={discussionReply}
+              onChange={(event) => onDiscussionReplyChange(event.target.value)}
+            />
+            <MDButton
+              variant="gradient"
+              color="info"
+              disabled={saving || !discussionReply.trim()}
+              sx={{ mt: 1 }}
+              onClick={onSubmitDiscussionReply}
+            >
+              Post Reply
+            </MDButton>
+          </MDBox>
         </MDBox>
       )}
 
@@ -97,12 +226,26 @@ function ActivityBody({ activity }) {
 }
 
 ActivityBody.propTypes = {
+  answers: PropTypes.object.isRequired,
   activity: PropTypes.shape({
     activity_type: PropTypes.string,
     content: PropTypes.object,
     points: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     title: PropTypes.string,
   }).isRequired,
+  discussion: PropTypes.object,
+  discussionReply: PropTypes.string.isRequired,
+  onAnswerChange: PropTypes.func.isRequired,
+  onDiscussionReplyChange: PropTypes.func.isRequired,
+  onSubmitDiscussionReply: PropTypes.func.isRequired,
+  onSubmitQuiz: PropTypes.func.isRequired,
+  quizResult: PropTypes.object,
+  saving: PropTypes.bool.isRequired,
+};
+
+ActivityBody.defaultProps = {
+  discussion: null,
+  quizResult: null,
 };
 
 function CompletionCelebration({ data, onNext, onClose }) {
@@ -182,6 +325,10 @@ function ModuleLearn() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [activeActivityId, setActiveActivityId] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [discussion, setDiscussion] = useState(null);
+  const [discussionReply, setDiscussionReply] = useState("");
+  const [quizResult, setQuizResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -210,6 +357,30 @@ function ModuleLearn() {
     loadModule();
   }, [courseId, moduleId]);
 
+  useEffect(() => {
+    setAnswers({});
+    setQuizResult(null);
+    setDiscussion(null);
+    setDiscussionReply("");
+
+    async function loadDiscussion() {
+      if (activeActivity?.activity_type !== "discussion") return;
+      try {
+        const response = await apiClient.get(`/courses/activities/${activeActivity.id}/discussion`);
+        setDiscussion(response);
+      } catch (err) {
+        setError(err.message || "Failed to load discussion");
+      }
+    }
+
+    loadDiscussion();
+    const interval =
+      activeActivity?.activity_type === "discussion" ? setInterval(loadDiscussion, 8000) : null;
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [activeActivity?.id]);
+
   const updateProgress = async (activity, status) => {
     if (!activity) return;
     setSaving(true);
@@ -227,6 +398,45 @@ function ModuleLearn() {
     setActiveActivityId(activity.id);
     if (activity.status === "not_started") {
       await updateProgress(activity, "in_progress");
+    }
+  };
+
+  const submitQuiz = async () => {
+    if (!activeActivity) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await apiClient.post(
+        `/courses/activities/${activeActivity.id}/quiz-attempts`,
+        {
+          answers,
+        }
+      );
+      setQuizResult(response);
+      await loadModule();
+    } catch (err) {
+      setError(err.message || "Failed to submit quiz");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitDiscussionReply = async () => {
+    if (!activeActivity || !discussionReply.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      await apiClient.post(`/courses/activities/${activeActivity.id}/discussion/replies`, {
+        body: discussionReply,
+      });
+      setDiscussionReply("");
+      const response = await apiClient.get(`/courses/activities/${activeActivity.id}/discussion`);
+      setDiscussion(response);
+      await loadModule();
+    } catch (err) {
+      setError(err.message || "Failed to post reply");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -338,7 +548,20 @@ function ModuleLearn() {
                         {data.module.completed_activities}/{data.module.total_activities} complete
                       </MDTypography>
                     </MDBox>
-                    <ActivityBody activity={activeActivity} />
+                    <ActivityBody
+                      activity={activeActivity}
+                      answers={answers}
+                      discussion={discussion}
+                      discussionReply={discussionReply}
+                      quizResult={quizResult}
+                      saving={saving}
+                      onAnswerChange={(questionId, value) =>
+                        setAnswers((current) => ({ ...current, [questionId]: value }))
+                      }
+                      onDiscussionReplyChange={setDiscussionReply}
+                      onSubmitDiscussionReply={submitDiscussionReply}
+                      onSubmitQuiz={submitQuiz}
+                    />
                     <MDBox
                       display="flex"
                       justifyContent="space-between"

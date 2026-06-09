@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import Grid from "@mui/material/Grid";
 import Icon from "@mui/material/Icon";
 import IconButton from "@mui/material/IconButton";
@@ -101,6 +106,548 @@ function parseActivityPayload(form) {
   };
 }
 
+function questionsFromCsv(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const columns = line.split(",").map((value) => value.trim());
+      const [prompt, options = "", correctAnswer = "", points = "1"] = columns;
+      return {
+        id: `q${Date.now()}-${index}`,
+        question_type: options.toLowerCase() === "true/false" ? "true_false" : "multiple_choice",
+        prompt,
+        options: options
+          .split("|")
+          .map((option) => option.trim())
+          .filter(Boolean),
+        correct_answer: correctAnswer,
+        points: Number(points || 1),
+        position: index + 1,
+      };
+    });
+}
+
+function normalizeQuestionForm(question = {}, index = 0) {
+  return {
+    id: question.id || `q${Date.now()}-${index}`,
+    question_type: question.question_type || question.type || "multiple_choice",
+    prompt: question.prompt || question.question || "",
+    options: Array.isArray(question.options) ? question.options : [],
+    correct_answer: question.correct_answer || question.answer || "",
+    points: Number(question.points || 1),
+    position: Number(question.position || index + 1),
+  };
+}
+
+function activityToManagerForm(activity) {
+  const content = activity?.content || {};
+  return {
+    title: activity?.title || "",
+    activity_type: activity?.activity_type || "lesson",
+    points: activity?.points || 0,
+    position: activity?.position || 1,
+    is_required: activity?.is_required !== false,
+    completion_rule: activity?.completion_rule || "manual",
+    pass_score: activity?.pass_score || "",
+    is_published: activity?.is_published !== false,
+    description: content.description || content.body || "",
+    rich_html: content.rich_html || "",
+    discussion_prompt: content.discussion_prompt || content.prompt || "",
+    starter_code: content.starter_code || content.code || "",
+    language: content.language || "javascript",
+    submission_instructions: content.submission_instructions || "",
+    reflection_prompt: content.reflection_prompt || "",
+    project_brief: content.project_brief || "",
+    questions: Array.isArray(content.questions)
+      ? content.questions.map((question, index) => normalizeQuestionForm(question, index))
+      : [],
+  };
+}
+
+function RichContentEditor({ value, onChange }) {
+  const editorRef = useRef(null);
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== (value || "")) {
+      editorRef.current.innerHTML = value || "";
+    }
+  }, [value]);
+
+  const runCommand = (command, commandValue = null) => {
+    editorRef.current?.focus();
+    document.execCommand(command, false, commandValue);
+    onChange(editorRef.current?.innerHTML || "");
+  };
+
+  const insertTable = () => {
+    runCommand(
+      "insertHTML",
+      "<table style='width:100%;border-collapse:collapse'><tr><th style='border:1px solid #d1d5db;padding:6px'>Heading</th><th style='border:1px solid #d1d5db;padding:6px'>Heading</th></tr><tr><td style='border:1px solid #d1d5db;padding:6px'>Text</td><td style='border:1px solid #d1d5db;padding:6px'>Text</td></tr></table>"
+    );
+  };
+
+  const insertLink = () => {
+    const url = window.prompt("Paste the link URL");
+    if (url) runCommand("createLink", url);
+  };
+
+  const insertImage = () => {
+    const url = window.prompt("Paste the image URL");
+    if (url) runCommand("insertImage", url);
+  };
+
+  const insertEmbed = () => {
+    const url = window.prompt("Paste an embed URL");
+    if (!url) return;
+    runCommand(
+      "insertHTML",
+      `<iframe src="${url}" style="width:100%;min-height:260px;border:0;border-radius:8px" allowfullscreen></iframe>`
+    );
+  };
+
+  return (
+    <MDBox>
+      <MDBox display="flex" gap={0.5} flexWrap="wrap" mb={1}>
+        {[
+          ["formatBlock", "H2", "title"],
+          ["bold", null, "format_bold"],
+          ["italic", null, "format_italic"],
+          ["underline", null, "format_underlined"],
+          ["insertUnorderedList", null, "format_list_bulleted"],
+          ["insertOrderedList", null, "format_list_numbered"],
+        ].map(([command, commandValue, icon]) => (
+          <IconButton
+            key={`${command}-${commandValue || "default"}`}
+            onClick={() => runCommand(command, commandValue)}
+          >
+            <Icon>{icon}</Icon>
+          </IconButton>
+        ))}
+        <IconButton onClick={() => runCommand("foreColor", "#2563eb")}>
+          <Icon>format_color_text</Icon>
+        </IconButton>
+        <IconButton onClick={insertTable}>
+          <Icon>table_chart</Icon>
+        </IconButton>
+        <IconButton onClick={insertLink}>
+          <Icon>link</Icon>
+        </IconButton>
+        <IconButton onClick={insertImage}>
+          <Icon>image</Icon>
+        </IconButton>
+        <IconButton onClick={insertEmbed}>
+          <Icon>smart_display</Icon>
+        </IconButton>
+      </MDBox>
+      <MDBox
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={() => onChange(editorRef.current?.innerHTML || "")}
+        p={2}
+        border="1px solid #d1d5db"
+        borderRadius="md"
+        minHeight={220}
+        sx={{
+          bgcolor: "#ffffff",
+          outline: "none",
+          "& img": { maxWidth: "100%", borderRadius: "8px" },
+          "& table": { maxWidth: "100%" },
+        }}
+      />
+    </MDBox>
+  );
+}
+
+function ActivityManagerDialog({ activity, open, saving, onClose, onSave }) {
+  const [form, setForm] = useState(activityToManagerForm(activity));
+  const [csvText, setCsvText] = useState("");
+
+  useEffect(() => {
+    setForm(activityToManagerForm(activity));
+    setCsvText("");
+  }, [activity?.id, open]);
+
+  if (!activity) return null;
+
+  const updateQuestion = (index, patch) => {
+    setForm((current) => ({
+      ...current,
+      questions: current.questions.map((question, questionIndex) =>
+        questionIndex === index ? { ...question, ...patch } : question
+      ),
+    }));
+  };
+
+  const addQuestion = () => {
+    setForm((current) => ({
+      ...current,
+      questions: [
+        ...current.questions,
+        normalizeQuestionForm({ position: current.questions.length + 1 }, current.questions.length),
+      ],
+    }));
+  };
+
+  const importCsv = () => {
+    const imported = questionsFromCsv(csvText);
+    if (!imported.length) return;
+    setForm((current) => ({
+      ...current,
+      questions: [...current.questions, ...imported].map((question, index) => ({
+        ...question,
+        position: index + 1,
+      })),
+    }));
+    setCsvText("");
+  };
+
+  const save = () => {
+    const content = {
+      description: form.description,
+      rich_html: form.rich_html,
+      discussion_prompt: form.discussion_prompt,
+      starter_code: form.starter_code,
+      language: form.language,
+      submission_instructions: form.submission_instructions,
+      reflection_prompt: form.reflection_prompt,
+      project_brief: form.project_brief,
+      questions: form.questions.map((question, index) => ({
+        ...question,
+        options: Array.isArray(question.options)
+          ? question.options
+          : String(question.options || "")
+              .split("|")
+              .map((option) => option.trim())
+              .filter(Boolean),
+        points: Number(question.points || 1),
+        position: index + 1,
+      })),
+    };
+
+    onSave({
+      title: form.title,
+      activity_type: form.activity_type,
+      content,
+      points: Number(form.points || 0),
+      position: Number(form.position || 1),
+      is_required: form.is_required,
+      completion_rule: form.completion_rule,
+      pass_score: form.pass_score || null,
+      is_published: form.is_published,
+    });
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+      <DialogTitle>Manage Activity</DialogTitle>
+      <DialogContent dividers>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={5}>
+            <MDInput
+              label="Activity title"
+              fullWidth
+              value={form.title}
+              onChange={(event) => setForm({ ...form, title: event.target.value })}
+            />
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <MDInput
+              select
+              label="Type"
+              fullWidth
+              value={form.activity_type}
+              onChange={(event) => setForm({ ...form, activity_type: event.target.value })}
+              SelectProps={{ native: true }}
+            >
+              {activityTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </MDInput>
+          </Grid>
+          <Grid item xs={6} md={2}>
+            <MDInput
+              label="Marks"
+              type="number"
+              fullWidth
+              value={form.points}
+              onChange={(event) => setForm({ ...form, points: event.target.value })}
+            />
+          </Grid>
+          <Grid item xs={6} md={2}>
+            <MDInput
+              label="Position"
+              type="number"
+              fullWidth
+              value={form.position}
+              onChange={(event) => setForm({ ...form, position: event.target.value })}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <MDInput
+              label="Short description"
+              multiline
+              rows={2}
+              fullWidth
+              value={form.description}
+              onChange={(event) => setForm({ ...form, description: event.target.value })}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <MDInput
+              select
+              label="Completion"
+              fullWidth
+              value={form.completion_rule}
+              onChange={(event) => setForm({ ...form, completion_rule: event.target.value })}
+              SelectProps={{ native: true }}
+            >
+              <option value="manual">Manual</option>
+              <option value="viewed">Viewed</option>
+              <option value="submitted">Submitted</option>
+              <option value="graded">Graded</option>
+              <option value="score_at_least">Score at least</option>
+            </MDInput>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <MDInput
+              label="Pass score"
+              type="number"
+              fullWidth
+              value={form.pass_score}
+              onChange={(event) => setForm({ ...form, pass_score: event.target.value })}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <MDInput
+              select
+              label="Published"
+              fullWidth
+              value={form.is_published ? "yes" : "no"}
+              onChange={(event) => setForm({ ...form, is_published: event.target.value === "yes" })}
+              SelectProps={{ native: true }}
+            >
+              <option value="yes">Published</option>
+              <option value="no">Unpublished</option>
+            </MDInput>
+          </Grid>
+
+          {form.activity_type === "quiz" ? (
+            <Grid item xs={12}>
+              <MDTypography variant="h6" fontWeight="bold" mb={1}>
+                Quiz Questions
+              </MDTypography>
+              <MDBox display="flex" flexDirection="column" gap={1.5}>
+                {form.questions.map((question, index) => (
+                  <MDBox key={question.id} p={2} border="1px solid #e5e7eb" borderRadius="md">
+                    <Grid container spacing={1.5}>
+                      <Grid item xs={12} md={5}>
+                        <MDInput
+                          label={`Question ${index + 1}`}
+                          fullWidth
+                          value={question.prompt}
+                          onChange={(event) =>
+                            updateQuestion(index, { prompt: event.target.value })
+                          }
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={3}>
+                        <MDInput
+                          label="Options separated by |"
+                          fullWidth
+                          value={question.options.join("|")}
+                          onChange={(event) =>
+                            updateQuestion(index, {
+                              options: event.target.value
+                                .split("|")
+                                .map((option) => option.trim())
+                                .filter(Boolean),
+                            })
+                          }
+                        />
+                      </Grid>
+                      <Grid item xs={8} md={3}>
+                        <MDInput
+                          label="Correct answer"
+                          fullWidth
+                          value={question.correct_answer}
+                          onChange={(event) =>
+                            updateQuestion(index, { correct_answer: event.target.value })
+                          }
+                        />
+                      </Grid>
+                      <Grid item xs={4} md={1}>
+                        <MDInput
+                          label="Marks"
+                          type="number"
+                          fullWidth
+                          value={question.points}
+                          onChange={(event) =>
+                            updateQuestion(index, { points: event.target.value })
+                          }
+                        />
+                      </Grid>
+                    </Grid>
+                  </MDBox>
+                ))}
+              </MDBox>
+              <MDBox mt={1.5} display="flex" gap={1} flexWrap="wrap">
+                <MDButton variant="outlined" color="info" onClick={addQuestion}>
+                  Add Question
+                </MDButton>
+              </MDBox>
+              <MDBox mt={2}>
+                <MDInput
+                  label="Bulk CSV: prompt, optionA|optionB|optionC, correct answer, marks"
+                  multiline
+                  rows={3}
+                  fullWidth
+                  value={csvText}
+                  onChange={(event) => setCsvText(event.target.value)}
+                />
+                <MDButton
+                  variant="outlined"
+                  color="dark"
+                  size="small"
+                  sx={{ mt: 1 }}
+                  onClick={importCsv}
+                >
+                  Import CSV
+                </MDButton>
+              </MDBox>
+            </Grid>
+          ) : (
+            <Grid item xs={12}>
+              <MDTypography variant="h6" fontWeight="bold" mb={1}>
+                Rich Content
+              </MDTypography>
+              <RichContentEditor
+                value={form.rich_html}
+                onChange={(richHtml) => setForm({ ...form, rich_html: richHtml })}
+              />
+            </Grid>
+          )}
+
+          {form.activity_type === "discussion" && (
+            <Grid item xs={12}>
+              <MDInput
+                label="Discussion prompt"
+                multiline
+                rows={3}
+                fullWidth
+                value={form.discussion_prompt}
+                onChange={(event) => setForm({ ...form, discussion_prompt: event.target.value })}
+              />
+            </Grid>
+          )}
+
+          {["assignment", "project", "reflection"].includes(form.activity_type) && (
+            <Grid item xs={12}>
+              <MDInput
+                label={
+                  form.activity_type === "reflection"
+                    ? "Reflection prompt"
+                    : form.activity_type === "project"
+                    ? "Project brief"
+                    : "Submission instructions"
+                }
+                multiline
+                rows={4}
+                fullWidth
+                value={
+                  form.activity_type === "reflection"
+                    ? form.reflection_prompt
+                    : form.activity_type === "project"
+                    ? form.project_brief
+                    : form.submission_instructions
+                }
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    [form.activity_type === "reflection"
+                      ? "reflection_prompt"
+                      : form.activity_type === "project"
+                      ? "project_brief"
+                      : "submission_instructions"]: event.target.value,
+                  })
+                }
+              />
+            </Grid>
+          )}
+
+          {form.activity_type === "coding" && (
+            <>
+              <Grid item xs={12} md={3}>
+                <MDInput
+                  label="Language"
+                  fullWidth
+                  value={form.language}
+                  onChange={(event) => setForm({ ...form, language: event.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} md={9}>
+                <MDInput
+                  label="Starter code"
+                  multiline
+                  rows={7}
+                  fullWidth
+                  value={form.starter_code}
+                  onChange={(event) => setForm({ ...form, starter_code: event.target.value })}
+                  sx={{ "& textarea": { fontFamily: "monospace" } }}
+                />
+              </Grid>
+            </>
+          )}
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <MDButton variant="outlined" color="dark" onClick={onClose}>
+          Close
+        </MDButton>
+        <MDButton variant="gradient" color="info" disabled={saving || !form.title} onClick={save}>
+          Save Activity
+        </MDButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+RichContentEditor.propTypes = {
+  onChange: PropTypes.func.isRequired,
+  value: PropTypes.string,
+};
+
+RichContentEditor.defaultProps = {
+  value: "",
+};
+
+ActivityManagerDialog.propTypes = {
+  activity: PropTypes.shape({
+    activity_type: PropTypes.string,
+    content: PropTypes.object,
+    completion_rule: PropTypes.string,
+    id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    is_published: PropTypes.bool,
+    is_required: PropTypes.bool,
+    pass_score: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    points: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    position: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    title: PropTypes.string,
+  }),
+  onClose: PropTypes.func.isRequired,
+  onSave: PropTypes.func.isRequired,
+  open: PropTypes.bool.isRequired,
+  saving: PropTypes.bool.isRequired,
+};
+
+ActivityManagerDialog.defaultProps = {
+  activity: null,
+};
+
 function CourseBuilder() {
   const { templateId, courseId } = useParams();
   const { pathname } = useLocation();
@@ -115,6 +662,7 @@ function CourseBuilder() {
   const [moduleActionAnchor, setModuleActionAnchor] = useState(null);
   const [activityActionAnchor, setActivityActionAnchor] = useState(null);
   const [actionTarget, setActionTarget] = useState(null);
+  const [activityManagerOpen, setActivityManagerOpen] = useState(false);
   const [courseForm, setCourseForm] = useState({});
   const [moduleEditForm, setModuleEditForm] = useState(emptyModule(1));
   const [activityEditForm, setActivityEditForm] = useState(emptyActivity(1));
@@ -268,6 +816,14 @@ function CourseBuilder() {
     closeMenus();
   };
 
+  const openActivityManager = (courseModule, activity) => {
+    setSelectedModuleId(courseModule.id);
+    setSelectedActivityId(activity.id);
+    setActivityEditForm(activityToForm(activity));
+    setActivityManagerOpen(true);
+    closeMenus();
+  };
+
   const updateModulePublished = async (courseModule, isPublished) => {
     setSaving(true);
     setError("");
@@ -372,6 +928,26 @@ function CourseBuilder() {
         : `/courses/activities/${selectedActivity.id}`;
       await apiClient.put(endpoint, parseActivityPayload(activityEditForm));
       setMessage("Activity saved.");
+      await loadBuilder();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveManagedActivity = async (payload) => {
+    if (!selectedActivity) return;
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const endpoint = isTemplate
+        ? `/course-templates/activities/${selectedActivity.id}`
+        : `/courses/activities/${selectedActivity.id}`;
+      await apiClient.put(endpoint, payload);
+      setMessage("Activity saved.");
+      setActivityManagerOpen(false);
       await loadBuilder();
     } catch (err) {
       setError(err.message);
@@ -1104,9 +1680,9 @@ function CourseBuilder() {
           onClose={closeMenus}
         >
           <MenuItem
-            onClick={() => selectActivityForEdit(actionTarget?.module, actionTarget?.activity)}
+            onClick={() => openActivityManager(actionTarget?.module, actionTarget?.activity)}
           >
-            Edit
+            Manage
           </MenuItem>
           <MenuItem
             onClick={() => {
@@ -1128,6 +1704,13 @@ function CourseBuilder() {
             Delete
           </MenuItem>
         </Menu>
+        <ActivityManagerDialog
+          activity={selectedActivity}
+          open={activityManagerOpen}
+          saving={saving}
+          onClose={() => setActivityManagerOpen(false)}
+          onSave={saveManagedActivity}
+        />
       </MDBox>
       <Footer />
     </DashboardLayout>

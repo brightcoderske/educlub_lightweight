@@ -224,6 +224,56 @@ function activityDone(status) {
   return ["completed", "graded"].includes(status);
 }
 
+function normalizeQuestion(question = {}, index = 0, includeAnswer = false) {
+  const normalized = {
+    id: question.id || `${index + 1}`,
+    question_type: question.question_type || question.type || "multiple_choice",
+    prompt: question.prompt || question.question || "",
+    options: Array.isArray(question.options) ? question.options : [],
+    points: Number(question.points || 1),
+    position: Number(question.position || index + 1),
+    feedback: question.feedback || "",
+  };
+
+  if (includeAnswer) {
+    normalized.correct_answer =
+      question.correct_answer ?? question.answer ?? question.correct ?? "";
+  }
+
+  return normalized;
+}
+
+function sanitizeActivityContent(content = {}, includeAnswers = false) {
+  if (!content || typeof content !== "object") return {};
+  const sanitized = { ...content };
+  if (Array.isArray(sanitized.questions)) {
+    sanitized.questions = sanitized.questions.map((question, index) =>
+      normalizeQuestion(question, index, includeAnswers),
+    );
+  }
+  return sanitized;
+}
+
+function normalizeAnswer(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim().toLowerCase()).sort();
+  }
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function answersMatch(expected, actual) {
+  const normalizedExpected = normalizeAnswer(expected);
+  const normalizedActual = normalizeAnswer(actual);
+
+  if (Array.isArray(normalizedExpected) || Array.isArray(normalizedActual)) {
+    return JSON.stringify(normalizedExpected) === JSON.stringify(normalizedActual);
+  }
+
+  return normalizedExpected === normalizedActual;
+}
+
 function moduleSummary(module) {
   const total = module.activities.length;
   const completed = module.activities.filter((activity) =>
@@ -360,7 +410,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
         template_activity_id: row.template_activity_id,
         title: row.activity_title,
         activity_type: row.activity_type,
-        content: row.content || {},
+        content: sanitizeActivityContent(row.content || {}, staffView),
         points: Number(row.points || 0),
         position: row.activity_position,
         is_required: row.is_required,
@@ -410,6 +460,204 @@ async function getCourseLearningOverview(courseId, user = {}) {
       score_percent: courseScore,
       is_done: modules.length > 0 && completedModules >= modules.length,
     },
+  };
+}
+
+async function assertActivityAccess(activityId, user = {}) {
+  const result = await query(
+    `SELECT la.*, cm.course_id, c.school_id
+     FROM learning_activities la
+     JOIN course_modules cm ON cm.id = la.module_id
+     JOIN courses c ON c.id = cm.course_id
+     WHERE la.id = $1`,
+    [activityId],
+  );
+  const activity = result.rows[0];
+  if (!activity) return { activity: null, learner: null, staffView: false };
+
+  if (isStaff(user)) {
+    const allowed =
+      user.role === "system_admin" ||
+      (isSchoolStaff(user) && Number(activity.school_id) === Number(user.schoolId));
+    return { activity: allowed ? activity : null, learner: null, staffView: true };
+  }
+
+  const learner = await findLearnerForUser(user.userId);
+  if (!learner) return { activity: null, learner: null, staffView: false };
+
+  const allocation = await query(
+    `SELECT id
+     FROM course_allocations
+     WHERE course_id = $1
+       AND learner_id = $2
+       AND status IN ('active', 'in_progress', 'completed')
+     LIMIT 1`,
+    [activity.course_id, learner.id],
+  );
+
+  return {
+    activity: allocation.rows[0] ? activity : null,
+    learner,
+    staffView: false,
+  };
+}
+
+async function ensureDiscussion(activity, user = {}) {
+  const existing = await query(
+    "SELECT * FROM discussions WHERE activity_id = $1 LIMIT 1",
+    [activity.id],
+  );
+  if (existing.rows[0]) return existing.rows[0];
+
+  const content = activity.content || {};
+  const prompt =
+    content.discussion_prompt ||
+    content.prompt ||
+    content.body ||
+    content.description ||
+    "Share your thoughts with the class.";
+
+  const created = await query(
+    `INSERT INTO discussions (
+       activity_id, prompt, allow_peer_replies, created_by_user_id
+     )
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [
+      activity.id,
+      prompt,
+      content.allow_peer_replies !== false,
+      user.userId || null,
+    ],
+  );
+  return created.rows[0];
+}
+
+async function getActivityDiscussion(activityId, user = {}) {
+  const { activity } = await assertActivityAccess(activityId, user);
+  if (!activity) throw new Error("Activity not found or not available.");
+  if (activity.activity_type !== "discussion") {
+    throw new Error("This activity is not a discussion.");
+  }
+
+  const discussion = await ensureDiscussion(activity, user);
+  const replies = await query(
+    `SELECT dr.*,
+            COALESCE(l.full_name, u.full_name, u.email, 'Teacher') AS author_name,
+            CASE WHEN dr.learner_id IS NULL THEN 'staff' ELSE 'learner' END AS author_type
+     FROM discussion_replies dr
+     LEFT JOIN learners l ON l.id = dr.learner_id
+     LEFT JOIN users u ON u.id = dr.author_user_id
+     WHERE dr.discussion_id = $1
+       AND dr.is_hidden = false
+     ORDER BY dr.created_at ASC`,
+    [discussion.id],
+  );
+
+  return { discussion, replies: replies.rows };
+}
+
+async function addDiscussionReply(activityId, user = {}, data = {}) {
+  const { activity, learner, staffView } = await assertActivityAccess(
+    activityId,
+    user,
+  );
+  if (!activity) throw new Error("Activity not found or not available.");
+  if (activity.activity_type !== "discussion") {
+    throw new Error("This activity is not a discussion.");
+  }
+  if (!staffView && !learner) throw new Error("Learner profile is required.");
+
+  const body = String(data.body || "").trim();
+  if (!body) throw new Error("Reply cannot be empty.");
+
+  const discussion = await ensureDiscussion(activity, user);
+  const result = await query(
+    `INSERT INTO discussion_replies (
+       discussion_id, learner_id, author_user_id, parent_reply_id, body
+     )
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [
+      discussion.id,
+      learner?.id || null,
+      user.userId || null,
+      data.parent_reply_id || null,
+      body,
+    ],
+  );
+
+  if (learner) {
+    await upsertActivityProgress(activityId, user, { status: "submitted" });
+  }
+
+  return result.rows[0];
+}
+
+async function submitQuiz(activityId, user = {}, data = {}) {
+  const { activity, learner } = await assertActivityAccess(activityId, user);
+  if (!activity) throw new Error("Activity not found or not available.");
+  if (activity.activity_type !== "quiz") throw new Error("This activity is not a quiz.");
+  if (!learner) throw new Error("Learner profile is required.");
+
+  const questions = Array.isArray(activity.content?.questions)
+    ? activity.content.questions.map((question, index) =>
+        normalizeQuestion(question, index, true),
+      )
+    : [];
+  if (questions.length === 0) throw new Error("This quiz has no questions yet.");
+
+  const answers = data.answers || {};
+  let earned = 0;
+  const total = questions.reduce((sum, question) => sum + Number(question.points || 0), 0);
+  const feedback = {};
+
+  questions.forEach((question) => {
+    const answer = answers[question.id] ?? answers[question.position];
+    const correct = answersMatch(question.correct_answer, answer);
+    if (correct) earned += Number(question.points || 0);
+    feedback[question.id] = {
+      correct,
+      points: correct ? Number(question.points || 0) : 0,
+      max_points: Number(question.points || 0),
+    };
+  });
+
+  const score = total ? Math.round((earned / total) * 100) : 0;
+  const attemptNumber = await query(
+    `SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt
+     FROM quiz_attempts
+     WHERE learner_id = $1
+       AND activity_id = $2`,
+    [learner.id, activityId],
+  );
+  const attempt = await query(
+    `INSERT INTO quiz_attempts (
+       learner_id, activity_id, attempt_number, answers, score, feedback
+     )
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [
+      learner.id,
+      activityId,
+      attemptNumber.rows[0]?.next_attempt || 1,
+      JSON.stringify(answers),
+      score,
+      JSON.stringify(feedback),
+    ],
+  );
+
+  await upsertActivityProgress(activityId, user, {
+    status: "graded",
+    score,
+  });
+
+  return {
+    attempt: attempt.rows[0],
+    score,
+    earned_points: earned,
+    total_points: total,
+    feedback,
   };
 }
 
@@ -720,6 +968,9 @@ module.exports = {
   createManagedActivity,
   updateActivity,
   deleteActivity,
+  getActivityDiscussion,
+  addDiscussionReply,
+  submitQuiz,
   syncSchoolCourse: courseTemplatesService.syncSchoolCourse,
   rollbackSchoolCourse: courseTemplatesService.rollbackSchoolCourse,
 };

@@ -387,12 +387,14 @@ CREATE TABLE IF NOT EXISTS discussion_replies (
   id SERIAL PRIMARY KEY,
   discussion_id INTEGER REFERENCES discussions(id) ON DELETE CASCADE,
   learner_id INTEGER REFERENCES learners(id) ON DELETE CASCADE,
+  author_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   parent_reply_id INTEGER REFERENCES discussion_replies(id) ON DELETE CASCADE,
   body TEXT NOT NULL,
   is_hidden BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE discussion_replies ADD COLUMN IF NOT EXISTS author_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 
 -- Course Allocations table
 CREATE TABLE IF NOT EXISTS course_allocations (

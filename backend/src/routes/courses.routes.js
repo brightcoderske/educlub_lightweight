@@ -31,6 +31,21 @@ router.post(
   authenticateToken,
   coursesController.updateActivityProgress,
 );
+router.get(
+  "/activities/:activityId/discussion",
+  authenticateToken,
+  coursesController.getActivityDiscussion,
+);
+router.post(
+  "/activities/:activityId/discussion/replies",
+  authenticateToken,
+  coursesController.addDiscussionReply,
+);
+router.post(
+  "/activities/:activityId/quiz-attempts",
+  authenticateToken,
+  coursesController.submitQuiz,
+);
 router.post(
   "/:id/modules",
   authenticateToken,
