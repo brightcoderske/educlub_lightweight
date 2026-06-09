@@ -1,0 +1,20 @@
+{
+  "short_name": "eduClub",
+  "name": "eduClub LMS",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "apple-icon.png",
+      "sizes": "192x192 180x180 152x152 120x120",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1A73E8",
+  "background_color": "#ffffff"
+}

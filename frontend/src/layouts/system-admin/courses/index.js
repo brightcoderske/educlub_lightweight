@@ -1,0 +1,35 @@
+import AdminResourcePage from "layouts/system-admin/AdminResourcePage";
+
+function SystemAdminCourses() {
+  return (
+    <AdminResourcePage
+      title="Courses"
+      subtitle="Master course templates that schools can adopt and safely customize."
+      endpoint="/course-templates"
+      columns={[
+        {
+          key: "name",
+          label: "Course Template",
+          type: "internalLink",
+          path: (course) => `/system-admin/courses/${course.id}/builder`,
+        },
+        { key: "code", label: "Code" },
+        { key: "target_level", label: "Level" },
+        { key: "estimated_weeks", label: "Weeks" },
+        { key: "course_category", label: "Category" },
+        { key: "version", label: "Version" },
+        { key: "is_active", label: "Active" },
+      ]}
+      formFields={[
+        { name: "name", label: "Course title" },
+        { name: "code", label: "Course code" },
+        { name: "target_level", label: "Target grade or level" },
+        { name: "estimated_weeks", label: "Estimated weeks", type: "number" },
+        { name: "description", label: "Description", fullWidth: true },
+      ]}
+      createLabel="Create Course"
+    />
+  );
+}
+
+export default SystemAdminCourses;

@@ -1,0 +1,358 @@
+const { query } = require("../config");
+const reportsService = require("../services/reports.service");
+const academicService = require("../services/academic.service");
+const path = require("path");
+
+async function ensureLearnerAccess(req, learnerId) {
+  if (req.user.role === "system_admin") {
+    return true;
+  }
+
+  const result = await query(
+    "SELECT school_id, user_id FROM learners WHERE id = $1",
+    [learnerId]
+  );
+  const learner = result.rows[0];
+
+  if (!learner) {
+    return false;
+  }
+
+  if (req.user.role === "school_admin" || req.user.role === "teacher") {
+    return learner.school_id === req.user.schoolId;
+  }
+
+  return learner.user_id === req.user.userId;
+}
+
+async function getAllReports(req, res) {
+  try {
+    const result = await query(
+      `SELECT r.*
+       FROM reports r
+       JOIN learners l ON r.learner_id = l.id
+       WHERE $1 = 'system_admin'
+          OR ($1 = 'school_admin' AND l.school_id = $2)
+          OR ($1 = 'learner' AND l.user_id = $3)
+       ORDER BY r.created_at DESC`,
+      [req.user.role, req.user.schoolId, req.user.userId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get reports error:", error);
+    res.status(500).json({ error: "Failed to get reports" });
+  }
+}
+
+async function getLearnerReports(req, res) {
+  try {
+    const allowed = await ensureLearnerAccess(req, req.params.learnerId);
+    if (!allowed) {
+      return res.status(403).json({ error: "Learner is outside your access" });
+    }
+
+    const result = await query(
+      `SELECT r.*, l.full_name as learner_name, c.name as course_name
+       FROM reports r
+       JOIN learners l ON r.learner_id = l.id
+       LEFT JOIN courses c ON r.course_id = c.id
+       WHERE r.learner_id = $1
+       ORDER BY r.created_at DESC`,
+      [req.params.learnerId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get learner reports error:", error);
+    res.status(500).json({ error: "Failed to get learner reports" });
+  }
+}
+
+async function getSchoolReports(req, res) {
+  try {
+    if (
+      req.user.role === "school_admin" &&
+      Number(req.params.schoolId) !== req.user.schoolId
+    ) {
+      return res.status(403).json({ error: "School is outside your access" });
+    }
+
+    const result = await query(
+      `SELECT r.*, l.full_name as learner_name, s.name as school_name, c.name as course_name
+       FROM reports r
+       JOIN learners l ON r.learner_id = l.id
+       JOIN schools s ON l.school_id = s.id
+       LEFT JOIN courses c ON r.course_id = c.id
+       WHERE l.school_id = $1
+       ORDER BY r.created_at DESC`,
+      [req.params.schoolId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get school reports error:", error);
+    res.status(500).json({ error: "Failed to get school reports" });
+  }
+}
+
+async function getCourseReports(req, res) {
+  try {
+    const result = await query(
+      `SELECT r.*, l.full_name as learner_name, c.name as course_name
+       FROM reports r
+       JOIN learners l ON r.learner_id = l.id
+       JOIN courses c ON r.course_id = c.id
+       WHERE r.course_id = $1
+       ORDER BY r.created_at DESC`,
+      [req.params.courseId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get course reports error:", error);
+    res.status(500).json({ error: "Failed to get course reports" });
+  }
+}
+
+async function generateReport(req, res) {
+  try {
+    const { learner_id, course_id, report_type, term, academic_year, data } =
+      req.body;
+
+    const allowed = await ensureLearnerAccess(req, learner_id);
+    if (!allowed || req.user.role === "learner") {
+      return res.status(403).json({ error: "Learner is outside your access" });
+    }
+
+    const result = await query(
+      `INSERT INTO reports (learner_id, course_id, report_type, term, academic_year, data)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        learner_id,
+        course_id,
+        report_type,
+        term,
+        academic_year,
+        JSON.stringify(data),
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Generate report error:", error);
+    res.status(500).json({ error: "Failed to generate report" });
+  }
+}
+
+async function getReportFeedback(req, res) {
+  try {
+    const { learnerId } = req.params;
+    const { term, academicYear } = req.query;
+    const allowed = await ensureLearnerAccess(req, learnerId);
+    if (!allowed || req.user.role === "learner") {
+      return res.status(403).json({ error: "Learner is outside your access" });
+    }
+    if (!term || !academicYear) {
+      return res.status(400).json({ error: "Term and academic year are required." });
+    }
+
+    const feedback = await reportsService.getReportFeedback(
+      learnerId,
+      term,
+      academicYear
+    );
+    res.json(feedback || { learner_id: Number(learnerId), term, academic_year: Number(academicYear), comment_text: "" });
+  } catch (error) {
+    console.error("Get report feedback error:", error);
+    res.status(500).json({ error: "Failed to load report feedback" });
+  }
+}
+
+async function saveReportFeedback(req, res) {
+  try {
+    const { learnerId } = req.params;
+    const { term, academicYear, comment_text } = req.body;
+    const allowed = await ensureLearnerAccess(req, learnerId);
+    if (!allowed || req.user.role === "learner") {
+      return res.status(403).json({ error: "Learner is outside your access" });
+    }
+    if (!term || !academicYear) {
+      return res.status(400).json({ error: "Term and academic year are required." });
+    }
+
+    const saved = await reportsService.saveReportFeedback(
+      req.user,
+      learnerId,
+      term,
+      academicYear,
+      comment_text
+    );
+    res.json(
+      saved || {
+        learner_id: Number(learnerId),
+        term,
+        academic_year: Number(academicYear),
+        comment_text: "",
+        message: "Feedback cleared.",
+      }
+    );
+  } catch (error) {
+    console.error("Save report feedback error:", error);
+    res.status(500).json({ error: "Failed to save report feedback" });
+  }
+}
+
+async function generateLearnerReportPDF(req, res) {
+  try {
+    let { learnerId, term, academicYear } = req.params;
+    const { term_type } = req.query;
+    const allowed = await ensureLearnerAccess(req, learnerId);
+    if (!allowed) {
+      return res.status(403).json({ error: "Learner is outside your access" });
+    }
+
+    // If term and academicYear are not provided, use the active term
+    if (!term || !academicYear) {
+      const activeTerm = await academicService.getActiveTerm(
+        term_type || "regular"
+      );
+      if (activeTerm) {
+        term = term || activeTerm.name;
+        academicYear =
+          academicYear || new Date(activeTerm.start_date).getFullYear();
+      } else {
+        return res.status(400).json({
+          error: "No active term found. Please specify term and academic year.",
+        });
+      }
+    }
+
+    const pdfPath = await reportsService.generateLearnerReportPDF(
+      learnerId,
+      term,
+      academicYear
+    );
+
+    res.download(pdfPath, `report_${learnerId}_${term}_${academicYear}.pdf`);
+  } catch (error) {
+    console.error("Generate learner PDF report error:", error);
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+}
+
+async function generateClassReportsPDF(req, res) {
+  try {
+    let { grade, stream, term, academicYear, school_id } = req.body;
+    const { term_type } = req.body;
+    const schoolId =
+      req.user.role === "system_admin" ? school_id : req.user.schoolId;
+
+    // If term and academicYear are not provided, use the active term
+    if (!term || !academicYear) {
+      const activeTerm = await academicService.getActiveTerm(
+        term_type || "regular"
+      );
+      if (activeTerm) {
+        term = term || activeTerm.name;
+        academicYear =
+          academicYear || new Date(activeTerm.start_date).getFullYear();
+      } else {
+        return res.status(400).json({
+          error: "No active term found. Please specify term and academic year.",
+        });
+      }
+    }
+
+    // Get all learners in this class
+    const learnersResult = await query(
+      `SELECT id FROM learners 
+       WHERE school_id = $1 AND grade = $2 AND stream = $3 AND is_active = true`,
+      [schoolId, grade, stream]
+    );
+
+    const learnerIds = learnersResult.rows.map((l) => l.id);
+
+    if (learnerIds.length === 0) {
+      return res.status(404).json({ error: "No learners found in this class" });
+    }
+
+    const zipPath = await reportsService.generateMultipleReportsPDF(
+      learnerIds,
+      term,
+      academicYear
+    );
+
+    res.download(
+      zipPath,
+      `reports_${grade}_${stream}_${term}_${academicYear}.zip`
+    );
+  } catch (error) {
+    console.error("Generate class PDF reports error:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function generateSchoolReportsPDF(req, res) {
+  try {
+    let { term, academicYear, school_id } = req.body;
+    const { term_type } = req.body;
+    const schoolId =
+      req.user.role === "system_admin" ? school_id : req.user.schoolId;
+
+    if (!schoolId) {
+      return res.status(400).json({ error: "School is required" });
+    }
+
+    // If term and academicYear are not provided, use the active term
+    if (!term || !academicYear) {
+      const activeTerm = await academicService.getActiveTerm(
+        term_type || "regular"
+      );
+      if (activeTerm) {
+        term = term || activeTerm.name;
+        academicYear =
+          academicYear || new Date(activeTerm.start_date).getFullYear();
+      } else {
+        return res.status(400).json({
+          error: "No active term found. Please specify term and academic year.",
+        });
+      }
+    }
+
+    // Get all learners in this school
+    const learnersResult = await query(
+      `SELECT id FROM learners WHERE school_id = $1 AND is_active = true`,
+      [schoolId]
+    );
+
+    const learnerIds = learnersResult.rows.map((l) => l.id);
+
+    if (learnerIds.length === 0) {
+      return res
+        .status(404)
+        .json({ error: "No learners found in this school" });
+    }
+
+    const zipPath = await reportsService.generateMultipleReportsPDF(
+      learnerIds,
+      term,
+      academicYear
+    );
+
+    res.download(zipPath, `reports_school_${term}_${academicYear}.zip`);
+  } catch (error) {
+    console.error("Generate school PDF reports error:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+module.exports = {
+  getAllReports,
+  getLearnerReports,
+  getSchoolReports,
+  getCourseReports,
+  generateReport,
+  getReportFeedback,
+  saveReportFeedback,
+  generateLearnerReportPDF,
+  generateClassReportsPDF,
+  generateSchoolReportsPDF,
+};
