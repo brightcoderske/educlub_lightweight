@@ -205,6 +205,7 @@ CREATE TABLE IF NOT EXISTS course_template_activities (
 
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES course_templates(id) ON DELETE SET NULL;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS template_version INTEGER;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS school_version INTEGER DEFAULT 1;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS last_template_sync_at TIMESTAMP;
 
 -- Native LMS course builder tables
@@ -708,6 +709,15 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS template_update_notifications (
+  id SERIAL PRIMARY KEY,
+  template_id INTEGER REFERENCES course_templates(id) ON DELETE CASCADE,
+  school_id INTEGER REFERENCES schools(id) ON DELETE CASCADE,
+  template_version INTEGER NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(template_id, school_id, template_version)
+);
+
 ALTER TABLE competitions ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE competitions ADD COLUMN IF NOT EXISTS competition_type VARCHAR(50) DEFAULT 'quiz';
 ALTER TABLE competitions ADD COLUMN IF NOT EXISTS eligible_grades JSONB DEFAULT '[]'::jsonb;
@@ -854,6 +864,8 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_role_school ON notifications(role, school_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread_user ON notifications(user_id, is_read, created_at);
+CREATE INDEX IF NOT EXISTS idx_template_update_notifications_school
+  ON template_update_notifications(school_id, template_id, template_version);
 CREATE INDEX IF NOT EXISTS idx_competitions_dates ON competitions(start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_competitions_featured ON competitions(is_featured, is_active);
 CREATE INDEX IF NOT EXISTS idx_competitions_active_dates ON competitions(is_active, start_date, end_date);
@@ -955,6 +967,7 @@ ALTER TABLE trusted_mfa_devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mfa_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE template_update_notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE competitions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE competition_enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE competition_payments ENABLE ROW LEVEL SECURITY;
@@ -2400,6 +2413,11 @@ CREATE POLICY notifications_role_access ON notifications
         )
       )
     )
+    OR (
+      role IN ('school_admin', 'teacher')
+      AND (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+      AND school_id = (SELECT public.educlub_school_id())
+    )
   );
 
 DROP POLICY IF EXISTS notifications_system_admin_insert ON notifications;
@@ -2413,6 +2431,31 @@ CREATE POLICY notifications_system_admin_update ON notifications
   USING ((SELECT public.educlub_role()) = 'system_admin')
   WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
 CREATE POLICY notifications_system_admin_delete ON notifications
+  FOR DELETE
+  USING ((SELECT public.educlub_role()) = 'system_admin');
+
+DROP POLICY IF EXISTS template_update_notifications_role_access ON template_update_notifications;
+CREATE POLICY template_update_notifications_role_access ON template_update_notifications
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+      AND school_id = (SELECT public.educlub_school_id())
+    )
+  );
+
+DROP POLICY IF EXISTS template_update_notifications_system_admin_insert ON template_update_notifications;
+DROP POLICY IF EXISTS template_update_notifications_system_admin_update ON template_update_notifications;
+DROP POLICY IF EXISTS template_update_notifications_system_admin_delete ON template_update_notifications;
+CREATE POLICY template_update_notifications_system_admin_insert ON template_update_notifications
+  FOR INSERT
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+CREATE POLICY template_update_notifications_system_admin_update ON template_update_notifications
+  FOR UPDATE
+  USING ((SELECT public.educlub_role()) = 'system_admin')
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+CREATE POLICY template_update_notifications_system_admin_delete ON template_update_notifications
   FOR DELETE
   USING ((SELECT public.educlub_role()) = 'system_admin');
 

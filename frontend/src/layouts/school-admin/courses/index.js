@@ -54,6 +54,7 @@ function Courses() {
 
   const builderReadyCount = courses.filter((c) => c.description || c.estimated_weeks).length;
   const activeCount = courses.filter((c) => c.is_active).length;
+  const updateCount = courses.filter((course) => course.update_available).length;
   const adoptedTemplateIds = new Set(courses.map((course) => Number(course.template_id)));
 
   const adoptTemplate = async (template) => {
@@ -150,6 +151,14 @@ function Courses() {
                   <MDTypography variant="h4" fontWeight="bold">
                     {activeCount}
                   </MDTypography>
+                  {updateCount > 0 && (
+                    <Chip
+                      label={`${updateCount} update${updateCount === 1 ? "" : "s"}`}
+                      color="warning"
+                      size="small"
+                      sx={{ mt: 1 }}
+                    />
+                  )}
                 </MDBox>
                 <MDBox
                   width="48px"
@@ -219,24 +228,38 @@ function Courses() {
                         {courses.map((course) => (
                           <TableRow key={course.id} hover>
                             <TableCell>
-                              <MDTypography
-                                component="button"
-                                variant="body2"
-                                color="info"
-                                fontWeight="medium"
-                                onClick={() =>
-                                  navigate(`/school-admin/courses/${course.id}/builder`)
-                                }
-                                sx={{
-                                  background: "none",
-                                  border: 0,
-                                  cursor: "pointer",
-                                  p: 0,
-                                  textAlign: "left",
-                                }}
-                              >
-                                {course.name}
-                              </MDTypography>
+                              <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                                <MDTypography
+                                  component="button"
+                                  variant="body2"
+                                  color="info"
+                                  fontWeight="medium"
+                                  onClick={() =>
+                                    navigate(`/school-admin/courses/${course.id}/builder`)
+                                  }
+                                  sx={{
+                                    background: "none",
+                                    border: 0,
+                                    cursor: "pointer",
+                                    p: 0,
+                                    textAlign: "left",
+                                  }}
+                                >
+                                  {course.name}
+                                </MDTypography>
+                                {course.update_available && (
+                                  <Chip label="Update available" color="warning" size="small" />
+                                )}
+                              </MDBox>
+                              {course.template_id && (
+                                <MDTypography variant="caption" color="text">
+                                  School v{course.school_version || 1} | Synced template v
+                                  {course.template_version || 1}
+                                  {course.current_template_version
+                                    ? ` of ${course.current_template_version}`
+                                    : ""}
+                                </MDTypography>
+                              )}
                             </TableCell>
                             <TableCell>
                               <MDTypography
@@ -302,13 +325,25 @@ function Courses() {
                       </TableHead>
                       <TableBody>
                         {templates.map((template) => {
-                          const adopted = adoptedTemplateIds.has(Number(template.id));
+                          const adopted =
+                            template.is_adopted || adoptedTemplateIds.has(Number(template.id));
+                          const adoptedCourse = courses.find(
+                            (course) => Number(course.template_id) === Number(template.id)
+                          );
                           return (
                             <TableRow key={template.id} hover>
                               <TableCell>
-                                <MDTypography variant="body2" fontWeight="medium">
-                                  {template.name}
-                                </MDTypography>
+                                <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                                  <MDTypography variant="body2" fontWeight="medium">
+                                    {template.name}
+                                  </MDTypography>
+                                  {template.update_available && (
+                                    <Chip label="Update available" color="warning" size="small" />
+                                  )}
+                                  {adopted && !template.update_available && (
+                                    <Chip label="Adopted" color="success" size="small" />
+                                  )}
+                                </MDBox>
                                 <MDTypography variant="caption" color="text">
                                   {template.description || "No description"}
                                 </MDTypography>
@@ -323,17 +358,24 @@ function Courses() {
                                   size="small"
                                   disabled={loading}
                                   onClick={() => {
-                                    const adoptedCourse = courses.find(
-                                      (course) => Number(course.template_id) === Number(template.id)
-                                    );
                                     if (adoptedCourse) {
                                       navigate(`/school-admin/courses/${adoptedCourse.id}/builder`);
+                                      return;
+                                    }
+                                    if (template.adopted_course_id) {
+                                      navigate(
+                                        `/school-admin/courses/${template.adopted_course_id}/builder`
+                                      );
                                       return;
                                     }
                                     adoptTemplate(template);
                                   }}
                                 >
-                                  {adopted ? "Open" : "Adopt"}
+                                  {template.update_available
+                                    ? "Review"
+                                    : adopted
+                                    ? "Open"
+                                    : "Adopt"}
                                 </MDButton>
                               </TableCell>
                             </TableRow>

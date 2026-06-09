@@ -100,6 +100,16 @@ async function createAllocation(req, res) {
           .status(403)
           .json({ error: "Learner is outside your school" });
       }
+
+      const courseResult = await query(
+        "SELECT id FROM courses WHERE id = $1 AND school_id = $2 AND is_active = true",
+        [course_id, req.user.schoolId]
+      );
+      if (!courseResult.rows[0]) {
+        return res
+          .status(403)
+          .json({ error: "Allocate learners to your school's adopted course version." });
+      }
     }
 
     const result = await query(
@@ -198,6 +208,16 @@ async function updateAllocation(req, res) {
           .status(403)
           .json({ error: "Learner is outside your school" });
       }
+
+      const courseResult = await query(
+        "SELECT id FROM courses WHERE id = $1 AND school_id = $2 AND is_active = true",
+        [course_id, req.user.schoolId]
+      );
+      if (!courseResult.rows[0]) {
+        return res
+          .status(403)
+          .json({ error: "Allocation must use your school's adopted course version." });
+      }
     }
 
     const result = await query(
@@ -262,6 +282,16 @@ async function bulkAllocate(req, res) {
 
     if (!schoolId) {
       return res.status(400).json({ error: "School is required" });
+    }
+
+    const courseResult = await query(
+      "SELECT id FROM courses WHERE id = $1 AND school_id = $2 AND is_active = true",
+      [course_id, schoolId]
+    );
+    if (!courseResult.rows[0]) {
+      return res
+        .status(403)
+        .json({ error: "Bulk allocation must use your school's adopted course version." });
     }
 
     const gradeMatchSql = `

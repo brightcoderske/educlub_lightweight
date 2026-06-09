@@ -44,8 +44,14 @@ async function getAllCourses(filters = {}) {
   }
 
   const result = await query(
-    `SELECT c.*
+    `SELECT c.*,
+            t.version AS current_template_version,
+            (
+              c.template_id IS NOT NULL
+              AND COALESCE(c.template_version, 0) < COALESCE(t.version, 1)
+            ) AS update_available
      FROM courses c
+     LEFT JOIN course_templates t ON t.id = c.template_id
      WHERE 1=1
        ${categorySql}
        ${scopeSql}
@@ -191,6 +197,17 @@ async function assertCourseManageAccess(courseId, user = {}) {
   return Boolean(result.rows[0]);
 }
 
+async function bumpSchoolCourseVersion(courseId) {
+  await query(
+    `UPDATE courses
+     SET school_version = COALESCE(school_version, 1) + 1,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+       AND school_id IS NOT NULL`,
+    [courseId],
+  );
+}
+
 function normalizeStatus(status) {
   const allowed = new Set([
     "not_started",
@@ -230,9 +247,18 @@ function moduleSummary(module) {
 
 async function assertCourseAccess(courseId, user = {}) {
   if (isStaff(user)) {
-    const result = await query("SELECT * FROM courses WHERE id = $1", [
-      courseId,
-    ]);
+    const result = await query(
+      `SELECT c.*,
+              t.version AS current_template_version,
+              (
+                c.template_id IS NOT NULL
+                AND COALESCE(c.template_version, 0) < COALESCE(t.version, 1)
+              ) AS update_available
+       FROM courses c
+       LEFT JOIN course_templates t ON t.id = c.template_id
+       WHERE c.id = $1`,
+      [courseId],
+    );
     return { course: result.rows[0], learner: null };
   }
 
@@ -240,9 +266,15 @@ async function assertCourseAccess(courseId, user = {}) {
   if (!learner) return { course: null, learner: null };
 
   const result = await query(
-    `SELECT c.*
+    `SELECT c.*,
+            t.version AS current_template_version,
+            (
+              c.template_id IS NOT NULL
+              AND COALESCE(c.template_version, 0) < COALESCE(t.version, 1)
+            ) AS update_available
      FROM courses c
      JOIN course_allocations a ON a.course_id = c.id
+     LEFT JOIN course_templates t ON t.id = c.template_id
      WHERE c.id = $1
        AND a.learner_id = $2
        AND a.status IN ('active', 'in_progress', 'completed')
@@ -286,6 +318,8 @@ async function getCourseLearningOverview(courseId, user = {}) {
        la.points,
        la.position AS activity_position,
        la.is_required,
+       la.completion_rule,
+       la.pass_score,
        la.is_published AS activity_published,
        COALESCE(ap.status, 'not_started') AS status,
        ap.score,
@@ -330,6 +364,8 @@ async function getCourseLearningOverview(courseId, user = {}) {
         points: Number(row.points || 0),
         position: row.activity_position,
         is_required: row.is_required,
+        completion_rule: row.completion_rule,
+        pass_score: row.pass_score,
         is_published: row.activity_published,
         status: row.status,
         score: row.score === null ? null : Number(row.score),
@@ -503,7 +539,9 @@ async function createModule(courseId, data = {}) {
 async function createManagedModule(courseId, user = {}, data = {}) {
   const allowed = await assertCourseManageAccess(courseId, user);
   if (!allowed) throw new Error("You cannot edit this course.");
-  return createModule(courseId, data);
+  const module = await createModule(courseId, data);
+  await bumpSchoolCourseVersion(courseId);
+  return module;
 }
 
 async function updateModule(moduleId, user = {}, data = {}) {
@@ -538,6 +576,7 @@ async function updateModule(moduleId, user = {}, data = {}) {
       moduleId,
     ],
   );
+  await bumpSchoolCourseVersion(courseId);
   return result.rows[0];
 }
 
@@ -553,6 +592,7 @@ async function deleteModule(moduleId, user = {}) {
   if (!allowed) throw new Error("You cannot delete this module.");
 
   await query("DELETE FROM course_modules WHERE id = $1", [moduleId]);
+  await bumpSchoolCourseVersion(courseId);
 }
 
 async function createActivity(moduleId, data = {}) {
@@ -594,7 +634,9 @@ async function createManagedActivity(moduleId, user = {}, data = {}) {
   const allowed = await assertCourseManageAccess(courseId, user);
   if (!allowed) throw new Error("You cannot edit this module.");
 
-  return createActivity(moduleId, data);
+  const activity = await createActivity(moduleId, data);
+  await bumpSchoolCourseVersion(courseId);
+  return activity;
 }
 
 async function updateActivity(activityId, user = {}, data = {}) {
@@ -638,6 +680,7 @@ async function updateActivity(activityId, user = {}, data = {}) {
       activityId,
     ],
   );
+  await bumpSchoolCourseVersion(courseId);
   return result.rows[0];
 }
 
@@ -656,6 +699,7 @@ async function deleteActivity(activityId, user = {}) {
   if (!allowed) throw new Error("You cannot delete this activity.");
 
   await query("DELETE FROM learning_activities WHERE id = $1", [activityId]);
+  await bumpSchoolCourseVersion(courseId);
 }
 
 module.exports = {

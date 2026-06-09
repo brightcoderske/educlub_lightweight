@@ -1,4 +1,5 @@
 const { query } = require("../config");
+const notificationsService = require("./notifications.service");
 
 function normalizeCourseCategory(category) {
   if (["general", "weekly_typing", "weekly_quiz"].includes(category)) {
@@ -21,14 +22,54 @@ function requireSchool(user = {}) {
   }
 }
 
-function bumpTemplateVersion(templateId) {
-  return query(
+async function notifyTemplateUpdate(templateId, templateVersion) {
+  const schools = await query(
+    `SELECT DISTINCT c.school_id, t.name
+     FROM courses c
+     JOIN course_templates t ON t.id = c.template_id
+     WHERE c.template_id = $1
+       AND c.school_id IS NOT NULL
+       AND COALESCE(c.template_version, 0) < $2`,
+    [templateId, templateVersion],
+  );
+
+  for (const school of schools.rows) {
+    const inserted = await query(
+      `INSERT INTO template_update_notifications (
+         template_id, school_id, template_version
+       )
+       VALUES ($1, $2, $3)
+       ON CONFLICT (template_id, school_id, template_version) DO NOTHING
+       RETURNING id`,
+      [templateId, school.school_id, templateVersion],
+    );
+
+    if (!inserted.rows[0]) continue;
+
+    await notificationsService.notifyRole("school_admin", {
+      school_id: school.school_id,
+      title: "Course template updated",
+      message: `${school.name} has template version ${templateVersion} available. Sync it into your school course when ready.`,
+      notification_type: "course_template_updated",
+      entity_type: "course_template",
+      entity_id: templateId,
+    });
+  }
+}
+
+async function bumpTemplateVersion(templateId) {
+  const result = await query(
     `UPDATE course_templates
      SET version = COALESCE(version, 1) + 1,
          updated_at = CURRENT_TIMESTAMP
-     WHERE id = $1`,
+     WHERE id = $1
+     RETURNING id, version`,
     [templateId],
   );
+  if (result.rows[0]) {
+    await notifyTemplateUpdate(result.rows[0].id, result.rows[0].version);
+  }
+  return result.rows[0];
 }
 
 async function getTemplateIdForModule(templateModuleId) {
@@ -52,18 +93,38 @@ async function getTemplateIdForActivity(templateActivityId) {
 
 async function listTemplates(filters = {}, user = {}) {
   const params = [];
-  let sql = "SELECT * FROM course_templates WHERE 1=1";
+  const schoolId = user.schoolId || null;
+  let sql = "SELECT t.*";
+
+  if (isSchoolStaff(user) && schoolId) {
+    params.push(schoolId);
+    sql += `, c.id AS adopted_course_id,
+            c.template_version AS adopted_template_version,
+            c.school_version AS adopted_school_version,
+            (c.id IS NOT NULL) AS is_adopted,
+            (c.id IS NOT NULL AND COALESCE(c.template_version, 0) < COALESCE(t.version, 1)) AS update_available`;
+  }
+
+  sql += " FROM course_templates t";
+
+  if (isSchoolStaff(user) && schoolId) {
+    sql += ` LEFT JOIN courses c
+              ON c.template_id = t.id
+             AND c.school_id = $1`;
+  }
+
+  sql += " WHERE 1=1";
 
   if (!isSystemAdmin(user)) {
-    sql += " AND is_active = true";
+    sql += " AND t.is_active = true";
   }
 
   if (filters.category && filters.category !== "all") {
     params.push(filters.category);
-    sql += ` AND course_category = $${params.length}`;
+    sql += ` AND t.course_category = $${params.length}`;
   }
 
-  sql += " ORDER BY course_category, name";
+  sql += " ORDER BY t.course_category, t.name";
   const result = await query(sql, params);
   return result.rows;
 }
@@ -123,6 +184,9 @@ async function updateTemplate(templateId, data = {}) {
       templateId,
     ],
   );
+  if (result.rows[0]) {
+    await notifyTemplateUpdate(templateId, result.rows[0].version);
+  }
   return result.rows[0];
 }
 
@@ -380,10 +444,10 @@ async function adoptTemplate(templateId, user = {}) {
   const courseResult = await query(
     `INSERT INTO courses (
        school_id, template_id, template_version, last_template_sync_at,
-       name, code, description, target_level, image_url, estimated_weeks,
+       school_version, name, code, description, target_level, image_url, estimated_weeks,
        learning_objectives, certificate_enabled, course_category, is_active
      )
-     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
+     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
      RETURNING *`,
     [
       user.schoolId,
@@ -438,7 +502,12 @@ async function adoptTemplate(templateId, user = {}) {
 async function getSchoolCourse(courseId, user = {}) {
   requireSchool(user);
   const result = await query(
-    `SELECT c.*, t.version AS current_template_version
+    `SELECT c.*,
+            t.version AS current_template_version,
+            (
+              c.template_id IS NOT NULL
+              AND COALESCE(c.template_version, 0) < COALESCE(t.version, 1)
+            ) AS update_available
      FROM courses c
      LEFT JOIN course_templates t ON t.id = c.template_id
      WHERE c.id = $1
@@ -471,6 +540,7 @@ async function syncSchoolCourse(courseId, user = {}) {
          certificate_enabled = $8,
          course_category = $9,
          template_version = $10,
+         school_version = COALESCE(school_version, 1) + 1,
          last_template_sync_at = CURRENT_TIMESTAMP,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $11`,
