@@ -1,74 +1,90 @@
-import { useEffect, useState } from "react";
-import PropTypes from "prop-types";
-import Grid from "@mui/material/Grid";
+import { useEffect, useMemo, useState } from "react";
 import Card from "@mui/material/Card";
+import Chip from "@mui/material/Chip";
+import Grid from "@mui/material/Grid";
+import Icon from "@mui/material/Icon";
+import IconButton from "@mui/material/IconButton";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+
 import MDBox from "components/MDBox";
-import MDTypography from "components/MDTypography";
-import MDInput from "components/MDInput";
 import MDButton from "components/MDButton";
+import MDInput from "components/MDInput";
+import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 
-function AcademicTable({ title, rows, columns }) {
-  return (
-    <Card>
-      <MDBox p={3}>
-        <MDTypography variant="h5" mb={2}>
-          {title}
-        </MDTypography>
-        {rows.length === 0 ? (
-          <MDTypography variant="body2" color="text">
-            No records yet.
-          </MDTypography>
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead sx={{ display: "table-header-group" }}>
-                <TableRow>
-                  {columns.map((column) => (
-                    <TableCell key={column.key}>{column.label}</TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.id}>
-                    {columns.map((column) => (
-                      <TableCell key={column.key}>{row[column.key] ?? "-"}</TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-      </MDBox>
-    </Card>
-  );
+const emptyYear = {
+  year: "",
+  start_date: "",
+  end_date: "",
+  is_active: "false",
+};
+
+const emptyTerm = {
+  academic_year_id: "",
+  name: "Term 1",
+  term_type: "regular",
+  start_date: "",
+  end_date: "",
+  is_active: "false",
+};
+
+function toDateInput(value) {
+  return value ? String(value).slice(0, 10) : "";
 }
 
-AcademicTable.propTypes = {
-  title: PropTypes.string.isRequired,
-  rows: PropTypes.arrayOf(PropTypes.object).isRequired,
-  columns: PropTypes.arrayOf(PropTypes.object).isRequired,
-};
+function yearToForm(year) {
+  return {
+    year: year?.year || "",
+    start_date: toDateInput(year?.start_date),
+    end_date: toDateInput(year?.end_date),
+    is_active: year?.is_active ? "true" : "false",
+  };
+}
+
+function termToForm(term) {
+  return {
+    academic_year_id: term?.academic_year_id || "",
+    name: term?.name || "Term 1",
+    term_type: term?.term_type || "regular",
+    start_date: toDateInput(term?.start_date),
+    end_date: toDateInput(term?.end_date),
+    is_active: term?.is_active ? "true" : "false",
+  };
+}
 
 function SystemAdminAcademic() {
   const { isSystemAdmin } = useAuth();
   const [years, setYears] = useState([]);
   const [terms, setTerms] = useState([]);
-  const [yearForm, setYearForm] = useState({});
-  const [termForm, setTermForm] = useState({});
+  const [yearForm, setYearForm] = useState(emptyYear);
+  const [termForm, setTermForm] = useState(emptyTerm);
+  const [editingYearId, setEditingYearId] = useState(null);
+  const [editingTermId, setEditingTermId] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const activeYear = useMemo(() => years.find((year) => year.is_active) || years[0], [years]);
+  const termsByYear = useMemo(
+    () =>
+      terms.reduce((groups, term) => {
+        const key = term.academic_year || "No year";
+        return {
+          ...groups,
+          [key]: [...(groups[key] || []), term],
+        };
+      }, {}),
+    [terms]
+  );
 
   const loadAcademic = async () => {
     const [yearsResponse, termsResponse] = await Promise.all([
@@ -77,6 +93,12 @@ function SystemAdminAcademic() {
     ]);
     setYears(yearsResponse);
     setTerms(termsResponse);
+    if (!termForm.academic_year_id && yearsResponse[0]?.id) {
+      setTermForm((current) => ({
+        ...current,
+        academic_year_id: activeYear?.id || yearsResponse[0].id,
+      }));
+    }
   };
 
   useEffect(() => {
@@ -85,27 +107,105 @@ function SystemAdminAcademic() {
     }
   }, []);
 
-  const createYear = async () => {
-    await apiClient.post("/academic/years", {
-      year: Number(yearForm.year),
-      start_date: yearForm.start_date,
-      end_date: yearForm.end_date,
-      is_active: yearForm.is_active === "true",
-    });
-    setYearForm({});
-    await loadAcademic();
+  const resetYearForm = () => {
+    setEditingYearId(null);
+    setYearForm(emptyYear);
   };
 
-  const createTerm = async () => {
-    await apiClient.post("/academic/terms", {
-      academic_year_id: Number(termForm.academic_year_id),
-      name: termForm.name,
-      start_date: termForm.start_date,
-      end_date: termForm.end_date,
-      is_active: termForm.is_active === "true",
+  const resetTermForm = () => {
+    setEditingTermId(null);
+    setTermForm({
+      ...emptyTerm,
+      academic_year_id: activeYear?.id || years[0]?.id || "",
     });
-    setTermForm({});
-    await loadAcademic();
+  };
+
+  const saveYear = async () => {
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const payload = {
+        year: Number(yearForm.year),
+        start_date: yearForm.start_date,
+        end_date: yearForm.end_date,
+        is_active: yearForm.is_active === "true",
+      };
+      if (editingYearId) {
+        await apiClient.put(`/academic/years/${editingYearId}`, payload);
+        setMessage("Academic year updated.");
+      } else {
+        await apiClient.post("/academic/years", payload);
+        setMessage("Academic year created.");
+      }
+      resetYearForm();
+      await loadAcademic();
+    } catch (err) {
+      setError(err.message || "Failed to save academic year.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveTerm = async () => {
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const payload = {
+        academic_year_id: Number(termForm.academic_year_id),
+        name: termForm.name,
+        term_type: termForm.term_type,
+        start_date: termForm.start_date,
+        end_date: termForm.end_date,
+        is_active: termForm.is_active === "true",
+      };
+      if (editingTermId) {
+        await apiClient.put(`/academic/terms/${editingTermId}`, payload);
+        setMessage("Term updated and weeks recalculated.");
+      } else {
+        await apiClient.post("/academic/terms", payload);
+        setMessage("Term created and weeks calculated.");
+      }
+      resetTermForm();
+      await loadAcademic();
+    } catch (err) {
+      setError(err.message || "Failed to save term.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteYear = async (year) => {
+    if (!window.confirm(`Delete academic year ${year.year}? Linked terms will also be removed.`)) {
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await apiClient.delete(`/academic/years/${year.id}`);
+      await loadAcademic();
+    } catch (err) {
+      setError(err.message || "Failed to delete academic year.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteTerm = async (term) => {
+    if (!window.confirm(`Delete ${term.term_label || `${term.academic_year} - ${term.name}`}?`)) {
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await apiClient.delete(`/academic/terms/${term.id}`);
+      await loadAcademic();
+    } catch (err) {
+      setError(err.message || "Failed to delete term.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!isSystemAdmin()) {
@@ -116,23 +216,34 @@ function SystemAdminAcademic() {
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDTypography variant="h3">Academic Years & Terms</MDTypography>
-        <MDTypography variant="body2" color="text" mb={3}>
-          Manage the year-aware, term-aware, and week-aware academic structure.
-        </MDTypography>
+        <MDBox mb={3}>
+          <MDTypography variant="h3">Academic Years & Terms</MDTypography>
+          <MDTypography variant="body2" color="text">
+            Edit dates, active records, and week calculation from one system-admin screen.
+          </MDTypography>
+        </MDBox>
 
         {error && (
-          <MDTypography variant="caption" color="error" display="block" mb={2}>
-            {error}
-          </MDTypography>
+          <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#fee2e2" }}>
+            <MDTypography variant="body2" color="error">
+              {error}
+            </MDTypography>
+          </MDBox>
+        )}
+        {message && (
+          <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#dcfce7" }}>
+            <MDTypography variant="body2" color="success">
+              {message}
+            </MDTypography>
+          </MDBox>
         )}
 
         <Grid container spacing={3}>
-          <Grid item xs={12} lg={6}>
+          <Grid item xs={12} lg={5}>
             <Card>
               <MDBox p={3}>
                 <MDTypography variant="h5" mb={2}>
-                  Create Academic Year
+                  {editingYearId ? "Edit Academic Year" : "Create Academic Year"}
                 </MDTypography>
                 <Grid container spacing={2}>
                   <Grid item xs={12} md={4}>
@@ -140,7 +251,7 @@ function SystemAdminAcademic() {
                       label="Year"
                       type="number"
                       fullWidth
-                      value={yearForm.year || ""}
+                      value={yearForm.year}
                       onChange={(event) => setYearForm({ ...yearForm, year: event.target.value })}
                     />
                   </Grid>
@@ -148,7 +259,7 @@ function SystemAdminAcademic() {
                     <MDInput
                       type="date"
                       fullWidth
-                      value={yearForm.start_date || ""}
+                      value={yearForm.start_date}
                       onChange={(event) =>
                         setYearForm({ ...yearForm, start_date: event.target.value })
                       }
@@ -158,103 +269,285 @@ function SystemAdminAcademic() {
                     <MDInput
                       type="date"
                       fullWidth
-                      value={yearForm.end_date || ""}
+                      value={yearForm.end_date}
                       onChange={(event) =>
                         setYearForm({ ...yearForm, end_date: event.target.value })
                       }
                     />
                   </Grid>
+                  <Grid item xs={12}>
+                    <MDInput
+                      select
+                      label="Active year"
+                      fullWidth
+                      value={yearForm.is_active}
+                      onChange={(event) =>
+                        setYearForm({ ...yearForm, is_active: event.target.value })
+                      }
+                      SelectProps={{ native: true }}
+                    >
+                      <option value="false">No</option>
+                      <option value="true">Yes</option>
+                    </MDInput>
+                  </Grid>
                 </Grid>
-                <MDBox mt={2}>
-                  <MDButton variant="gradient" color="info" onClick={createYear}>
-                    Create Year
+                <MDBox mt={2} display="flex" gap={1}>
+                  <MDButton
+                    variant="gradient"
+                    color="info"
+                    disabled={
+                      saving || !yearForm.year || !yearForm.start_date || !yearForm.end_date
+                    }
+                    onClick={saveYear}
+                  >
+                    {editingYearId ? "Save Year" : "Create Year"}
                   </MDButton>
+                  {editingYearId && (
+                    <MDButton variant="outlined" color="dark" onClick={resetYearForm}>
+                      Cancel
+                    </MDButton>
+                  )}
                 </MDBox>
               </MDBox>
             </Card>
           </Grid>
 
-          <Grid item xs={12} lg={6}>
+          <Grid item xs={12} lg={7}>
             <Card>
               <MDBox p={3}>
                 <MDTypography variant="h5" mb={2}>
-                  Create Term
+                  {editingTermId ? "Edit Term" : "Create Term"}
                 </MDTypography>
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={4}>
                     <MDInput
-                      label="Academic Year ID"
-                      type="number"
+                      select
+                      label="Academic year"
                       fullWidth
-                      value={termForm.academic_year_id || ""}
+                      value={termForm.academic_year_id}
                       onChange={(event) =>
                         setTermForm({ ...termForm, academic_year_id: event.target.value })
                       }
-                    />
+                      SelectProps={{ native: true }}
+                    >
+                      <option value="">Select year</option>
+                      {years.map((year) => (
+                        <option key={year.id} value={year.id}>
+                          {year.year}
+                        </option>
+                      ))}
+                    </MDInput>
                   </Grid>
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={4}>
                     <MDInput
-                      label="Term Name"
+                      select
+                      label="Term"
                       fullWidth
-                      value={termForm.name || ""}
+                      value={termForm.name}
                       onChange={(event) => setTermForm({ ...termForm, name: event.target.value })}
-                    />
+                      SelectProps={{ native: true }}
+                    >
+                      <option value="Term 1">Term 1</option>
+                      <option value="Term 2">Term 2</option>
+                      <option value="Term 3">Term 3</option>
+                    </MDInput>
                   </Grid>
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={4}>
+                    <MDInput
+                      select
+                      label="Type"
+                      fullWidth
+                      value={termForm.term_type}
+                      onChange={(event) =>
+                        setTermForm({ ...termForm, term_type: event.target.value })
+                      }
+                      SelectProps={{ native: true }}
+                    >
+                      <option value="regular">Regular</option>
+                      <option value="crash_course">Crash course</option>
+                      <option value="holiday_program">Holiday program</option>
+                      <option value="intensive">Intensive</option>
+                      <option value="other">Other</option>
+                    </MDInput>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
                     <MDInput
                       type="date"
                       fullWidth
-                      value={termForm.start_date || ""}
+                      value={termForm.start_date}
                       onChange={(event) =>
                         setTermForm({ ...termForm, start_date: event.target.value })
                       }
                     />
                   </Grid>
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={4}>
                     <MDInput
                       type="date"
                       fullWidth
-                      value={termForm.end_date || ""}
+                      value={termForm.end_date}
                       onChange={(event) =>
                         setTermForm({ ...termForm, end_date: event.target.value })
                       }
                     />
                   </Grid>
+                  <Grid item xs={12} md={4}>
+                    <MDInput
+                      select
+                      label="Active term"
+                      fullWidth
+                      value={termForm.is_active}
+                      onChange={(event) =>
+                        setTermForm({ ...termForm, is_active: event.target.value })
+                      }
+                      SelectProps={{ native: true }}
+                    >
+                      <option value="false">No</option>
+                      <option value="true">Yes</option>
+                    </MDInput>
+                  </Grid>
                 </Grid>
-                <MDBox mt={2}>
-                  <MDButton variant="gradient" color="info" onClick={createTerm}>
-                    Create Term
+                <MDBox mt={2} display="flex" gap={1}>
+                  <MDButton
+                    variant="gradient"
+                    color="info"
+                    disabled={
+                      saving ||
+                      !termForm.academic_year_id ||
+                      !termForm.name ||
+                      !termForm.start_date ||
+                      !termForm.end_date
+                    }
+                    onClick={saveTerm}
+                  >
+                    {editingTermId ? "Save Term" : "Create Term"}
                   </MDButton>
+                  {editingTermId && (
+                    <MDButton variant="outlined" color="dark" onClick={resetTermForm}>
+                      Cancel
+                    </MDButton>
+                  )}
                 </MDBox>
               </MDBox>
             </Card>
           </Grid>
 
-          <Grid item xs={12} lg={6}>
-            <AcademicTable
-              title="Academic Years"
-              rows={years}
-              columns={[
-                { key: "id", label: "ID" },
-                { key: "year", label: "Year" },
-                { key: "start_date", label: "Start" },
-                { key: "end_date", label: "End" },
-                { key: "is_active", label: "Active" },
-              ]}
-            />
+          <Grid item xs={12} lg={5}>
+            <Card>
+              <MDBox p={3}>
+                <MDTypography variant="h5" mb={2}>
+                  Academic Years
+                </MDTypography>
+                <TableContainer>
+                  <Table>
+                    <TableHead sx={{ display: "table-header-group" }}>
+                      <TableRow>
+                        <TableCell>Year</TableCell>
+                        <TableCell>Dates</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {years.map((year) => (
+                        <TableRow key={year.id}>
+                          <TableCell>{year.year}</TableCell>
+                          <TableCell>
+                            {toDateInput(year.start_date)} to {toDateInput(year.end_date)}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              size="small"
+                              label={year.is_active ? "Active" : "Inactive"}
+                              color={year.is_active ? "success" : "default"}
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                setEditingYearId(year.id);
+                                setYearForm(yearToForm(year));
+                              }}
+                            >
+                              <Icon>edit</Icon>
+                            </IconButton>
+                            <IconButton size="small" onClick={() => deleteYear(year)}>
+                              <Icon>delete</Icon>
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </MDBox>
+            </Card>
           </Grid>
-          <Grid item xs={12} lg={6}>
-            <AcademicTable
-              title="Terms"
-              rows={terms}
-              columns={[
-                { key: "id", label: "ID" },
-                { key: "academic_year_id", label: "Year ID" },
-                { key: "name", label: "Term" },
-                { key: "total_weeks", label: "Weeks" },
-                { key: "is_active", label: "Active" },
-              ]}
-            />
+
+          <Grid item xs={12} lg={7}>
+            <Card>
+              <MDBox p={3}>
+                <MDTypography variant="h5" mb={2}>
+                  Terms
+                </MDTypography>
+                {Object.entries(termsByYear).map(([year, rows]) => (
+                  <MDBox key={year} mb={2}>
+                    <MDTypography variant="button" fontWeight="bold">
+                      {year}
+                    </MDTypography>
+                    <TableContainer>
+                      <Table>
+                        <TableHead sx={{ display: "table-header-group" }}>
+                          <TableRow>
+                            <TableCell>Term</TableCell>
+                            <TableCell>Type</TableCell>
+                            <TableCell>Dates</TableCell>
+                            <TableCell>Weeks</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align="right">Actions</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {rows.map((term) => (
+                            <TableRow key={term.id}>
+                              <TableCell>
+                                {term.term_label || `${term.academic_year} - ${term.name}`}
+                              </TableCell>
+                              <TableCell>{term.term_type}</TableCell>
+                              <TableCell>
+                                {toDateInput(term.start_date)} to {toDateInput(term.end_date)}
+                              </TableCell>
+                              <TableCell>{term.total_weeks || "-"}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  size="small"
+                                  label={term.is_active ? "Active" : "Inactive"}
+                                  color={term.is_active ? "success" : "default"}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => {
+                                    setEditingTermId(term.id);
+                                    setTermForm(termToForm(term));
+                                  }}
+                                >
+                                  <Icon>edit</Icon>
+                                </IconButton>
+                                <IconButton size="small" onClick={() => deleteTerm(term)}>
+                                  <Icon>delete</Icon>
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </MDBox>
+                ))}
+              </MDBox>
+            </Card>
           </Grid>
         </Grid>
       </MDBox>

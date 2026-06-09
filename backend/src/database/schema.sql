@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS terms (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_terms_one_active_per_type
   ON terms(term_type)
   WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_terms_year_name_type
+  ON terms(academic_year_id, name, term_type);
 
 -- Term Weeks table
 CREATE TABLE IF NOT EXISTS term_weeks (
@@ -528,6 +530,59 @@ CREATE TABLE IF NOT EXISTS typing_attempts (
   UNIQUE(typing_lesson_id, learner_id, attempt_number)
 );
 
+CREATE TABLE IF NOT EXISTS quiz_tests (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  term VARCHAR(50),
+  academic_year INTEGER,
+  week_number INTEGER,
+  quiz_type VARCHAR(50) DEFAULT 'weekly' CHECK (quiz_type IN ('weekly', 'competition')),
+  competition_id INTEGER REFERENCES competitions(id) ON DELETE SET NULL,
+  school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL,
+  quiz_category VARCHAR(50) DEFAULT 'quiz' CHECK (quiz_category IN ('quiz', 'maths', 'science', 'stem')),
+  eligible_grades JSONB DEFAULT '[]'::jsonb,
+  eligible_streams JSONB DEFAULT '[]'::jsonb,
+  pass_score NUMERIC(8, 2) DEFAULT 50,
+  max_attempts INTEGER DEFAULT 1,
+  duration_seconds INTEGER DEFAULT 600,
+  is_published BOOLEAN DEFAULT FALSE,
+  is_open BOOLEAN DEFAULT FALSE,
+  created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS quiz_test_questions (
+  id SERIAL PRIMARY KEY,
+  quiz_test_id INTEGER REFERENCES quiz_tests(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 1,
+  question_type VARCHAR(50) DEFAULT 'single_choice'
+    CHECK (question_type IN ('single_choice', 'multiple_choice', 'short_answer')),
+  prompt TEXT NOT NULL,
+  options JSONB DEFAULT '[]'::jsonb,
+  correct_answer JSONB DEFAULT '[]'::jsonb,
+  points NUMERIC(8, 2) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(quiz_test_id, position)
+);
+
+CREATE TABLE IF NOT EXISTS quiz_test_attempts (
+  id SERIAL PRIMARY KEY,
+  quiz_test_id INTEGER REFERENCES quiz_tests(id) ON DELETE CASCADE,
+  learner_id INTEGER REFERENCES learners(id) ON DELETE CASCADE,
+  attempt_number INTEGER NOT NULL DEFAULT 1,
+  answers JSONB DEFAULT '{}'::jsonb,
+  score NUMERIC(8, 2) DEFAULT 0,
+  earned_points NUMERIC(8, 2) DEFAULT 0,
+  total_points NUMERIC(8, 2) DEFAULT 0,
+  feedback JSONB DEFAULT '{}'::jsonb,
+  duration_seconds INTEGER,
+  submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(quiz_test_id, learner_id, attempt_number)
+);
+
 -- Leaderboards table (cached weekly leaderboards)
 CREATE TABLE IF NOT EXISTS weekly_leaderboards (
   id SERIAL PRIMARY KEY,
@@ -817,10 +872,14 @@ CREATE INDEX IF NOT EXISTS idx_course_template_activities_module_position ON cou
 CREATE INDEX IF NOT EXISTS idx_course_modules_course_position ON course_modules(course_id, position);
 CREATE INDEX IF NOT EXISTS idx_learning_activities_module_position ON learning_activities(module_id, position);
 CREATE INDEX IF NOT EXISTS idx_activity_progress_learner_activity ON activity_progress(learner_id, activity_id);
+CREATE INDEX IF NOT EXISTS idx_activity_progress_activity_status ON activity_progress(activity_id, status, updated_at);
 CREATE INDEX IF NOT EXISTS idx_activity_submissions_learner_activity ON activity_submissions(learner_id, activity_id);
+CREATE INDEX IF NOT EXISTS idx_activity_submissions_activity_status ON activity_submissions(activity_id, status, submitted_at);
 CREATE INDEX IF NOT EXISTS idx_activity_grades_learner_activity ON activity_grades(learner_id, activity_id);
+CREATE INDEX IF NOT EXISTS idx_activity_grades_activity_learner ON activity_grades(activity_id, learner_id, graded_at);
 CREATE INDEX IF NOT EXISTS idx_quiz_questions_activity_position ON quiz_questions(activity_id, position);
 CREATE INDEX IF NOT EXISTS idx_quiz_attempts_learner_activity ON quiz_attempts(learner_id, activity_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_activity_learner_attempt ON quiz_attempts(activity_id, learner_id, attempt_number DESC);
 CREATE INDEX IF NOT EXISTS idx_discussions_activity ON discussions(activity_id);
 CREATE INDEX IF NOT EXISTS idx_discussion_replies_discussion ON discussion_replies(discussion_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_course_allocations_learner_id ON course_allocations(learner_id);
@@ -837,6 +896,11 @@ CREATE INDEX IF NOT EXISTS idx_typing_tests_period ON typing_tests(academic_year
 CREATE INDEX IF NOT EXISTS idx_typing_tests_status ON typing_tests(is_published, is_open, deadline_at);
 CREATE INDEX IF NOT EXISTS idx_typing_lessons_test_order ON typing_lessons(typing_test_id, lesson_order);
 CREATE INDEX IF NOT EXISTS idx_typing_attempts_lookup ON typing_attempts(typing_test_id, typing_lesson_id, learner_id, attempt_number);
+CREATE INDEX IF NOT EXISTS idx_quiz_tests_period ON quiz_tests(academic_year, term, week_number, quiz_type);
+CREATE INDEX IF NOT EXISTS idx_quiz_tests_status ON quiz_tests(is_published, is_open, quiz_type);
+CREATE INDEX IF NOT EXISTS idx_quiz_tests_competition ON quiz_tests(competition_id, quiz_type);
+CREATE INDEX IF NOT EXISTS idx_quiz_test_questions_test_position ON quiz_test_questions(quiz_test_id, position);
+CREATE INDEX IF NOT EXISTS idx_quiz_test_attempts_lookup ON quiz_test_attempts(quiz_test_id, learner_id, attempt_number);
 CREATE INDEX IF NOT EXISTS idx_certificates_learner_id ON certificates(learner_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_course_id ON certificates(course_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_learner_status ON certificates(learner_id, status, completion_status);
@@ -956,6 +1020,9 @@ ALTER TABLE weekly_leaderboards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE typing_tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE typing_lessons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE typing_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quiz_tests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quiz_test_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quiz_test_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE report_feedback ENABLE ROW LEVEL SECURITY;
@@ -1430,21 +1497,37 @@ DROP POLICY IF EXISTS learner_activity_progress_write ON activity_progress;
 CREATE POLICY learner_activity_progress_write ON activity_progress
   FOR ALL
   USING (
-    (SELECT public.educlub_role()) IN ('system_admin', 'school_admin', 'teacher')
+    (SELECT public.educlub_role()) = 'system_admin'
     OR EXISTS (
       SELECT 1 FROM learners l
       WHERE l.id = learner_id
-        AND (SELECT public.educlub_role()) = 'learner'
-        AND l.user_id = (SELECT public.educlub_user_id())
+        AND (
+          (
+            (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+            AND l.school_id = (SELECT public.educlub_school_id())
+          )
+          OR (
+            (SELECT public.educlub_role()) = 'learner'
+            AND l.user_id = (SELECT public.educlub_user_id())
+          )
+        )
     )
   )
   WITH CHECK (
-    (SELECT public.educlub_role()) IN ('system_admin', 'school_admin', 'teacher')
+    (SELECT public.educlub_role()) = 'system_admin'
     OR EXISTS (
       SELECT 1 FROM learners l
       WHERE l.id = learner_id
-        AND (SELECT public.educlub_role()) = 'learner'
-        AND l.user_id = (SELECT public.educlub_user_id())
+        AND (
+          (
+            (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+            AND l.school_id = (SELECT public.educlub_school_id())
+          )
+          OR (
+            (SELECT public.educlub_role()) = 'learner'
+            AND l.user_id = (SELECT public.educlub_user_id())
+          )
+        )
     )
   );
 
@@ -1963,6 +2046,98 @@ CREATE POLICY typing_attempts_role_access ON typing_attempts
 
 DROP POLICY IF EXISTS typing_attempts_learner_insert ON typing_attempts;
 CREATE POLICY typing_attempts_learner_insert ON typing_attempts
+  FOR INSERT
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'learner'
+    AND EXISTS (
+      SELECT 1 FROM learners l
+      WHERE l.id = learner_id
+        AND l.user_id = (SELECT public.educlub_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS quiz_tests_role_access ON quiz_tests;
+CREATE POLICY quiz_tests_role_access ON quiz_tests
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+      AND (school_id IS NULL OR school_id = (SELECT public.educlub_school_id()))
+    )
+    OR (
+      (SELECT public.educlub_role()) = 'learner'
+      AND is_published IS TRUE
+      AND is_open IS TRUE
+      AND EXISTS (
+        SELECT 1 FROM learners l
+        WHERE l.user_id = (SELECT public.educlub_user_id())
+          AND (school_id IS NULL OR school_id = l.school_id)
+          AND (
+            jsonb_array_length(COALESCE(eligible_grades, '[]'::jsonb)) = 0
+            OR COALESCE(eligible_grades, '[]'::jsonb) ? l.grade
+          )
+          AND (
+            jsonb_array_length(COALESCE(eligible_streams, '[]'::jsonb)) = 0
+            OR COALESCE(eligible_streams, '[]'::jsonb) ? COALESCE(l.stream, '')
+          )
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS quiz_tests_admin_insert ON quiz_tests;
+DROP POLICY IF EXISTS quiz_tests_admin_update ON quiz_tests;
+DROP POLICY IF EXISTS quiz_tests_admin_delete ON quiz_tests;
+CREATE POLICY quiz_tests_admin_insert ON quiz_tests
+  FOR INSERT
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+CREATE POLICY quiz_tests_admin_update ON quiz_tests
+  FOR UPDATE
+  USING ((SELECT public.educlub_role()) = 'system_admin')
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+CREATE POLICY quiz_tests_admin_delete ON quiz_tests
+  FOR DELETE
+  USING ((SELECT public.educlub_role()) = 'system_admin');
+
+DROP POLICY IF EXISTS quiz_test_questions_role_access ON quiz_test_questions;
+CREATE POLICY quiz_test_questions_role_access ON quiz_test_questions
+  FOR SELECT
+  USING (EXISTS (SELECT 1 FROM quiz_tests qt WHERE qt.id = quiz_test_id));
+
+DROP POLICY IF EXISTS quiz_test_questions_admin_insert ON quiz_test_questions;
+DROP POLICY IF EXISTS quiz_test_questions_admin_update ON quiz_test_questions;
+DROP POLICY IF EXISTS quiz_test_questions_admin_delete ON quiz_test_questions;
+CREATE POLICY quiz_test_questions_admin_insert ON quiz_test_questions
+  FOR INSERT
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+CREATE POLICY quiz_test_questions_admin_update ON quiz_test_questions
+  FOR UPDATE
+  USING ((SELECT public.educlub_role()) = 'system_admin')
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+CREATE POLICY quiz_test_questions_admin_delete ON quiz_test_questions
+  FOR DELETE
+  USING ((SELECT public.educlub_role()) = 'system_admin');
+
+DROP POLICY IF EXISTS quiz_test_attempts_role_access ON quiz_test_attempts;
+CREATE POLICY quiz_test_attempts_role_access ON quiz_test_attempts
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR EXISTS (
+      SELECT 1 FROM learners l
+      WHERE l.id = learner_id
+        AND (
+          l.user_id = (SELECT public.educlub_user_id())
+          OR (
+            (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+            AND l.school_id = (SELECT public.educlub_school_id())
+          )
+        )
+    )
+  );
+
+DROP POLICY IF EXISTS quiz_test_attempts_learner_insert ON quiz_test_attempts;
+CREATE POLICY quiz_test_attempts_learner_insert ON quiz_test_attempts
   FOR INSERT
   WITH CHECK (
     (SELECT public.educlub_role()) = 'learner'

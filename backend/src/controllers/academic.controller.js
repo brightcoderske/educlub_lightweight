@@ -3,10 +3,8 @@ const academicService = require("../services/academic.service");
 
 async function getAllAcademicYears(req, res) {
   try {
-    const result = await query(
-      "SELECT * FROM academic_years ORDER BY year DESC"
-    );
-    res.json(result.rows);
+    const years = await academicService.getAllAcademicYears();
+    res.json(years);
   } catch (error) {
     console.error("Get academic years error:", error);
     res.status(500).json({ error: "Failed to get academic years" });
@@ -15,16 +13,8 @@ async function getAllAcademicYears(req, res) {
 
 async function createAcademicYear(req, res) {
   try {
-    const { year, start_date, end_date, is_active } = req.body;
-
-    const result = await query(
-      `INSERT INTO academic_years (year, start_date, end_date, is_active)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [year, start_date, end_date, is_active]
-    );
-
-    res.status(201).json(result.rows[0]);
+    const year = await academicService.createAcademicYear(req.body);
+    res.status(201).json(year);
   } catch (error) {
     console.error("Create academic year error:", error);
     res.status(500).json({ error: "Failed to create academic year" });
@@ -51,21 +41,13 @@ async function getAcademicYearById(req, res) {
 
 async function updateAcademicYear(req, res) {
   try {
-    const { year, start_date, end_date, is_active } = req.body;
+    const year = await academicService.updateAcademicYear(req.params.id, req.body);
 
-    const result = await query(
-      `UPDATE academic_years
-       SET year = $1, start_date = $2, end_date = $3, is_active = $4
-       WHERE id = $5
-       RETURNING *`,
-      [year, start_date, end_date, is_active, req.params.id]
-    );
-
-    if (result.rows.length === 0) {
+    if (!year) {
       return res.status(404).json({ error: "Academic year not found" });
     }
 
-    res.json(result.rows[0]);
+    res.json(year);
   } catch (error) {
     console.error("Update academic year error:", error);
     res.status(500).json({ error: "Failed to update academic year" });
@@ -92,13 +74,8 @@ async function deleteAcademicYear(req, res) {
 
 async function getAllTerms(req, res) {
   try {
-    const result = await query(
-      `SELECT t.*, ay.year AS academic_year
-       FROM terms t
-       LEFT JOIN academic_years ay ON ay.id = t.academic_year_id
-       ORDER BY ay.year DESC, t.name`
-    );
-    res.json(result.rows);
+    const terms = await academicService.getAllTerms();
+    res.json(terms);
   } catch (error) {
     console.error("Get terms error:", error);
     res.status(500).json({ error: "Failed to get terms" });

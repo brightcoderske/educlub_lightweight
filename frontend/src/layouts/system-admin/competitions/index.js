@@ -224,6 +224,8 @@ function SystemAdminCompetitions() {
       await loadCompetitions();
       if (response?.competition_type === "typing" || form.competition_type === "typing") {
         navigate(`/system-admin/typing-quizzes?competition_id=${response.id}`);
+      } else if (response?.id) {
+        navigate(`/system-admin/typing-quizzes?category=weekly_quiz&competition_id=${response.id}`);
       }
     } catch (err) {
       setError(err.message || "Could not save competition");
@@ -299,6 +301,10 @@ function SystemAdminCompetitions() {
 
   const setupTypingCompetition = (competition) => {
     navigate(`/system-admin/typing-quizzes?competition_id=${competition.id}`);
+  };
+
+  const setupQuizCompetition = (competition) => {
+    navigate(`/system-admin/typing-quizzes?category=weekly_quiz&competition_id=${competition.id}`);
   };
 
   if (!isSystemAdmin()) {
@@ -609,6 +615,16 @@ function SystemAdminCompetitions() {
                                   onClick={() => setupTypingCompetition(competition)}
                                 >
                                   Typing Setup
+                                </MDButton>
+                              )}
+                              {competition.competition_type !== "typing" && (
+                                <MDButton
+                                  variant="text"
+                                  color="success"
+                                  size="small"
+                                  onClick={() => setupQuizCompetition(competition)}
+                                >
+                                  Quiz Setup
                                 </MDButton>
                               )}
                             </MDBox>

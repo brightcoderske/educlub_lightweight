@@ -51,6 +51,18 @@ router.post(
   authenticateToken,
   coursesController.submitActivityWork,
 );
+router.get(
+  "/activities/:activityId/review",
+  authenticateToken,
+  canManageCourse,
+  coursesController.getActivityReview,
+);
+router.put(
+  "/activities/:activityId/learners/:learnerId/grade",
+  authenticateToken,
+  canManageCourse,
+  coursesController.gradeActivityForLearner,
+);
 router.post(
   "/activity-images",
   authenticateToken,

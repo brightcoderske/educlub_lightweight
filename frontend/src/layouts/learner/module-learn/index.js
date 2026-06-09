@@ -48,6 +48,79 @@ function readFileAsDataUrl(file) {
   });
 }
 
+function buildDiscussionThreads(replies = []) {
+  const byId = new Map();
+  const roots = [];
+  replies.forEach((reply) => byId.set(reply.id, { ...reply, children: [] }));
+  replies.forEach((reply) => {
+    const item = byId.get(reply.id);
+    if (reply.parent_reply_id && byId.has(reply.parent_reply_id)) {
+      byId.get(reply.parent_reply_id).children.push(item);
+    } else {
+      roots.push(item);
+    }
+  });
+  return roots;
+}
+
+function discussionCardColor(index, depth = 0) {
+  const colors = ["#f8fafc", "#eff6ff", "#f0fdf4", "#fff7ed", "#faf5ff"];
+  return colors[(index + depth) % colors.length];
+}
+
+function DiscussionReplyCard({ reply, index, depth, onReply }) {
+  return (
+    <MDBox>
+      <MDBox
+        p={1.75}
+        ml={depth ? 2 : 0}
+        borderRadius="md"
+        sx={{
+          bgcolor: discussionCardColor(index, depth),
+          border: "1px solid #d8dee9",
+        }}
+      >
+        <MDBox display="flex" justifyContent="space-between" gap={1} flexWrap="wrap">
+          <MDTypography variant="caption" color="text" fontWeight="bold">
+            {reply.author_name}
+          </MDTypography>
+          <MDButton variant="text" color="info" size="small" onClick={() => onReply(reply)}>
+            Reply
+          </MDButton>
+        </MDBox>
+        <MDTypography variant="body2" color="text" sx={{ whiteSpace: "pre-wrap" }}>
+          {reply.body}
+        </MDTypography>
+      </MDBox>
+      {reply.children?.length > 0 && (
+        <MDBox mt={1} display="flex" flexDirection="column" gap={1}>
+          {reply.children.map((child, childIndex) => (
+            <DiscussionReplyCard
+              key={child.id}
+              reply={child}
+              index={childIndex}
+              depth={depth + 1}
+              onReply={onReply}
+            />
+          ))}
+        </MDBox>
+      )}
+    </MDBox>
+  );
+}
+
+DiscussionReplyCard.propTypes = {
+  depth: PropTypes.number.isRequired,
+  index: PropTypes.number.isRequired,
+  onReply: PropTypes.func.isRequired,
+  reply: PropTypes.shape({
+    author_name: PropTypes.string,
+    body: PropTypes.string,
+    children: PropTypes.array,
+    id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  }).isRequired,
+};
+
 function ActivityBody({
   activity,
   answers,
@@ -57,11 +130,14 @@ function ActivityBody({
   submissionFile,
   codeDraft,
   codeOutput,
+  codePreviewHtml,
   quizResult,
+  replyTarget,
   saving,
   onAnswerChange,
   onCodeChange,
   onRunCode,
+  onSetReplyTarget,
   onSubmissionFileChange,
   onSubmissionTextChange,
   onSubmitWork,
@@ -74,6 +150,7 @@ function ActivityBody({
   const body = content.body || content.text || content.instructions || "";
   const code = content.starter_code || content.code || content.template;
   const questions = Array.isArray(content.questions) ? content.questions : [];
+  const discussionThreads = buildDiscussionThreads(discussion?.replies || []);
   const richHtml = content.rich_html || "";
   const discussionPrompt = content.discussion_prompt || "";
   const activityPrompt =
@@ -151,7 +228,16 @@ function ActivityBody({
       {activity.activity_type === "quiz" && questions.length > 0 && (
         <MDBox mt={2}>
           {questions.map((question, index) => (
-            <MDBox key={`${question.id || index}`} py={1.25} borderTop="1px solid #eef0f2">
+            <MDBox
+              key={`${question.id || index}`}
+              p={2}
+              mt={1.5}
+              borderRadius="md"
+              sx={{
+                bgcolor: ["#eff6ff", "#f0fdf4", "#fff7ed", "#faf5ff"][index % 4],
+                border: "1px solid #dbeafe",
+              }}
+            >
               <MDTypography variant="button" fontWeight="medium">
                 {index + 1}. {question.prompt || question.question || "Question"}
               </MDTypography>
@@ -211,20 +297,28 @@ function ActivityBody({
             Class Discussion
           </MDTypography>
           <MDBox mt={1.5} display="flex" flexDirection="column" gap={1}>
-            {(discussion?.replies || []).map((reply) => (
-              <MDBox key={reply.id} p={1.5} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
-                <MDTypography variant="caption" color="text" fontWeight="bold">
-                  {reply.author_name}
-                </MDTypography>
-                <MDTypography variant="body2" color="text" sx={{ whiteSpace: "pre-wrap" }}>
-                  {reply.body}
-                </MDTypography>
-              </MDBox>
+            {discussionThreads.map((reply, index) => (
+              <DiscussionReplyCard
+                key={reply.id}
+                reply={reply}
+                index={index}
+                depth={0}
+                onReply={onSetReplyTarget}
+              />
             ))}
           </MDBox>
           <MDBox mt={2}>
+            {replyTarget && (
+              <Chip
+                label={`Replying to ${replyTarget.author_name}`}
+                color="info"
+                size="small"
+                onDelete={() => onSetReplyTarget(null)}
+                sx={{ mb: 1 }}
+              />
+            )}
             <MDInput
-              label="Reply"
+              label={replyTarget ? "Reply to post" : "Your post to the prompt"}
               multiline
               rows={3}
               fullWidth
@@ -301,7 +395,16 @@ function ActivityBody({
             fullWidth
             value={codeDraft}
             onChange={(event) => onCodeChange(event.target.value)}
-            sx={{ mt: 1, "& textarea": { fontFamily: "monospace" } }}
+            sx={{
+              mt: 1,
+              "& textarea": {
+                fontFamily: "monospace",
+                bgcolor: "#0f172a",
+                color: "#e2e8f0",
+                borderRadius: "8px",
+                p: 1.5,
+              },
+            }}
           />
           <MDBox mt={1.5} display="flex" gap={1} flexWrap="wrap">
             <MDButton variant="gradient" color="info" disabled={saving} onClick={onRunCode}>
@@ -317,8 +420,9 @@ function ActivityBody({
             p={2}
             borderRadius="md"
             sx={{
-              bgcolor: "#0f172a",
-              color: "#e2e8f0",
+              bgcolor: "#ffffff",
+              color: "#111827",
+              border: "1px solid #d8dee9",
               minHeight: 90,
               overflow: "auto",
               fontSize: 13,
@@ -327,6 +431,17 @@ function ActivityBody({
           >
             {codeOutput || "Output will appear here."}
           </MDBox>
+          {codePreviewHtml && (
+            <MDBox
+              component="iframe"
+              title="Code preview"
+              srcDoc={codePreviewHtml}
+              mt={1.5}
+              width="100%"
+              height="320"
+              sx={{ bgcolor: "#ffffff", border: "1px solid #d8dee9", borderRadius: "8px" }}
+            />
+          )}
         </MDBox>
       )}
 
@@ -363,16 +478,19 @@ ActivityBody.propTypes = {
   discussionReply: PropTypes.string.isRequired,
   codeDraft: PropTypes.string.isRequired,
   codeOutput: PropTypes.string.isRequired,
+  codePreviewHtml: PropTypes.string.isRequired,
   onCodeChange: PropTypes.func.isRequired,
   onAnswerChange: PropTypes.func.isRequired,
   onDiscussionReplyChange: PropTypes.func.isRequired,
   onRunCode: PropTypes.func.isRequired,
+  onSetReplyTarget: PropTypes.func.isRequired,
   onSubmissionFileChange: PropTypes.func.isRequired,
   onSubmissionTextChange: PropTypes.func.isRequired,
   onSubmitDiscussionReply: PropTypes.func.isRequired,
   onSubmitQuiz: PropTypes.func.isRequired,
   onSubmitWork: PropTypes.func.isRequired,
   quizResult: PropTypes.object,
+  replyTarget: PropTypes.object,
   saving: PropTypes.bool.isRequired,
   submissionFile: PropTypes.object,
   submissionText: PropTypes.string.isRequired,
@@ -381,6 +499,7 @@ ActivityBody.propTypes = {
 ActivityBody.defaultProps = {
   discussion: null,
   quizResult: null,
+  replyTarget: null,
   submissionFile: null,
 };
 
@@ -464,10 +583,12 @@ function ModuleLearn() {
   const [answers, setAnswers] = useState({});
   const [discussion, setDiscussion] = useState(null);
   const [discussionReply, setDiscussionReply] = useState("");
+  const [replyTarget, setReplyTarget] = useState(null);
   const [submissionText, setSubmissionText] = useState("");
   const [submissionFile, setSubmissionFile] = useState(null);
   const [codeDraft, setCodeDraft] = useState("");
   const [codeOutput, setCodeOutput] = useState("");
+  const [codePreviewHtml, setCodePreviewHtml] = useState("");
   const [quizResult, setQuizResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -502,10 +623,12 @@ function ModuleLearn() {
     setQuizResult(null);
     setDiscussion(null);
     setDiscussionReply("");
+    setReplyTarget(null);
     setSubmissionText("");
     setSubmissionFile(null);
     setCodeDraft(activeActivity?.content?.starter_code || activeActivity?.content?.code || "");
     setCodeOutput("");
+    setCodePreviewHtml("");
 
     async function loadDiscussion() {
       if (activeActivity?.activity_type !== "discussion") return;
@@ -619,6 +742,12 @@ function ModuleLearn() {
   const runCode = () => {
     if (!activeActivity) return;
     const language = activeActivity.content?.language || "javascript";
+    setCodePreviewHtml("");
+    if (["html_css_js", "html", "web"].includes(language.toLowerCase())) {
+      setCodePreviewHtml(codeDraft);
+      setCodeOutput("Rendered browser preview below.");
+      return;
+    }
     if (!["javascript", "js"].includes(language.toLowerCase())) {
       setCodeOutput(`Running ${language} code will be supported in the server runner later.`);
       return;
@@ -642,8 +771,10 @@ function ModuleLearn() {
     try {
       await apiClient.post(`/courses/activities/${activeActivity.id}/discussion/replies`, {
         body: discussionReply,
+        parent_reply_id: replyTarget?.id || null,
       });
       setDiscussionReply("");
+      setReplyTarget(null);
       const response = await apiClient.get(`/courses/activities/${activeActivity.id}/discussion`);
       setDiscussion(response);
       await loadModule();
@@ -674,7 +805,15 @@ function ModuleLearn() {
   }
 
   return (
-    <MDBox minHeight="100vh" sx={{ bgcolor: "#eef4f8" }}>
+    <MDBox
+      minHeight="100vh"
+      sx={{
+        backgroundColor: "#f7f1e3",
+        backgroundImage:
+          "radial-gradient(circle at 20% 20%, rgba(37,99,235,0.08), transparent 28%), radial-gradient(circle at 80% 10%, rgba(22,163,74,0.08), transparent 24%), linear-gradient(135deg, rgba(255,255,255,0.55) 25%, transparent 25%)",
+        backgroundSize: "auto, auto, 28px 28px",
+      }}
+    >
       <MDBox
         px={{ xs: 2, md: 3 }}
         py={1.5}
@@ -773,10 +912,13 @@ function ModuleLearn() {
                       submissionFile={submissionFile}
                       codeDraft={codeDraft}
                       codeOutput={codeOutput}
+                      codePreviewHtml={codePreviewHtml}
+                      replyTarget={replyTarget}
                       onAnswerChange={updateAnswer}
                       onCodeChange={setCodeDraft}
                       onDiscussionReplyChange={setDiscussionReply}
                       onRunCode={runCode}
+                      onSetReplyTarget={setReplyTarget}
                       onSubmissionFileChange={setSubmissionFile}
                       onSubmissionTextChange={setSubmissionText}
                       onSubmitDiscussionReply={submitDiscussionReply}

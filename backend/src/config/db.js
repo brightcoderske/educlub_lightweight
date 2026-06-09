@@ -3,8 +3,23 @@ const { AsyncLocalStorage } = require("async_hooks");
 
 const requestContext = new AsyncLocalStorage();
 
+const poolMax = Number(process.env.DB_POOL_MAX || 4);
+const idleTimeoutMillis = Number(process.env.DB_IDLE_TIMEOUT_MS || 10000);
+const connectionTimeoutMillis = Number(
+  process.env.DB_CONNECTION_TIMEOUT_MS || 5000
+);
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 4,
+  idleTimeoutMillis:
+    Number.isFinite(idleTimeoutMillis) && idleTimeoutMillis > 0
+      ? idleTimeoutMillis
+      : 10000,
+  connectionTimeoutMillis:
+    Number.isFinite(connectionTimeoutMillis) && connectionTimeoutMillis > 0
+      ? connectionTimeoutMillis
+      : 5000,
   ssl:
     process.env.NODE_ENV === "production" ||
     process.env.DATABASE_URL.includes("supabase")

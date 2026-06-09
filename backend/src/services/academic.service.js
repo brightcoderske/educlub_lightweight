@@ -14,9 +14,13 @@ async function getAllAcademicYears() {
 async function createAcademicYear(yearData) {
   const { year, start_date, end_date, is_active } = yearData;
 
+  if (is_active) {
+    await query("UPDATE academic_years SET is_active = false WHERE is_active = true");
+  }
+
   const result = await query(
     `INSERT INTO academic_years (year, start_date, end_date, is_active)
-     VALUES ($1, $2, $3, $4)
+     VALUES ($1::integer, $2::date, $3::date, $4::boolean)
      RETURNING *`,
     [year, start_date, end_date, is_active]
   );
@@ -33,10 +37,21 @@ async function getAcademicYearById(id) {
 async function updateAcademicYear(id, yearData) {
   const { year, start_date, end_date, is_active } = yearData;
 
+  if (is_active) {
+    await query(
+      "UPDATE academic_years SET is_active = false WHERE is_active = true AND id <> $1::integer",
+      [id]
+    );
+  }
+
   const result = await query(
     `UPDATE academic_years
-     SET year = $1, start_date = $2, end_date = $3, is_active = $4
-     WHERE id = $5
+     SET year = $1::integer,
+         start_date = $2::date,
+         end_date = $3::date,
+         is_active = $4::boolean,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $5::integer
      RETURNING *`,
     [year, start_date, end_date, is_active, id]
   );
@@ -49,7 +64,12 @@ async function deleteAcademicYear(id) {
 
 async function getAllTerms() {
   const result = await query(
-    "SELECT * FROM terms ORDER BY academic_year DESC, name"
+    `SELECT t.*,
+            ay.year AS academic_year,
+            CONCAT(ay.year, ' - ', t.name) AS term_label
+     FROM terms t
+     LEFT JOIN academic_years ay ON ay.id = t.academic_year_id
+     ORDER BY ay.year DESC, t.term_type, t.name`
   );
   return result.rows;
 }
@@ -88,9 +108,32 @@ async function getAllActiveTerms() {
   return result.rows;
 }
 
+async function assertNoDuplicateTerm(termData, id = null) {
+  const result = await query(
+    `SELECT id
+     FROM terms
+     WHERE academic_year_id = $1::integer
+       AND name = $2::varchar
+       AND term_type = $3::varchar
+       AND ($4::integer IS NULL OR id <> $4::integer)
+     LIMIT 1`,
+    [
+      termData.academic_year_id,
+      termData.name,
+      termData.term_type || "regular",
+      id ? Number(id) : null,
+    ]
+  );
+  if (result.rows[0]) {
+    throw new Error("This academic year already has that term and type.");
+  }
+}
+
 async function createTerm(termData) {
   const { academic_year_id, name, term_type, start_date, end_date, is_active } =
     termData;
+
+  await assertNoDuplicateTerm(termData);
 
   // If setting this term as active, deactivate other terms of the same type
   if (is_active) {
@@ -102,7 +145,7 @@ async function createTerm(termData) {
 
   const result = await query(
     `INSERT INTO terms (academic_year_id, name, term_type, start_date, end_date, is_active)
-     VALUES ($1, $2, $3, $4, $5, $6)
+     VALUES ($1::integer, $2::varchar, $3::varchar, $4::date, $5::date, $6::boolean)
      RETURNING *`,
     [
       academic_year_id,
@@ -131,6 +174,8 @@ async function updateTerm(id, termData) {
   const { academic_year_id, name, term_type, start_date, end_date, is_active } =
     termData;
 
+  await assertNoDuplicateTerm(termData, id);
+
   // If setting this term as active, deactivate other terms of the same type
   if (is_active) {
     await query(
@@ -141,8 +186,14 @@ async function updateTerm(id, termData) {
 
   const result = await query(
     `UPDATE terms
-     SET academic_year_id = $1, name = $2, term_type = $3, start_date = $4, end_date = $5, is_active = $6
-     WHERE id = $7
+     SET academic_year_id = $1::integer,
+         name = $2::varchar,
+         term_type = $3::varchar,
+         start_date = $4::date,
+         end_date = $5::date,
+         is_active = $6::boolean,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $7::integer
      RETURNING *`,
     [
       academic_year_id,

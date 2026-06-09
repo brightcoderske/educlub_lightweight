@@ -56,14 +56,46 @@ const emptyTypingForm = () => ({
   lessons: defaultLessons(),
 });
 
+const defaultQuestions = () => [
+  {
+    position: 1,
+    question_type: "single_choice",
+    prompt: "",
+    options: ["", "", "", ""],
+    correct_answer: "",
+    points: 1,
+  },
+];
+
+const emptyQuizForm = () => ({
+  name: "Week 1 Quiz",
+  description: "",
+  term: "Term 1",
+  academic_year: new Date().getFullYear(),
+  week_number: 1,
+  quiz_type: "weekly",
+  competition_id: "",
+  quiz_category: "quiz",
+  eligible_grades: [],
+  pass_score: 50,
+  max_attempts: 1,
+  duration_seconds: 600,
+  is_published: false,
+  is_open: false,
+  questions: defaultQuestions(),
+});
+
 const gradeOptions = Array.from({ length: 12 }, (_, index) => `Grade ${index + 1}`);
 
 function WeeklyLearning() {
   const { user, isSystemAdmin, isSchoolAdmin, isLearner } = useAuth();
   const [searchParams] = useSearchParams();
   const competitionQueryId = searchParams.get("competition_id") || searchParams.get("competition");
+  const quizQueryId = searchParams.get("quiz");
   const [courses, setCourses] = useState([]);
   const [typingTests, setTypingTests] = useState([]);
+  const [quizTests, setQuizTests] = useState([]);
+  const [quizReport, setQuizReport] = useState([]);
   const [typingReport, setTypingReport] = useState([]);
   const [allocations, setAllocations] = useState([]);
   const [learners, setLearners] = useState([]);
@@ -88,6 +120,10 @@ function WeeklyLearning() {
   const [advancingLesson, setAdvancingLesson] = useState(false);
   const [completionSummary, setCompletionSummary] = useState(null);
   const [editingTypingId, setEditingTypingId] = useState(null);
+  const [editingQuizId, setEditingQuizId] = useState(null);
+  const [activeQuiz, setActiveQuiz] = useState(null);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [quizResult, setQuizResult] = useState(null);
   const [bulkForm, setBulkForm] = useState({
     grade: "",
     stream: "",
@@ -109,6 +145,7 @@ function WeeklyLearning() {
     attempt_status: "",
   });
   const [typingForm, setTypingForm] = useState(emptyTypingForm);
+  const [quizForm, setQuizForm] = useState(emptyQuizForm);
 
   const loadData = async () => {
     setLoading(true);
@@ -142,8 +179,29 @@ function WeeklyLearning() {
         }
         setCourses([]);
       } else {
-        const weeklyCourses = await apiClient.get(`/weekly-learning?category=${category}`);
-        setCourses(weeklyCourses);
+        const params = new URLSearchParams();
+        params.set("quiz_type", competitionQueryId ? "competition" : "weekly");
+        if (quizQueryId) params.set("id", quizQueryId);
+        if (competitionQueryId) params.set("competition_id", competitionQueryId);
+        const tests = await apiClient.get(`/quiz-tests/tests?${params.toString()}`);
+        setQuizTests(
+          quizQueryId ? tests.filter((test) => String(test.id) === String(quizQueryId)) : tests
+        );
+        if (!isLearner()) {
+          const reportParams = new URLSearchParams();
+          if (typingReportFilters.term) reportParams.set("term", typingReportFilters.term);
+          if (typingReportFilters.academic_year) {
+            reportParams.set("academic_year", typingReportFilters.academic_year);
+          }
+          if (typingReportFilters.week_number) {
+            reportParams.set("week_number", typingReportFilters.week_number);
+          }
+          const report = await apiClient
+            .get(`/quiz-tests/report?${reportParams.toString()}`)
+            .catch(() => []);
+          setQuizReport(report);
+        }
+        setCourses([]);
       }
 
       if (!isLearner()) {
@@ -209,10 +267,34 @@ function WeeklyLearning() {
 
   useEffect(() => {
     loadData();
-  }, [category, user?.schoolId, searchParams, typingReportFilters, competitionQueryId]);
+  }, [
+    category,
+    user?.schoolId,
+    searchParams,
+    typingReportFilters,
+    competitionQueryId,
+    quizQueryId,
+  ]);
+
+  useEffect(() => {
+    if (searchParams.get("category") === "weekly_quiz") {
+      setCategory("weekly_quiz");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!competitionQueryId || !isSystemAdmin()) return;
+    if (searchParams.get("category") === "weekly_quiz") {
+      const current = competitions.find((item) => String(item.id) === String(competitionQueryId));
+      setQuizForm((form) => ({
+        ...form,
+        quiz_type: "competition",
+        competition_id: competitionQueryId,
+        quiz_category: current?.competition_type || form.quiz_category,
+        name: current?.name ? `${current.name} Quiz` : form.name,
+      }));
+      return;
+    }
     setCategory("weekly_typing");
     setTypingForm((current) => ({
       ...current,
@@ -220,7 +302,7 @@ function WeeklyLearning() {
       competition_id: competitionQueryId,
       name: current.name || "Typing Competition Assessment",
     }));
-  }, [competitionQueryId, isSystemAdmin]);
+  }, [competitionQueryId, isSystemAdmin, searchParams, competitions]);
 
   useEffect(() => {
     const selectedTerm = academicTerms.find(
@@ -296,6 +378,9 @@ function WeeklyLearning() {
       : weekOptions;
   const typingCompetitions = competitions.filter(
     (competition) => competition.competition_type === "typing"
+  );
+  const quizCompetitions = competitions.filter((competition) =>
+    ["quiz", "maths", "science", "stem"].includes(competition.competition_type)
   );
 
   const saveTypingTest = async () => {
@@ -389,6 +474,140 @@ function WeeklyLearning() {
           : [...selected, grade],
       };
     });
+  };
+
+  const toggleQuizGrade = (grade) => {
+    setQuizForm((current) => {
+      const selected = current.eligible_grades || [];
+      return {
+        ...current,
+        eligible_grades: selected.includes(grade)
+          ? selected.filter((item) => item !== grade)
+          : [...selected, grade],
+      };
+    });
+  };
+
+  const updateQuizQuestion = (index, updates) => {
+    setQuizForm((current) => {
+      const questions = [...current.questions];
+      questions[index] = { ...questions[index], ...updates };
+      return { ...current, questions };
+    });
+  };
+
+  const addQuizQuestion = () => {
+    setQuizForm((current) => ({
+      ...current,
+      questions: [
+        ...current.questions,
+        {
+          ...defaultQuestions()[0],
+          position: current.questions.length + 1,
+        },
+      ],
+    }));
+  };
+
+  const saveQuizTest = async () => {
+    setMessage("");
+    setError("");
+    try {
+      const payload = {
+        ...quizForm,
+        competition_id: quizForm.quiz_type === "competition" ? quizForm.competition_id : "",
+        questions: quizForm.questions.map((question, index) => ({
+          ...question,
+          position: index + 1,
+          options: question.options.filter(Boolean),
+          correct_answer:
+            question.question_type === "multiple_choice"
+              ? String(question.correct_answer || "")
+                  .split(",")
+                  .map((item) => item.trim())
+                  .filter(Boolean)
+              : question.correct_answer,
+        })),
+      };
+      const response = editingQuizId
+        ? await apiClient.put(`/quiz-tests/tests/${editingQuizId}`, payload)
+        : await apiClient.post("/quiz-tests/tests", payload);
+      setMessage(`${editingQuizId ? "Updated" : "Saved"} ${response.name}`);
+      setEditingQuizId(null);
+      setQuizForm(emptyQuizForm());
+      await loadData();
+    } catch (err) {
+      setError(err.message || "Could not save quiz.");
+    }
+  };
+
+  const editQuizTest = async (test) => {
+    setMessage("");
+    setError("");
+    try {
+      const response = await apiClient.get(`/quiz-tests/tests/${test.id}`);
+      setEditingQuizId(response.id);
+      setQuizForm({
+        ...emptyQuizForm(),
+        ...response,
+        competition_id: response.competition_id || "",
+        eligible_grades: Array.isArray(response.eligible_grades) ? response.eligible_grades : [],
+        questions: response.questions?.length
+          ? response.questions.map((question) => ({
+              ...question,
+              correct_answer: Array.isArray(question.correct_answer)
+                ? question.correct_answer.join(", ")
+                : question.correct_answer || "",
+              options: question.options?.length ? question.options : ["", "", "", ""],
+            }))
+          : defaultQuestions(),
+      });
+    } catch (err) {
+      setError(err.message || "Could not load quiz setup.");
+    }
+  };
+
+  const deleteQuizTest = async (test) => {
+    if (!window.confirm(`Delete "${test.name}"? This will remove the quiz setup.`)) return;
+    setMessage("");
+    setError("");
+    try {
+      const response = await apiClient.delete(`/quiz-tests/tests/${test.id}`);
+      setMessage(response.message || "Quiz deleted.");
+      if (editingQuizId === test.id) {
+        setEditingQuizId(null);
+        setQuizForm(emptyQuizForm());
+      }
+      await loadData();
+    } catch (err) {
+      setError(err.message || "Could not delete quiz.");
+    }
+  };
+
+  const openQuizTest = async (test) => {
+    setError("");
+    setQuizResult(null);
+    setQuizAnswers({});
+    try {
+      setActiveQuiz(await apiClient.get(`/quiz-tests/tests/${test.id}`));
+    } catch (err) {
+      setError(err.message || "Could not open quiz.");
+    }
+  };
+
+  const submitQuizTest = async () => {
+    if (!activeQuiz) return;
+    setError("");
+    try {
+      const response = await apiClient.post(`/quiz-tests/tests/${activeQuiz.id}/attempts`, {
+        answers: quizAnswers,
+      });
+      setQuizResult(response);
+      setMessage("Quiz submitted. Your score has been recorded.");
+      await loadData();
+    } catch (err) {
+      setError(err.message || "Could not submit quiz.");
+    }
   };
 
   const exportTypingCsv = () => {
@@ -612,6 +831,7 @@ function WeeklyLearning() {
   const totalTypingRows = reportRows.length || 1;
   const reportGrades = [...new Set(typingReport.map((row) => row.grade).filter(Boolean))].sort();
   const reportStreams = [...new Set(typingReport.map((row) => row.stream).filter(Boolean))].sort();
+  const quizReportRows = quizReport.filter((row) => row.final_score !== null);
 
   const bulkAllocate = async () => {
     setMessage("");
@@ -637,14 +857,8 @@ function WeeklyLearning() {
   };
 
   const learnerRows =
-    category === "weekly_quiz" && allocations.length === 0
-      ? courses.map((course) => ({
-          id: course.id,
-          name: course.name,
-          course_category: course.course_category,
-          term: syncForm.term,
-          academic_year: syncForm.academic_year,
-        }))
+    category === "weekly_quiz"
+      ? quizTests
       : allocations.map((item) => ({
           id: item.course_id,
           allocation_id: item.id,
@@ -654,7 +868,7 @@ function WeeklyLearning() {
           academic_year: item.academic_year,
         }));
 
-  const rows = isLearner() ? learnerRows : courses;
+  const rows = category === "weekly_quiz" ? quizTests : isLearner() ? learnerRows : courses;
 
   return (
     <DashboardLayout>
@@ -979,6 +1193,322 @@ function WeeklyLearning() {
                   </Grid>
                 )}
 
+                {category === "weekly_quiz" && isSystemAdmin() && (
+                  <Grid container spacing={2} mb={3}>
+                    <Grid item xs={12}>
+                      <MDTypography variant="h6" fontWeight="bold">
+                        {editingQuizId ? "Edit Quiz Setup" : "New Quiz Setup"}
+                      </MDTypography>
+                      <MDTypography variant="caption" color="text">
+                        Weekly quizzes write to report cards. Competition quizzes support quiz,
+                        maths, science, and STEM challenges.
+                      </MDTypography>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <MDInput
+                        label="Quiz Name"
+                        fullWidth
+                        value={quizForm.name}
+                        onChange={(event) => setQuizForm({ ...quizForm, name: event.target.value })}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <MDInput
+                        select
+                        label="Type"
+                        fullWidth
+                        value={quizForm.quiz_type}
+                        onChange={(event) =>
+                          setQuizForm({ ...quizForm, quiz_type: event.target.value })
+                        }
+                        SelectProps={{ native: true }}
+                      >
+                        <option value="weekly">Weekly</option>
+                        <option value="competition">Competition</option>
+                      </MDInput>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <MDInput
+                        select
+                        label="Category"
+                        fullWidth
+                        value={quizForm.quiz_category}
+                        onChange={(event) =>
+                          setQuizForm({ ...quizForm, quiz_category: event.target.value })
+                        }
+                        SelectProps={{ native: true }}
+                      >
+                        <option value="quiz">General Quiz</option>
+                        <option value="maths">Maths</option>
+                        <option value="science">Science</option>
+                        <option value="stem">STEM</option>
+                      </MDInput>
+                    </Grid>
+                    {quizForm.quiz_type === "competition" ? (
+                      <Grid item xs={12} md={4}>
+                        <MDInput
+                          select
+                          label="Competition"
+                          fullWidth
+                          value={quizForm.competition_id}
+                          onChange={(event) =>
+                            setQuizForm({ ...quizForm, competition_id: event.target.value })
+                          }
+                          SelectProps={{ native: true }}
+                        >
+                          <option value="">Select competition</option>
+                          {quizCompetitions.map((competition) => (
+                            <option key={competition.id} value={competition.id}>
+                              {competition.name}
+                            </option>
+                          ))}
+                        </MDInput>
+                      </Grid>
+                    ) : (
+                      <>
+                        <Grid item xs={12} md={4}>
+                          <MDInput
+                            select
+                            label="Academic Year"
+                            fullWidth
+                            value={quizForm.academic_year}
+                            onChange={(event) =>
+                              setQuizForm({
+                                ...quizForm,
+                                academic_year: event.target.value,
+                                week_number: 1,
+                              })
+                            }
+                            SelectProps={{ native: true }}
+                          >
+                            {[...new Set(termOptions.map((term) => term.academic_year))]
+                              .filter(Boolean)
+                              .map((year) => (
+                                <option key={year} value={year}>
+                                  {year}
+                                </option>
+                              ))}
+                          </MDInput>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <MDInput
+                            select
+                            label="Term"
+                            fullWidth
+                            value={quizForm.term}
+                            onChange={(event) =>
+                              setQuizForm({ ...quizForm, term: event.target.value, week_number: 1 })
+                            }
+                            SelectProps={{ native: true }}
+                          >
+                            {terms.map((term) => (
+                              <option key={term} value={term}>
+                                {term}
+                              </option>
+                            ))}
+                          </MDInput>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <MDInput
+                            select
+                            label="Week"
+                            fullWidth
+                            value={quizForm.week_number}
+                            onChange={(event) =>
+                              setQuizForm({ ...quizForm, week_number: event.target.value })
+                            }
+                            SelectProps={{ native: true }}
+                          >
+                            {weekOptions.map((weekNumber) => (
+                              <option key={weekNumber} value={weekNumber}>
+                                Week {weekNumber}
+                              </option>
+                            ))}
+                          </MDInput>
+                        </Grid>
+                      </>
+                    )}
+                    <Grid item xs={12}>
+                      <MDTypography variant="caption" color="text" display="block" mb={0.5}>
+                        Eligible grades
+                      </MDTypography>
+                      <MDBox display="flex" flexWrap="wrap" gap={0.5}>
+                        {gradeOptions.map((grade) => (
+                          <MDButton
+                            key={grade}
+                            variant={
+                              quizForm.eligible_grades.includes(grade) ? "gradient" : "outlined"
+                            }
+                            color="info"
+                            size="small"
+                            onClick={() => toggleQuizGrade(grade)}
+                          >
+                            {grade.replace("Grade ", "G")}
+                          </MDButton>
+                        ))}
+                      </MDBox>
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <MDInput
+                        label="Pass Score"
+                        type="number"
+                        fullWidth
+                        value={quizForm.pass_score}
+                        onChange={(event) =>
+                          setQuizForm({ ...quizForm, pass_score: event.target.value })
+                        }
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <MDInput
+                        label="Max Attempts"
+                        type="number"
+                        fullWidth
+                        value={quizForm.max_attempts}
+                        onChange={(event) =>
+                          setQuizForm({ ...quizForm, max_attempts: event.target.value })
+                        }
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <MDInput
+                        label="Duration Seconds"
+                        type="number"
+                        fullWidth
+                        value={quizForm.duration_seconds}
+                        onChange={(event) =>
+                          setQuizForm({ ...quizForm, duration_seconds: event.target.value })
+                        }
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <MDInput
+                        select
+                        label="Status"
+                        fullWidth
+                        value={`${quizForm.is_published ? "published" : "draft"}-${
+                          quizForm.is_open ? "open" : "closed"
+                        }`}
+                        onChange={(event) => {
+                          const [published, open] = event.target.value.split("-");
+                          setQuizForm({
+                            ...quizForm,
+                            is_published: published === "published",
+                            is_open: open === "open",
+                          });
+                        }}
+                        SelectProps={{ native: true }}
+                      >
+                        <option value="draft-closed">Draft</option>
+                        <option value="published-closed">Published, closed</option>
+                        <option value="published-open">Published, open</option>
+                      </MDInput>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <MDInput
+                        label="Description"
+                        fullWidth
+                        multiline
+                        rows={2}
+                        value={quizForm.description}
+                        onChange={(event) =>
+                          setQuizForm({ ...quizForm, description: event.target.value })
+                        }
+                      />
+                    </Grid>
+                    {quizForm.questions.map((question, index) => (
+                      <Grid item xs={12} key={`question-${index + 1}`}>
+                        <Card variant="outlined">
+                          <MDBox p={2}>
+                            <Grid container spacing={1.5}>
+                              <Grid item xs={12} md={6}>
+                                <MDInput
+                                  label={`Question ${index + 1}`}
+                                  fullWidth
+                                  value={question.prompt}
+                                  onChange={(event) =>
+                                    updateQuizQuestion(index, { prompt: event.target.value })
+                                  }
+                                />
+                              </Grid>
+                              <Grid item xs={12} md={3}>
+                                <MDInput
+                                  select
+                                  label="Answer type"
+                                  fullWidth
+                                  value={question.question_type}
+                                  onChange={(event) =>
+                                    updateQuizQuestion(index, { question_type: event.target.value })
+                                  }
+                                  SelectProps={{ native: true }}
+                                >
+                                  <option value="single_choice">Single choice</option>
+                                  <option value="multiple_choice">Multiple choice</option>
+                                  <option value="short_answer">Short answer</option>
+                                </MDInput>
+                              </Grid>
+                              <Grid item xs={12} md={3}>
+                                <MDInput
+                                  label="Marks"
+                                  type="number"
+                                  fullWidth
+                                  value={question.points}
+                                  onChange={(event) =>
+                                    updateQuizQuestion(index, { points: event.target.value })
+                                  }
+                                />
+                              </Grid>
+                              <Grid item xs={12} md={8}>
+                                <MDInput
+                                  label="Options separated by comma"
+                                  fullWidth
+                                  value={(question.options || []).join(", ")}
+                                  onChange={(event) =>
+                                    updateQuizQuestion(index, {
+                                      options: event.target.value
+                                        .split(",")
+                                        .map((item) => item.trim()),
+                                    })
+                                  }
+                                />
+                              </Grid>
+                              <Grid item xs={12} md={4}>
+                                <MDInput
+                                  label="Correct answer"
+                                  fullWidth
+                                  value={question.correct_answer}
+                                  onChange={(event) =>
+                                    updateQuizQuestion(index, {
+                                      correct_answer: event.target.value,
+                                    })
+                                  }
+                                />
+                              </Grid>
+                            </Grid>
+                          </MDBox>
+                        </Card>
+                      </Grid>
+                    ))}
+                    <Grid item xs={12}>
+                      <MDButton variant="outlined" color="dark" onClick={addQuizQuestion}>
+                        Add Question
+                      </MDButton>
+                      <MDButton
+                        variant="gradient"
+                        color="info"
+                        onClick={saveQuizTest}
+                        disabled={
+                          !quizForm.name ||
+                          quizForm.questions.some((question) => !question.prompt) ||
+                          (quizForm.quiz_type === "competition" && !quizForm.competition_id)
+                        }
+                      >
+                        {editingQuizId ? "Update Quiz" : "Save Quiz"}
+                      </MDButton>
+                    </Grid>
+                  </Grid>
+                )}
+
                 {category === "weekly_quiz" && isSchoolAdmin() && (
                   <Grid container spacing={2} mb={3}>
                     <Grid item xs={12} md={3}>
@@ -1243,7 +1773,7 @@ function WeeklyLearning() {
                       <TableHead sx={{ display: "table-header-group" }}>
                         <TableRow>
                           <TableCell>Name</TableCell>
-                          <TableCell>Type</TableCell>
+                          <TableCell>Category</TableCell>
                           <TableCell>Source</TableCell>
                           {isLearner() && <TableCell>Term</TableCell>}
                           <TableCell align="center">Action</TableCell>
@@ -1255,23 +1785,53 @@ function WeeklyLearning() {
                             <TableCell>{row.name}</TableCell>
                             <TableCell>
                               <Chip
-                                label={row.course_category === "weekly_typing" ? "Typing" : "Quiz"}
-                                color={row.course_category === "weekly_typing" ? "success" : "info"}
+                                label={row.quiz_category || "quiz"}
+                                color={row.quiz_type === "competition" ? "warning" : "info"}
                                 size="small"
                               />
                             </TableCell>
-                            <TableCell>Native</TableCell>
+                            <TableCell>
+                              {row.quiz_type === "competition" ? "Competition" : "Weekly"}
+                            </TableCell>
                             {isLearner() && (
                               <TableCell>
                                 {row.term} | {row.academic_year}
                               </TableCell>
                             )}
                             <TableCell align="center">
-                              <MDTypography variant="caption" color="text">
-                                {row.course_category === "weekly_typing"
-                                  ? "Open a typing test below"
-                                  : "Native quiz builder pending"}
-                              </MDTypography>
+                              {isLearner() ? (
+                                <MDButton
+                                  variant="gradient"
+                                  color="info"
+                                  size="small"
+                                  onClick={() => openQuizTest(row)}
+                                >
+                                  Start
+                                </MDButton>
+                              ) : isSystemAdmin() ? (
+                                <MDBox display="flex" gap={0.5} justifyContent="center">
+                                  <MDButton
+                                    variant="text"
+                                    color="info"
+                                    size="small"
+                                    onClick={() => editQuizTest(row)}
+                                  >
+                                    Edit
+                                  </MDButton>
+                                  <MDButton
+                                    variant="text"
+                                    color="error"
+                                    size="small"
+                                    onClick={() => deleteQuizTest(row)}
+                                  >
+                                    Delete
+                                  </MDButton>
+                                </MDBox>
+                              ) : (
+                                <MDTypography variant="caption" color="text">
+                                  Native
+                                </MDTypography>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1513,6 +2073,59 @@ function WeeklyLearning() {
                     </TableContainer>
                   </MDBox>
                 )}
+                {category === "weekly_quiz" && !isLearner() && (
+                  <MDBox mt={3}>
+                    <MDTypography variant="h6" fontWeight="bold" mb={1}>
+                      Quiz Performance
+                    </MDTypography>
+                    {quizReportRows.length === 0 ? (
+                      <MDTypography variant="body2" color="text">
+                        No quiz attempts recorded for the selected period yet.
+                      </MDTypography>
+                    ) : (
+                      <TableContainer>
+                        <Table>
+                          <TableHead sx={{ display: "table-header-group" }}>
+                            <TableRow>
+                              <TableCell>Learner</TableCell>
+                              <TableCell>Week</TableCell>
+                              <TableCell>Grade</TableCell>
+                              <TableCell>Quiz</TableCell>
+                              <TableCell>Score</TableCell>
+                              <TableCell>Status</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {quizReportRows.map((row) => (
+                              <TableRow key={`${row.learner_id}-${row.test_id}`}>
+                                <TableCell>{row.full_name}</TableCell>
+                                <TableCell>{row.week_number || "-"}</TableCell>
+                                <TableCell>{row.grade || "-"}</TableCell>
+                                <TableCell>{row.test_name}</TableCell>
+                                <TableCell>{row.final_score}%</TableCell>
+                                <TableCell>
+                                  <Chip
+                                    label={
+                                      Number(row.final_score) >= Number(row.pass_score || 0)
+                                        ? "Passed"
+                                        : "Below pass score"
+                                    }
+                                    color={
+                                      Number(row.final_score) >= Number(row.pass_score || 0)
+                                        ? "success"
+                                        : "warning"
+                                    }
+                                    size="small"
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )}
+                  </MDBox>
+                )}
               </MDBox>
             </Card>
           </Grid>
@@ -1595,6 +2208,107 @@ function WeeklyLearning() {
                         : activeLessonIndex + 1 < activeTest.lessons.length
                         ? "Next Lesson"
                         : "Finish Test"}
+                    </MDButton>
+                  </MDBox>
+                </>
+              )}
+            </MDBox>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(activeQuiz)}
+        onClose={() => setActiveQuiz(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogContent>
+          {activeQuiz && (
+            <MDBox>
+              <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <MDBox>
+                  <MDTypography variant="h4" fontWeight="bold">
+                    {activeQuiz.name}
+                  </MDTypography>
+                  <MDTypography variant="body2" color="text">
+                    {activeQuiz.description || "Answer all questions before submitting."}
+                  </MDTypography>
+                </MDBox>
+                <MDButton variant="outlined" color="dark" onClick={() => setActiveQuiz(null)}>
+                  Close
+                </MDButton>
+              </MDBox>
+              {quizResult ? (
+                <MDBox py={4} textAlign="center">
+                  <MDTypography variant="h4" fontWeight="bold">
+                    Score: {quizResult.score}%
+                  </MDTypography>
+                  <MDTypography variant="body2" color="text">
+                    {quizResult.earned_points}/{quizResult.total_points} marks recorded.
+                  </MDTypography>
+                </MDBox>
+              ) : (
+                <>
+                  <MDBox display="flex" flexDirection="column" gap={1.5}>
+                    {(activeQuiz.questions || []).map((question, index) => (
+                      <Card key={question.id || index} variant="outlined">
+                        <MDBox p={2}>
+                          <MDTypography variant="button" fontWeight="bold">
+                            {index + 1}. {question.prompt}
+                          </MDTypography>
+                          {question.question_type === "short_answer" ? (
+                            <MDInput
+                              fullWidth
+                              label="Answer"
+                              value={quizAnswers[question.id] || ""}
+                              onChange={(event) =>
+                                setQuizAnswers({
+                                  ...quizAnswers,
+                                  [question.id]: event.target.value,
+                                })
+                              }
+                              sx={{ mt: 1 }}
+                            />
+                          ) : (
+                            <MDBox display="flex" flexDirection="column" gap={1} mt={1}>
+                              {(question.options || []).map((option) => {
+                                const selected = quizAnswers[question.id];
+                                const isMulti = question.question_type === "multiple_choice";
+                                const selectedList = Array.isArray(selected) ? selected : [];
+                                const active = isMulti
+                                  ? selectedList.includes(option)
+                                  : selected === option;
+                                return (
+                                  <MDButton
+                                    key={option}
+                                    variant={active ? "gradient" : "outlined"}
+                                    color={active ? "info" : "dark"}
+                                    onClick={() => {
+                                      if (isMulti) {
+                                        setQuizAnswers({
+                                          ...quizAnswers,
+                                          [question.id]: active
+                                            ? selectedList.filter((item) => item !== option)
+                                            : [...selectedList, option],
+                                        });
+                                      } else {
+                                        setQuizAnswers({ ...quizAnswers, [question.id]: option });
+                                      }
+                                    }}
+                                  >
+                                    {option}
+                                  </MDButton>
+                                );
+                              })}
+                            </MDBox>
+                          )}
+                        </MDBox>
+                      </Card>
+                    ))}
+                  </MDBox>
+                  <MDBox mt={2} display="flex" justifyContent="flex-end">
+                    <MDButton variant="gradient" color="success" onClick={submitQuizTest}>
+                      Submit Quiz
                     </MDButton>
                   </MDBox>
                 </>

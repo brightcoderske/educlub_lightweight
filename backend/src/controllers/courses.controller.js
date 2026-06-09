@@ -219,6 +219,39 @@ async function submitActivityWork(req, res) {
   }
 }
 
+async function getActivityReview(req, res) {
+  try {
+    const review = await coursesService.getActivityReview(
+      req.params.activityId,
+      req.user,
+      req.query,
+    );
+    res.json(review);
+  } catch (error) {
+    console.error("Get activity review error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to load activity review" });
+  }
+}
+
+async function gradeActivityForLearner(req, res) {
+  try {
+    const grade = await coursesService.gradeActivityForLearner(
+      req.params.activityId,
+      req.params.learnerId,
+      req.user,
+      req.body,
+    );
+    res.json(grade);
+  } catch (error) {
+    console.error("Grade activity learner error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to save activity grade" });
+  }
+}
+
 async function uploadActivityImage(req, res) {
   try {
     const url = saveDataUpload(req, "activity-images", {
@@ -392,6 +425,8 @@ module.exports = {
   addDiscussionReply,
   submitQuiz,
   submitActivityWork,
+  getActivityReview,
+  gradeActivityForLearner,
   uploadActivityImage,
   uploadSubmissionFile,
   createModule,

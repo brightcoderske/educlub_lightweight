@@ -521,13 +521,13 @@ async function ensureDiscussion(activity, user = {}) {
     `INSERT INTO discussions (
        activity_id, prompt, allow_peer_replies, created_by_user_id
      )
-     VALUES ($1, $2, $3, $4)
+     VALUES ($1::integer, $2::text, $3::boolean, NULLIF($4::text, '')::integer)
      RETURNING *`,
     [
       activity.id,
       prompt,
       content.allow_peer_replies !== false,
-      user.userId || null,
+      user.userId ? String(user.userId) : "",
     ],
   );
   return created.rows[0];
@@ -553,7 +553,7 @@ async function syncDiscussionSetup(activity, user = {}) {
        SET prompt = $1,
            allow_peer_replies = $2,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3
+       WHERE id = $3::integer
        RETURNING *`,
       [prompt, content.allow_peer_replies !== false, existing.rows[0].id],
     );
@@ -578,7 +578,7 @@ async function getActivityDiscussion(activityId, user = {}) {
      FROM discussion_replies dr
      LEFT JOIN learners l ON l.id = dr.learner_id
      LEFT JOIN users u ON u.id = dr.author_user_id
-     WHERE dr.discussion_id = $1
+     WHERE dr.discussion_id = $1::integer
        AND dr.is_hidden = false
      ORDER BY dr.created_at ASC`,
     [discussion.id],
@@ -606,13 +606,19 @@ async function addDiscussionReply(activityId, user = {}, data = {}) {
     `INSERT INTO discussion_replies (
        discussion_id, learner_id, author_user_id, parent_reply_id, body
      )
-     VALUES ($1, $2, $3, $4, $5)
+     VALUES (
+       $1::integer,
+       NULLIF($2::text, '')::integer,
+       NULLIF($3::text, '')::integer,
+       NULLIF($4::text, '')::integer,
+       $5::text
+     )
      RETURNING *`,
     [
       discussion.id,
-      learner?.id || null,
-      user.userId || null,
-      data.parent_reply_id || null,
+      learner?.id ? String(learner.id) : "",
+      user.userId ? String(user.userId) : "",
+      data.parent_reply_id ? String(data.parent_reply_id) : "",
       body,
     ],
   );
@@ -639,13 +645,13 @@ async function submitActivityWork(activityId, user = {}, data = {}) {
     `INSERT INTO activity_submissions (
        learner_id, activity_id, submission_type, content, submitted_at, status
      )
-     VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, 'submitted')
+     VALUES ($1::integer, $2::integer, $3::varchar, $4::jsonb, CURRENT_TIMESTAMP, 'submitted'::varchar)
      ON CONFLICT (learner_id, activity_id)
      DO UPDATE SET
        submission_type = EXCLUDED.submission_type,
        content = EXCLUDED.content,
        submitted_at = CURRENT_TIMESTAMP,
-       status = 'submitted'
+       status = 'submitted'::varchar
      RETURNING *`,
     [
       learner.id,
@@ -692,15 +698,15 @@ async function submitQuiz(activityId, user = {}, data = {}) {
   const attemptNumber = await query(
     `SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt
      FROM quiz_attempts
-     WHERE learner_id = $1
-       AND activity_id = $2`,
+     WHERE learner_id = $1::integer
+       AND activity_id = $2::integer`,
     [learner.id, activityId],
   );
   const attempt = await query(
     `INSERT INTO quiz_attempts (
        learner_id, activity_id, attempt_number, answers, score, feedback
      )
-     VALUES ($1, $2, $3, $4, $5, $6)
+     VALUES ($1::integer, $2::integer, $3::integer, $4::jsonb, $5::numeric, $6::jsonb)
      RETURNING *`,
     [
       learner.id,
@@ -780,8 +786,8 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
      FROM learning_activities la
      JOIN course_modules cm ON cm.id = la.module_id
      JOIN course_allocations ca ON ca.course_id = cm.course_id
-     WHERE la.id = $1
-       AND ca.learner_id = $2
+     WHERE la.id = $1::integer
+       AND ca.learner_id = $2::integer
        AND ca.status IN ('active', 'in_progress', 'completed')
      LIMIT 1`,
     [activityId, learner.id],
@@ -803,8 +809,12 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
        learner_id, activity_id, status, score, opened_at, completed_at, updated_at
      )
      VALUES (
-       $1, $2, $3, $4, COALESCE($5, NOW()),
-       CASE WHEN $3 IN ('completed', 'graded') THEN NOW() ELSE NULL END,
+       $1::integer,
+       $2::integer,
+       $3::varchar,
+       $4::numeric,
+       COALESCE(NULLIF($5::text, '')::timestamp, NOW()),
+       CASE WHEN $3::varchar IN ('completed'::varchar, 'graded'::varchar) THEN NOW() ELSE NULL END,
        NOW()
      )
      ON CONFLICT (learner_id, activity_id)
@@ -813,7 +823,7 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
        score = COALESCE(EXCLUDED.score, activity_progress.score),
        opened_at = COALESCE(activity_progress.opened_at, NOW()),
        completed_at = CASE
-         WHEN EXCLUDED.status IN ('completed', 'graded')
+         WHEN EXCLUDED.status IN ('completed'::varchar, 'graded'::varchar)
          THEN COALESCE(activity_progress.completed_at, NOW())
          ELSE activity_progress.completed_at
        END,
@@ -823,6 +833,243 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
   );
 
   return result.rows[0];
+}
+
+function toPositiveInteger(value, fallback, maxValue = null) {
+  const parsed = Number.parseInt(value, 10);
+  const normalized = Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  return maxValue ? Math.min(normalized, maxValue) : normalized;
+}
+
+function gradeToProgressScore(score, activityPoints) {
+  const numericScore = Number(score);
+  if (!Number.isFinite(numericScore)) return null;
+  const maxPoints = Number(activityPoints || 0);
+  if (maxPoints > 0) {
+    return Math.max(0, Math.min(100, Math.round((numericScore / maxPoints) * 100)));
+  }
+  return Math.max(0, Math.min(100, numericScore));
+}
+
+async function assertActivityReviewAccess(activityId, user = {}) {
+  if (!isStaff(user)) throw new Error("Only staff can review learner work.");
+
+  const result = await query(
+    `SELECT la.*,
+            cm.course_id,
+            cm.title AS module_title,
+            c.name AS course_name,
+            c.school_id
+     FROM learning_activities la
+     JOIN course_modules cm ON cm.id = la.module_id
+     JOIN courses c ON c.id = cm.course_id
+     WHERE la.id = $1::integer`,
+    [activityId],
+  );
+  const activity = result.rows[0];
+  if (!activity) throw new Error("Activity not found.");
+
+  const allowed = await assertCourseManageAccess(activity.course_id, user);
+  if (!allowed) throw new Error("You cannot review this activity.");
+  return activity;
+}
+
+async function getActivityReview(activityId, user = {}, filters = {}) {
+  const activity = await assertActivityReviewAccess(activityId, user);
+  const limit = toPositiveInteger(filters.limit, 50, 100);
+  const offset = toPositiveInteger(filters.offset, 0);
+
+  const totalResult = await query(
+    `SELECT COUNT(*)::integer AS total
+     FROM course_allocations ca
+     JOIN learners l ON l.id = ca.learner_id
+     WHERE ca.course_id = $1::integer
+       AND ca.status IN ('active', 'in_progress', 'completed')
+       AND l.is_active = true`,
+    [activity.course_id],
+  );
+
+  const learnersResult = await query(
+    `SELECT l.id AS learner_id,
+            l.full_name,
+            l.email,
+            l.grade,
+            l.stream,
+            ap.status AS progress_status,
+            ap.score AS progress_score,
+            ap.opened_at,
+            ap.completed_at,
+            ap.graded_at AS progress_graded_at,
+            ap.updated_at AS progress_updated_at,
+            s.id AS submission_id,
+            s.submission_type,
+            s.content AS submission_content,
+            s.submitted_at,
+            s.status AS submission_status,
+            g.id AS grade_id,
+            g.score AS grade_score,
+            g.performance_level,
+            g.teacher_remarks,
+            g.graded_by_user_id,
+            g.graded_at,
+            qa.id AS latest_attempt_id,
+            qa.attempt_number,
+            qa.answers,
+            qa.score AS quiz_score,
+            qa.feedback AS quiz_feedback,
+            qa.submitted_at AS quiz_submitted_at
+     FROM course_allocations ca
+     JOIN learners l ON l.id = ca.learner_id
+     LEFT JOIN activity_progress ap
+       ON ap.learner_id = l.id
+      AND ap.activity_id = $1::integer
+     LEFT JOIN activity_submissions s
+       ON s.learner_id = l.id
+      AND s.activity_id = $1::integer
+     LEFT JOIN activity_grades g
+       ON g.learner_id = l.id
+      AND g.activity_id = $1::integer
+     LEFT JOIN LATERAL (
+       SELECT qa.*
+       FROM quiz_attempts qa
+       WHERE qa.learner_id = l.id
+         AND qa.activity_id = $1::integer
+       ORDER BY qa.attempt_number DESC
+       LIMIT 1
+     ) qa ON true
+     WHERE ca.course_id = $2::integer
+       AND ca.status IN ('active', 'in_progress', 'completed')
+       AND l.is_active = true
+     ORDER BY COALESCE(s.submitted_at, qa.submitted_at, ap.updated_at) DESC NULLS LAST,
+              l.full_name
+     LIMIT $3::integer OFFSET $4::integer`,
+    [activityId, activity.course_id, limit, offset],
+  );
+
+  return {
+    activity: {
+      id: activity.id,
+      course_id: activity.course_id,
+      course_name: activity.course_name,
+      module_title: activity.module_title,
+      title: activity.title,
+      activity_type: activity.activity_type,
+      content: sanitizeActivityContent(activity.content || {}, true),
+      points: Number(activity.points || 0),
+      completion_rule: activity.completion_rule,
+      pass_score: activity.pass_score,
+    },
+    learners: learnersResult.rows,
+    paging: {
+      total: totalResult.rows[0]?.total || 0,
+      limit,
+      offset,
+    },
+  };
+}
+
+async function gradeActivityForLearner(activityId, learnerId, user = {}, data = {}) {
+  const activity = await assertActivityReviewAccess(activityId, user);
+  const allocation = await query(
+    `SELECT ca.id
+     FROM course_allocations ca
+     JOIN learners l ON l.id = ca.learner_id
+     WHERE ca.course_id = $1::integer
+       AND ca.learner_id = $2::integer
+       AND ca.status IN ('active', 'in_progress', 'completed')
+       AND l.is_active = true
+     LIMIT 1`,
+    [activity.course_id, learnerId],
+  );
+  if (!allocation.rows[0]) throw new Error("Learner is not allocated to this course.");
+
+  const score =
+    data.score !== undefined && data.score !== null && data.score !== ""
+      ? Math.max(0, Number(data.score))
+      : null;
+  if (score !== null && !Number.isFinite(score)) throw new Error("Grade must be a valid number.");
+
+  const submission = await query(
+    `SELECT id
+     FROM activity_submissions
+     WHERE learner_id = $1::integer
+       AND activity_id = $2::integer
+     LIMIT 1`,
+    [learnerId, activityId],
+  );
+  const submissionId = submission.rows[0]?.id || null;
+  const progressScore = gradeToProgressScore(score, activity.points);
+
+  const grade = await query(
+    `INSERT INTO activity_grades (
+       submission_id, learner_id, activity_id, score, performance_level,
+       teacher_remarks, graded_by_user_id, graded_at
+     )
+     VALUES (
+       NULLIF($1::text, '')::integer,
+       $2::integer,
+       $3::integer,
+       $4::numeric,
+       NULLIF($5::text, '')::varchar,
+       NULLIF($6::text, ''),
+       NULLIF($7::text, '')::integer,
+       CURRENT_TIMESTAMP
+     )
+     ON CONFLICT (learner_id, activity_id)
+     DO UPDATE SET
+       submission_id = COALESCE(EXCLUDED.submission_id, activity_grades.submission_id),
+       score = EXCLUDED.score,
+       performance_level = EXCLUDED.performance_level,
+       teacher_remarks = EXCLUDED.teacher_remarks,
+       graded_by_user_id = EXCLUDED.graded_by_user_id,
+       graded_at = CURRENT_TIMESTAMP
+     RETURNING *`,
+    [
+      submissionId ? String(submissionId) : "",
+      learnerId,
+      activityId,
+      score,
+      data.performance_level || "",
+      data.teacher_remarks || "",
+      user.userId ? String(user.userId) : "",
+    ],
+  );
+
+  await query(
+    `INSERT INTO activity_progress (
+       learner_id, activity_id, status, score, opened_at, completed_at, graded_at, updated_at
+     )
+     VALUES (
+       $1::integer,
+       $2::integer,
+       'graded'::varchar,
+       $3::numeric,
+       NOW(),
+       NOW(),
+       NOW(),
+       NOW()
+     )
+     ON CONFLICT (learner_id, activity_id)
+     DO UPDATE SET
+       status = 'graded'::varchar,
+       score = COALESCE(EXCLUDED.score, activity_progress.score),
+       opened_at = COALESCE(activity_progress.opened_at, NOW()),
+       completed_at = COALESCE(activity_progress.completed_at, NOW()),
+       graded_at = NOW(),
+       updated_at = NOW()`,
+    [learnerId, activityId, progressScore],
+  );
+
+  if (submissionId) {
+    await query(
+      `UPDATE activity_submissions
+       SET status = 'graded'::varchar
+       WHERE id = $1::integer`,
+      [submissionId],
+    );
+  }
+
+  return grade.rows[0];
 }
 
 async function createModule(courseId, data = {}) {
@@ -1041,6 +1288,8 @@ module.exports = {
   addDiscussionReply,
   submitActivityWork,
   submitQuiz,
+  getActivityReview,
+  gradeActivityForLearner,
   syncSchoolCourse: courseTemplatesService.syncSchoolCourse,
   rollbackSchoolCourse: courseTemplatesService.rollbackSchoolCourse,
 };

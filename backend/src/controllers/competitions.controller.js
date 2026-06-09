@@ -216,6 +216,26 @@ async function launch(req, res) {
       });
     }
 
+    const quizTest = await query(
+      `SELECT id
+       FROM quiz_tests
+       WHERE competition_id = $1::integer
+         AND quiz_type = 'competition'
+         AND is_published = true
+         AND is_open = true
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [competition.id]
+    );
+    const quizTestId = quizTest.rows[0]?.id;
+    if (quizTestId) {
+      return res.json({
+        nativeQuiz: true,
+        quizTestId,
+        launchUrl: `/learner/typing-quizzes?category=weekly_quiz&quiz=${quizTestId}&competition=${competition.id}&autostart=1`,
+      });
+    }
+
     return res.status(400).json({
       error:
         "Native competition activity is not published yet. Create a quiz, coding, or project activity for this competition.",

@@ -36,6 +36,27 @@ const activityTypes = [
   "reflection",
 ];
 
+const editorColors = ["#111827", "#2563eb", "#16a34a", "#dc2626", "#9333ea", "#f59e0b"];
+const editorFonts = [
+  "Arial",
+  "Georgia",
+  "Times New Roman",
+  "Verdana",
+  "Courier New",
+  "Trebuchet MS",
+];
+const editorBlocks = ["P", "H1", "H2", "H3", "H4", "H5", "H6"];
+const orderedListStyles = [
+  ["decimal", "1, 2, 3"],
+  ["upper-alpha", "A, B, C"],
+  ["lower-roman", "i, ii, iii"],
+];
+const unorderedListStyles = [
+  ["disc", "Filled"],
+  ["circle", "Circle"],
+  ["square", "Square"],
+];
+
 function emptyModule(position) {
   return {
     title: "",
@@ -179,7 +200,7 @@ function activityToManagerForm(activity) {
     rich_html: content.rich_html || "",
     discussion_prompt: content.discussion_prompt || content.prompt || "",
     starter_code: content.starter_code || content.code || "",
-    language: content.language || "javascript",
+    language: content.language || "html_css_js",
     submission_instructions: content.submission_instructions || "",
     reflection_prompt: content.reflection_prompt || "",
     project_brief: content.project_brief || "",
@@ -192,6 +213,10 @@ function activityToManagerForm(activity) {
 function RichContentEditor({ value, onChange, onImageUpload }) {
   const editorRef = useRef(null);
   const imageInputRef = useRef(null);
+  const [colorAnchor, setColorAnchor] = useState(null);
+  const [orderedAnchor, setOrderedAnchor] = useState(null);
+  const [unorderedAnchor, setUnorderedAnchor] = useState(null);
+  const [tableAnchor, setTableAnchor] = useState(null);
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== (value || "")) {
@@ -212,6 +237,70 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
       "insertHTML",
       "<table style='width:100%;border-collapse:collapse'><tr><th style='border:1px solid #d1d5db;padding:6px'>Heading</th><th style='border:1px solid #d1d5db;padding:6px'>Heading</th></tr><tr><td style='border:1px solid #d1d5db;padding:6px'>Text</td><td style='border:1px solid #d1d5db;padding:6px'>Text</td></tr></table>"
     );
+  };
+
+  const applyListStyle = (ordered, style) => {
+    runCommand(ordered ? "insertOrderedList" : "insertUnorderedList");
+    const selection = window.getSelection();
+    const node = selection?.anchorNode?.parentElement;
+    const list = node?.closest?.("ol,ul");
+    if (list) {
+      list.style.listStyleType = style;
+      list.style.paddingLeft = "2rem";
+      list.style.marginLeft = "0.5rem";
+    }
+    onChange(editorRef.current?.innerHTML || "");
+  };
+
+  const selectedCell = () => {
+    const selection = window.getSelection();
+    const node =
+      selection?.anchorNode?.nodeType === 3
+        ? selection.anchorNode.parentElement
+        : selection?.anchorNode;
+    return node?.closest?.("td,th") || null;
+  };
+
+  const addTableRow = () => {
+    const cell = selectedCell();
+    const row = cell?.parentElement;
+    if (!row) return;
+    const clone = row.cloneNode(true);
+    Array.from(clone.children).forEach((child) => {
+      child.innerHTML = "Text";
+    });
+    row.after(clone);
+    onChange(editorRef.current?.innerHTML || "");
+  };
+
+  const deleteTableRow = () => {
+    const row = selectedCell()?.parentElement;
+    if (row) {
+      row.remove();
+      onChange(editorRef.current?.innerHTML || "");
+    }
+  };
+
+  const addTableColumn = () => {
+    const cell = selectedCell();
+    const index = cell ? Array.from(cell.parentElement.children).indexOf(cell) : -1;
+    const table = cell?.closest("table");
+    if (!table || index < 0) return;
+    Array.from(table.rows).forEach((row) => {
+      const newCell = row.cells[index].cloneNode(true);
+      newCell.innerHTML = row.rowIndex === 0 ? "Heading" : "Text";
+      row.cells[index].after(newCell);
+    });
+    onChange(editorRef.current?.innerHTML || "");
+  };
+
+  const deleteTableColumn = () => {
+    const cell = selectedCell();
+    const index = cell ? Array.from(cell.parentElement.children).indexOf(cell) : -1;
+    const table = cell?.closest("table");
+    if (!table || index < 0) return;
+    Array.from(table.rows).forEach((row) => row.cells[index]?.remove());
+    onChange(editorRef.current?.innerHTML || "");
   };
 
   const insertLink = () => {
@@ -255,12 +344,9 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         sx={{ position: "sticky", top: 0, zIndex: 2, bgcolor: "#ffffff" }}
       >
         {[
-          ["formatBlock", "H2", "title"],
           ["bold", null, "format_bold"],
           ["italic", null, "format_italic"],
           ["underline", null, "format_underlined"],
-          ["insertUnorderedList", null, "format_list_bulleted"],
-          ["insertOrderedList", null, "format_list_numbered"],
         ].map(([command, commandValue, icon]) => (
           <IconButton
             key={`${command}-${commandValue || "default"}`}
@@ -269,10 +355,63 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
             <Icon>{icon}</Icon>
           </IconButton>
         ))}
-        <IconButton onClick={() => runCommand("foreColor", "#2563eb")}>
+        <MDInput
+          select
+          value="font"
+          onChange={(event) =>
+            event.target.value !== "font" && runCommand("fontName", event.target.value)
+          }
+          SelectProps={{ native: true }}
+          sx={{ width: 130 }}
+        >
+          <option value="font">Font</option>
+          {editorFonts.map((font) => (
+            <option key={font} value={font}>
+              {font}
+            </option>
+          ))}
+        </MDInput>
+        <MDInput
+          select
+          value="format"
+          onChange={(event) =>
+            event.target.value !== "format" && runCommand("formatBlock", event.target.value)
+          }
+          SelectProps={{ native: true }}
+          sx={{ width: 95 }}
+        >
+          <option value="format">Style</option>
+          {editorBlocks.map((block) => (
+            <option key={block} value={block}>
+              {block === "P" ? "Normal" : block}
+            </option>
+          ))}
+        </MDInput>
+        <MDInput
+          select
+          value="size"
+          onChange={(event) =>
+            event.target.value !== "size" && runCommand("fontSize", event.target.value)
+          }
+          SelectProps={{ native: true }}
+          sx={{ width: 85 }}
+        >
+          <option value="size">Size</option>
+          <option value="2">Small</option>
+          <option value="3">Normal</option>
+          <option value="4">Large</option>
+          <option value="5">Huge</option>
+        </MDInput>
+        <IconButton onClick={(event) => setColorAnchor(event.currentTarget)}>
           <Icon>format_color_text</Icon>
         </IconButton>
-        <IconButton onClick={insertTable}>
+        <IconButton onClick={(event) => setUnorderedAnchor(event.currentTarget)}>
+          <Icon>format_list_bulleted</Icon>
+        </IconButton>
+        <IconButton onClick={(event) => setOrderedAnchor(event.currentTarget)}>
+          <Icon>format_list_numbered</Icon>
+        </IconButton>
+        <IconButton onClick={(event) => setTableAnchor(event.currentTarget)}>
           <Icon>table_chart</Icon>
         </IconButton>
         <IconButton onClick={insertLink}>
@@ -306,6 +445,62 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
           <Icon>smart_display</Icon>
         </IconButton>
       </MDBox>
+      <Menu anchorEl={colorAnchor} open={Boolean(colorAnchor)} onClose={() => setColorAnchor(null)}>
+        <MDBox display="flex" gap={1} p={1}>
+          {editorColors.map((color) => (
+            <IconButton
+              key={color}
+              onClick={() => {
+                runCommand("foreColor", color);
+                setColorAnchor(null);
+              }}
+            >
+              <MDBox width={22} height={22} borderRadius="50%" sx={{ bgcolor: color }} />
+            </IconButton>
+          ))}
+        </MDBox>
+      </Menu>
+      <Menu
+        anchorEl={unorderedAnchor}
+        open={Boolean(unorderedAnchor)}
+        onClose={() => setUnorderedAnchor(null)}
+      >
+        {unorderedListStyles.map(([style, label]) => (
+          <MenuItem
+            key={style}
+            onClick={() => {
+              applyListStyle(false, style);
+              setUnorderedAnchor(null);
+            }}
+          >
+            {label}
+          </MenuItem>
+        ))}
+      </Menu>
+      <Menu
+        anchorEl={orderedAnchor}
+        open={Boolean(orderedAnchor)}
+        onClose={() => setOrderedAnchor(null)}
+      >
+        {orderedListStyles.map(([style, label]) => (
+          <MenuItem
+            key={style}
+            onClick={() => {
+              applyListStyle(true, style);
+              setOrderedAnchor(null);
+            }}
+          >
+            {label}
+          </MenuItem>
+        ))}
+      </Menu>
+      <Menu anchorEl={tableAnchor} open={Boolean(tableAnchor)} onClose={() => setTableAnchor(null)}>
+        <MenuItem onClick={insertTable}>Insert 2 x 2 Table</MenuItem>
+        <MenuItem onClick={addTableRow}>Add Row</MenuItem>
+        <MenuItem onClick={deleteTableRow}>Delete Row</MenuItem>
+        <MenuItem onClick={addTableColumn}>Add Column</MenuItem>
+        <MenuItem onClick={deleteTableColumn}>Delete Column</MenuItem>
+      </Menu>
       <input
         ref={imageInputRef}
         type="file"
@@ -761,11 +956,19 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
             <>
               <Grid item xs={12} md={3}>
                 <MDInput
-                  label="Language"
+                  select
+                  label="Code type"
                   fullWidth
                   value={form.language}
                   onChange={(event) => setForm({ ...form, language: event.target.value })}
-                />
+                  SelectProps={{ native: true }}
+                >
+                  <option value="html_css_js">HTML/CSS/JavaScript</option>
+                  <option value="javascript">JavaScript</option>
+                  <option value="python">Python</option>
+                  <option value="sql">SQL</option>
+                  <option value="text">Pseudo code</option>
+                </MDInput>
               </Grid>
               <Grid item xs={12} md={9}>
                 <MDInput
@@ -828,6 +1031,262 @@ ActivityManagerDialog.defaultProps = {
   activity: null,
 };
 
+function getAnswerValue(answers, question) {
+  if (!answers || !question) return "";
+  return (
+    answers[question.id] ?? answers[question.position] ?? answers[String(question.position)] ?? ""
+  );
+}
+
+function earnedPointsFromFeedback(feedback) {
+  if (!feedback || typeof feedback !== "object") return "";
+  const values = Object.values(feedback);
+  if (!values.length) return "";
+  return values.reduce((sum, item) => sum + Number(item?.points || 0), 0);
+}
+
+function renderSubmissionContent(row) {
+  const content = row.submission_content || {};
+  if (!row.submission_id && !content.text && !content.file) {
+    return (
+      <MDTypography variant="caption" color="text">
+        No submission yet.
+      </MDTypography>
+    );
+  }
+
+  return (
+    <MDBox display="flex" flexDirection="column" gap={1}>
+      {content.text && (
+        <MDBox p={1.25} borderRadius="md" sx={{ bgcolor: "#f8fafc", whiteSpace: "pre-wrap" }}>
+          <MDTypography variant="caption" color="dark">
+            {content.text}
+          </MDTypography>
+        </MDBox>
+      )}
+      {content.output && (
+        <MDBox p={1.25} borderRadius="md" sx={{ bgcolor: "#111827", whiteSpace: "pre-wrap" }}>
+          <MDTypography variant="caption" sx={{ color: "#e5e7eb" }}>
+            {content.output}
+          </MDTypography>
+        </MDBox>
+      )}
+      {content.file?.url && (
+        <MDButton
+          component="a"
+          href={content.file.url}
+          target="_blank"
+          rel="noreferrer"
+          variant="outlined"
+          color="info"
+          size="small"
+          startIcon={<Icon>attach_file</Icon>}
+        >
+          Open {content.file.name || "submission"}
+        </MDButton>
+      )}
+    </MDBox>
+  );
+}
+
+function ActivityReviewDialog({
+  gradeForms,
+  loading,
+  onChangeGrade,
+  onClose,
+  onSaveGrade,
+  open,
+  review,
+  saving,
+}) {
+  const activity = review?.activity;
+  const learners = review?.learners || [];
+  const questions = Array.isArray(activity?.content?.questions) ? activity.content.questions : [];
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+      <DialogTitle>
+        <MDBox>
+          <MDTypography variant="h5" fontWeight="bold">
+            Review Activity
+          </MDTypography>
+          <MDTypography variant="body2" color="text">
+            {activity?.course_name || "Course"} | {activity?.module_title || "Module"} |{" "}
+            {activity?.title || "Activity"}
+          </MDTypography>
+        </MDBox>
+      </DialogTitle>
+      <DialogContent dividers sx={{ bgcolor: "#f8fafc" }}>
+        {loading ? (
+          <MDTypography variant="body2" color="text">
+            Loading learner work...
+          </MDTypography>
+        ) : learners.length === 0 ? (
+          <MDTypography variant="body2" color="text">
+            No learners are allocated to this course yet.
+          </MDTypography>
+        ) : (
+          <MDBox display="flex" flexDirection="column" gap={1.5}>
+            {learners.map((row) => {
+              const form = gradeForms[row.learner_id] || {};
+              return (
+                <Card key={row.learner_id}>
+                  <MDBox p={2}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={3}>
+                        <MDTypography variant="button" fontWeight="bold">
+                          {row.full_name}
+                        </MDTypography>
+                        <MDTypography variant="caption" color="text" display="block">
+                          {row.grade || "Grade not set"} {row.stream ? `| ${row.stream}` : ""}
+                        </MDTypography>
+                        <Chip
+                          size="small"
+                          sx={{ mt: 1 }}
+                          label={row.progress_status || "not_started"}
+                          color={row.progress_status === "graded" ? "success" : "default"}
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={5}>
+                        {activity?.activity_type === "quiz" ? (
+                          <MDBox display="flex" flexDirection="column" gap={1}>
+                            <MDTypography variant="caption" color="text" fontWeight="bold">
+                              Latest quiz attempt:{" "}
+                              {row.latest_attempt_id ? `${row.quiz_score || 0}%` : "No attempt yet"}
+                            </MDTypography>
+                            {questions.map((question, index) => (
+                              <MDBox
+                                key={question.id || index}
+                                p={1.25}
+                                borderRadius="md"
+                                sx={{ bgcolor: "#eef6ff", border: "1px solid #bfdbfe" }}
+                              >
+                                <MDTypography variant="caption" fontWeight="bold">
+                                  {index + 1}. {question.prompt}
+                                </MDTypography>
+                                <MDTypography variant="caption" display="block" color="text">
+                                  Learner: {asText(getAnswerValue(row.answers, question)) || "-"}
+                                </MDTypography>
+                                <MDTypography variant="caption" display="block" color="success">
+                                  Correct: {asText(question.correct_answer) || "-"}
+                                </MDTypography>
+                              </MDBox>
+                            ))}
+                          </MDBox>
+                        ) : (
+                          renderSubmissionContent(row)
+                        )}
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <Grid container spacing={1}>
+                          <Grid item xs={6}>
+                            <MDInput
+                              label={`Grade${activity?.points ? ` / ${activity.points}` : ""}`}
+                              type="number"
+                              fullWidth
+                              value={form.score ?? ""}
+                              onChange={(event) =>
+                                onChangeGrade(row.learner_id, "score", event.target.value)
+                              }
+                            />
+                          </Grid>
+                          <Grid item xs={6}>
+                            <MDInput
+                              select
+                              label="Level"
+                              fullWidth
+                              value={form.performance_level || ""}
+                              onChange={(event) =>
+                                onChangeGrade(
+                                  row.learner_id,
+                                  "performance_level",
+                                  event.target.value
+                                )
+                              }
+                              SelectProps={{ native: true }}
+                            >
+                              <option value="">Select</option>
+                              <option value="Excellent">Excellent</option>
+                              <option value="Good">Good</option>
+                              <option value="Developing">Developing</option>
+                              <option value="Needs support">Needs support</option>
+                            </MDInput>
+                          </Grid>
+                          <Grid item xs={12}>
+                            <MDInput
+                              label="Teacher remarks"
+                              multiline
+                              rows={2}
+                              fullWidth
+                              value={form.teacher_remarks || ""}
+                              onChange={(event) =>
+                                onChangeGrade(row.learner_id, "teacher_remarks", event.target.value)
+                              }
+                            />
+                          </Grid>
+                        </Grid>
+                        <MDBox mt={1.5} display="flex" justifyContent="flex-end">
+                          <MDButton
+                            variant="gradient"
+                            color="info"
+                            size="small"
+                            disabled={saving || form.score === ""}
+                            onClick={() => onSaveGrade(row)}
+                          >
+                            Save Grade
+                          </MDButton>
+                        </MDBox>
+                      </Grid>
+                    </Grid>
+                  </MDBox>
+                </Card>
+              );
+            })}
+          </MDBox>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <MDButton variant="outlined" color="dark" onClick={onClose}>
+          Close
+        </MDButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+ActivityReviewDialog.propTypes = {
+  gradeForms: PropTypes.objectOf(
+    PropTypes.shape({
+      performance_level: PropTypes.string,
+      score: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      teacher_remarks: PropTypes.string,
+    })
+  ).isRequired,
+  loading: PropTypes.bool.isRequired,
+  onChangeGrade: PropTypes.func.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onSaveGrade: PropTypes.func.isRequired,
+  open: PropTypes.bool.isRequired,
+  review: PropTypes.shape({
+    activity: PropTypes.shape({
+      activity_type: PropTypes.string,
+      content: PropTypes.shape({
+        questions: PropTypes.arrayOf(PropTypes.shape({})),
+      }),
+      course_name: PropTypes.string,
+      module_title: PropTypes.string,
+      points: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+      title: PropTypes.string,
+    }),
+    learners: PropTypes.arrayOf(PropTypes.shape({})),
+  }),
+  saving: PropTypes.bool.isRequired,
+};
+
+ActivityReviewDialog.defaultProps = {
+  review: null,
+};
+
 function CourseBuilder() {
   const { templateId, courseId } = useParams();
   const { pathname } = useLocation();
@@ -843,6 +1302,11 @@ function CourseBuilder() {
   const [activityActionAnchor, setActivityActionAnchor] = useState(null);
   const [actionTarget, setActionTarget] = useState(null);
   const [activityManagerOpen, setActivityManagerOpen] = useState(false);
+  const [activityReviewOpen, setActivityReviewOpen] = useState(false);
+  const [activityReview, setActivityReview] = useState(null);
+  const [activityReviewLoading, setActivityReviewLoading] = useState(false);
+  const [activityReviewSaving, setActivityReviewSaving] = useState(false);
+  const [gradeForms, setGradeForms] = useState({});
   const [courseForm, setCourseForm] = useState({});
   const [moduleEditForm, setModuleEditForm] = useState(emptyModule(1));
   const [activityEditForm, setActivityEditForm] = useState(emptyActivity(1));
@@ -1002,6 +1466,71 @@ function CourseBuilder() {
     setActivityEditForm(activityToForm(activity));
     setActivityManagerOpen(true);
     closeMenus();
+  };
+
+  const openActivityReview = async (courseModule, activity) => {
+    if (!activity) return;
+    setSelectedModuleId(courseModule.id);
+    setSelectedActivityId(activity.id);
+    setActivityReviewOpen(true);
+    setActivityReviewLoading(true);
+    setActivityReview(null);
+    setError("");
+    closeMenus();
+    try {
+      const response = await apiClient.get(`/courses/activities/${activity.id}/review`);
+      setActivityReview(response);
+      const forms = {};
+      (response.learners || []).forEach((learner) => {
+        const earnedPoints = earnedPointsFromFeedback(learner.quiz_feedback);
+        forms[learner.learner_id] = {
+          score:
+            learner.grade_score !== null && learner.grade_score !== undefined
+              ? learner.grade_score
+              : earnedPoints,
+          performance_level: learner.performance_level || "",
+          teacher_remarks: learner.teacher_remarks || "",
+        };
+      });
+      setGradeForms(forms);
+    } catch (err) {
+      setError(err.message || "Failed to load review.");
+    } finally {
+      setActivityReviewLoading(false);
+    }
+  };
+
+  const updateGradeForm = (learnerId, field, value) => {
+    setGradeForms((current) => ({
+      ...current,
+      [learnerId]: {
+        ...(current[learnerId] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveLearnerGrade = async (row) => {
+    const activityId = activityReview?.activity?.id;
+    if (!activityId) return;
+    const form = gradeForms[row.learner_id] || {};
+    setActivityReviewSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await apiClient.put(`/courses/activities/${activityId}/learners/${row.learner_id}/grade`, {
+        score: form.score,
+        performance_level: form.performance_level,
+        teacher_remarks: form.teacher_remarks,
+      });
+      const refreshed = await apiClient.get(`/courses/activities/${activityId}/review`);
+      setActivityReview(refreshed);
+      setMessage("Learner grade saved.");
+    } catch (err) {
+      setError(err.message || "Failed to save grade.");
+    } finally {
+      setActivityReviewSaving(false);
+    }
   };
 
   const updateModulePublished = async (courseModule, isPublished) => {
@@ -1873,6 +2402,13 @@ function CourseBuilder() {
           >
             Manage
           </MenuItem>
+          {!isTemplate && (
+            <MenuItem
+              onClick={() => openActivityReview(actionTarget?.module, actionTarget?.activity)}
+            >
+              Review Learners
+            </MenuItem>
+          )}
           <MenuItem
             onClick={() => {
               updateActivityPublished(
@@ -1900,6 +2436,16 @@ function CourseBuilder() {
           onClose={() => setActivityManagerOpen(false)}
           onImageUpload={uploadActivityImage}
           onSave={saveManagedActivity}
+        />
+        <ActivityReviewDialog
+          gradeForms={gradeForms}
+          loading={activityReviewLoading}
+          open={activityReviewOpen}
+          review={activityReview}
+          saving={activityReviewSaving}
+          onChangeGrade={updateGradeForm}
+          onClose={() => setActivityReviewOpen(false)}
+          onSaveGrade={saveLearnerGrade}
         />
       </MDBox>
       <Footer />

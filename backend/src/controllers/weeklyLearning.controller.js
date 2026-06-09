@@ -144,10 +144,40 @@ async function syncWeeklyResults(req, res) {
       return res.status(400).json({ error: "Term and academic year are required" });
     }
 
+    const params = [term, Number(academic_year)];
+    let weekSql = "";
+    if (week_number) {
+      params.push(Number(week_number));
+      weekSql = ` AND qt.week_number = $${params.length}`;
+    }
+
+    const result = await query(
+      `WITH best_scores AS (
+         SELECT qta.learner_id,
+                qt.week_number,
+                qt.term,
+                qt.academic_year,
+                MAX(qta.score)::integer AS quiz_score
+         FROM quiz_test_attempts qta
+         JOIN quiz_tests qt ON qt.id = qta.quiz_test_id
+         WHERE qt.quiz_type = 'weekly'
+           AND qt.term = $1::varchar
+           AND qt.academic_year = $2::integer
+           ${weekSql}
+         GROUP BY qta.learner_id, qt.week_number, qt.term, qt.academic_year
+       )
+       INSERT INTO weekly_marks (learner_id, week_number, term, academic_year, quiz_score)
+       SELECT learner_id, week_number, term, academic_year, quiz_score
+       FROM best_scores
+       ON CONFLICT (learner_id, week_number, term, academic_year)
+       DO UPDATE SET quiz_score = EXCLUDED.quiz_score, updated_at = NOW()
+       RETURNING learner_id`,
+      params
+    );
+
     res.json({
-      message:
-        "Native weekly quiz scoring will be recorded through eduClub activities.",
-      synced: 0,
+      message: `Synced ${result.rowCount || 0} weekly quiz result(s) to report cards.`,
+      synced: result.rowCount || 0,
       week_number: week_number || null,
     });
   } catch (error) {
