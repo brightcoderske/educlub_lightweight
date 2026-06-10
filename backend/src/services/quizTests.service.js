@@ -47,6 +47,32 @@ function normalizeCategory(value) {
   return QUIZ_CATEGORIES.has(category) ? category : "quiz";
 }
 
+function dateBoundary(value, endOfDay = false) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(
+      value.getFullYear(),
+      value.getMonth(),
+      value.getDate(),
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 999 : 0
+    );
+  }
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    endOfDay ? 23 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 999 : 0
+  );
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function computeAvailability(test, now = new Date()) {
   if (!normalizeBoolean(test.is_published)) {
     return { effective_is_published: false, effective_is_open: false };
@@ -54,14 +80,14 @@ function computeAvailability(test, now = new Date()) {
   if (test.quiz_type !== "weekly") {
     return { effective_is_published: true, effective_is_open: true };
   }
-  const weekStart = test.week_start_date ? new Date(test.week_start_date) : null;
-  const termEnd = test.term_end_date ? new Date(test.term_end_date) : null;
-  if (!weekStart || Number.isNaN(weekStart.getTime()) || !termEnd || Number.isNaN(termEnd.getTime())) {
-    return { effective_is_published: true, effective_is_open: normalizeBoolean(test.is_open) };
+  const weekStart = dateBoundary(test.week_start_date);
+  const weekEnd = dateBoundary(test.week_end_date, true);
+  if (!weekStart || !weekEnd) {
+    return { effective_is_published: true, effective_is_open: false };
   }
   return {
     effective_is_published: true,
-    effective_is_open: normalizeBoolean(test.is_open) && now >= weekStart && now <= termEnd,
+    effective_is_open: normalizeBoolean(test.is_open) && now >= weekStart && now <= weekEnd,
   };
 }
 
@@ -371,6 +397,18 @@ async function updateTest(user, testId, data) {
   return getTest(testId, user);
 }
 
+async function duplicateTest(user, testId) {
+  const source = await getTest(testId, { ...user, role: "system_admin" });
+  if (!source) return null;
+  return createTest(user, {
+    ...source,
+    name: `${source.name} Copy`,
+    is_published: false,
+    is_open: false,
+    questions: source.questions,
+  });
+}
+
 async function deleteTest(testId) {
   const result = await query("DELETE FROM quiz_tests WHERE id = $1::integer RETURNING *", [testId]);
   return result.rows[0] || null;
@@ -439,14 +477,16 @@ async function submitAttempt(user, testId, data = {}) {
   );
 
   if (test.quiz_type === "weekly" && test.term && test.academic_year && test.week_number) {
-    await query(
+    const weeklyMark = await query(
       `INSERT INTO weekly_marks (learner_id, week_number, term, academic_year, quiz_score)
        VALUES ($1::integer, $2::integer, $3::varchar, $4::integer, $5::integer)
        ON CONFLICT (learner_id, week_number, term, academic_year)
        DO UPDATE SET quiz_score = GREATEST(COALESCE(weekly_marks.quiz_score, 0), EXCLUDED.quiz_score),
-                     updated_at = NOW()`,
+                     updated_at = NOW()
+       RETURNING *`,
       [learner.id, test.week_number, test.term, test.academic_year, score]
     );
+    attempt.rows[0].weekly_mark = weeklyMark.rows[0] || null;
   }
 
   if (test.quiz_type === "competition" && test.competition_id) {
@@ -522,6 +562,7 @@ module.exports = {
   getTest,
   createTest,
   updateTest,
+  duplicateTest,
   deleteTest,
   submitAttempt,
   getReport,

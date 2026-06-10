@@ -18,6 +18,12 @@ router.put(
   requireRole("system_admin"),
   quizTestsController.updateTest
 );
+router.post(
+  "/tests/:id/duplicate",
+  authenticateToken,
+  requireRole("system_admin"),
+  quizTestsController.duplicateTest
+);
 router.delete(
   "/tests/:id",
   authenticateToken,

@@ -66,9 +66,23 @@ async function getAllTerms() {
   const result = await query(
     `SELECT t.*,
             ay.year AS academic_year,
-            CONCAT(ay.year, ' - ', t.name) AS term_label
+            CONCAT(ay.year, ' - ', t.name) AS term_label,
+            COALESCE(
+              jsonb_agg(
+                jsonb_build_object(
+                  'id', tw.id,
+                  'week_number', tw.week_number,
+                  'start_date', tw.start_date,
+                  'end_date', tw.end_date
+                )
+                ORDER BY tw.week_number
+              ) FILTER (WHERE tw.id IS NOT NULL),
+              '[]'::jsonb
+            ) AS weeks
      FROM terms t
      LEFT JOIN academic_years ay ON ay.id = t.academic_year_id
+     LEFT JOIN term_weeks tw ON tw.term_id = t.id
+     GROUP BY t.id, ay.year
      ORDER BY ay.year DESC, t.term_type, t.name`
   );
   return result.rows;

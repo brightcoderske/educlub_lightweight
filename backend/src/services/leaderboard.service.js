@@ -178,6 +178,27 @@ async function getAllWeeklyLeaderboards(weekNumber, term, academicYear, schoolId
 // Get learner's weekly performance summary
 async function getLearnerWeeklySummary(learnerId, term, academicYear) {
   const result = await query(
+    `SELECT tw.week_number,
+            wm.quiz_score,
+            wm.typing_score,
+            wm.active_course_score,
+            wm.active_course_modules_completed,
+            wm.active_course_modules_total
+     FROM terms t
+     JOIN academic_years ay ON ay.id = t.academic_year_id
+     JOIN term_weeks tw ON tw.term_id = t.id
+     LEFT JOIN weekly_marks wm
+       ON wm.learner_id = $1
+      AND wm.term = t.name
+      AND wm.academic_year = ay.year
+      AND wm.week_number = tw.week_number
+     WHERE t.name = $2 AND ay.year = $3
+     ORDER BY tw.week_number`,
+    [learnerId, term, academicYear]
+  );
+
+  if (result.rows.length > 0) return result.rows;
+  const fallback = await query(
     `SELECT week_number, quiz_score, typing_score, active_course_score,
             active_course_modules_completed, active_course_modules_total
      FROM weekly_marks
@@ -185,8 +206,7 @@ async function getLearnerWeeklySummary(learnerId, term, academicYear) {
      ORDER BY week_number`,
     [learnerId, term, academicYear]
   );
-
-  return result.rows;
+  return fallback.rows;
 }
 
 module.exports = {

@@ -220,24 +220,26 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
   const [tableAnchor, setTableAnchor] = useState(null);
   const [selectedObject, setSelectedObject] = useState(null);
 
+  const serializeEditor = () => {
+    if (!editorRef.current) return "";
+    const clone = editorRef.current.cloneNode(true);
+    clone.querySelectorAll("[data-editor-selected='true']").forEach((element) => {
+      element.style.outline = "";
+      element.style.outlineOffset = "";
+      delete element.dataset.editorSelected;
+    });
+    return clone.innerHTML;
+  };
+
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== (value || "")) {
+    if (editorRef.current && serializeEditor() !== (value || "")) {
       editorRef.current.innerHTML = value || "";
+      setSelectedObject(null);
     }
   }, [value]);
 
   const emitChange = () => {
-    const outline = selectedObject?.style.outline;
-    const outlineOffset = selectedObject?.style.outlineOffset;
-    if (selectedObject) {
-      selectedObject.style.outline = "";
-      selectedObject.style.outlineOffset = "";
-    }
-    onChange(editorRef.current?.innerHTML || "");
-    if (selectedObject) {
-      selectedObject.style.outline = outline;
-      selectedObject.style.outlineOffset = outlineOffset;
-    }
+    onChange(serializeEditor());
   };
 
   const runCommand = (command, commandValue = null) => {
@@ -350,10 +352,12 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     if (selectedObject && selectedObject !== object) {
       selectedObject.style.outline = "";
       selectedObject.style.outlineOffset = "";
+      delete selectedObject.dataset.editorSelected;
     }
     if (object) {
       object.style.outline = "2px solid #2563eb";
       object.style.outlineOffset = "2px";
+      object.dataset.editorSelected = "true";
     }
     setSelectedObject(object || null);
   };
@@ -367,9 +371,24 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
       target.remove();
       setSelectedObject(null);
     } else if (target.matches("img")) {
-      target.style.maxWidth = action;
-      target.style.width = "auto";
-      target.style.height = "auto";
+      if (action.startsWith("size:")) {
+        target.style.maxWidth = action.replace("size:", "");
+        target.style.width = "auto";
+      } else if (action.startsWith("align:")) {
+        const alignment = action.replace("align:", "");
+        target.style.display = "block";
+        target.style.marginLeft =
+          alignment === "right" ? "auto" : alignment === "center" ? "auto" : "0";
+        target.style.marginRight =
+          alignment === "left" ? "auto" : alignment === "center" ? "auto" : "0";
+      } else if (action.startsWith("crop:")) {
+        const shape = action.replace("crop:", "");
+        const ratios = { square: "1 / 1", landscape: "16 / 9", portrait: "4 / 5" };
+        target.style.aspectRatio = ratios[shape] || "";
+        target.style.objectFit = shape === "reset" ? "contain" : "cover";
+        target.style.width = shape === "reset" ? "auto" : "min(100%, 520px)";
+        target.style.height = "auto";
+      }
     }
     emitChange();
   };
@@ -559,27 +578,64 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
           p={0.75}
           border="1px solid #bfdbfe"
           borderRadius="md"
-          sx={{ bgcolor: "#eff6ff" }}
+          sx={{ position: "sticky", top: 48, zIndex: 2, bgcolor: "#eff6ff" }}
         >
           <MDTypography variant="caption" fontWeight="bold">
             Selected {selectedObject.tagName.toLowerCase()}
           </MDTypography>
           {selectedObject.matches("img") && (
             <>
-              <MDButton size="small" color="info" onClick={() => updateSelectedObject("35%")}>
+              <MDButton size="small" color="info" onClick={() => updateSelectedObject("size:35%")}>
                 Small
               </MDButton>
-              <MDButton size="small" color="info" onClick={() => updateSelectedObject("70%")}>
+              <MDButton size="small" color="info" onClick={() => updateSelectedObject("size:70%")}>
                 Medium
               </MDButton>
-              <MDButton size="small" color="info" onClick={() => updateSelectedObject("100%")}>
+              <MDButton size="small" color="info" onClick={() => updateSelectedObject("size:100%")}>
                 Full
+              </MDButton>
+              <IconButton title="Align left" onClick={() => updateSelectedObject("align:left")}>
+                <Icon>format_align_left</Icon>
+              </IconButton>
+              <IconButton title="Align center" onClick={() => updateSelectedObject("align:center")}>
+                <Icon>format_align_center</Icon>
+              </IconButton>
+              <IconButton title="Align right" onClick={() => updateSelectedObject("align:right")}>
+                <Icon>format_align_right</Icon>
+              </IconButton>
+              <MDButton
+                size="small"
+                color="dark"
+                onClick={() => updateSelectedObject("crop:landscape")}
+              >
+                Landscape
+              </MDButton>
+              <MDButton
+                size="small"
+                color="dark"
+                onClick={() => updateSelectedObject("crop:square")}
+              >
+                Square
+              </MDButton>
+              <MDButton
+                size="small"
+                color="dark"
+                onClick={() => updateSelectedObject("crop:portrait")}
+              >
+                Portrait
+              </MDButton>
+              <MDButton
+                size="small"
+                color="dark"
+                onClick={() => updateSelectedObject("crop:reset")}
+              >
+                Reset Crop
               </MDButton>
             </>
           )}
-          <IconButton color="error" onClick={() => updateSelectedObject("delete")}>
-            <Icon>delete</Icon>
-          </IconButton>
+          <MDButton color="error" size="small" onClick={() => updateSelectedObject("delete")}>
+            <Icon>delete</Icon>&nbsp; Delete
+          </MDButton>
         </MDBox>
       )}
       <input
@@ -595,6 +651,12 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         suppressContentEditableWarning
         onInput={emitChange}
         onClick={selectEditorObject}
+        onKeyDown={(event) => {
+          if (selectedObject && ["Delete", "Backspace"].includes(event.key)) {
+            event.preventDefault();
+            updateSelectedObject("delete");
+          }
+        }}
         p={2}
         border="1px solid #d1d5db"
         borderRadius="md"

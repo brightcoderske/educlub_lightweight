@@ -197,12 +197,32 @@ async function generateReport(reportData) {
 // Get weekly marks for a learner
 async function getWeeklyMarks(learnerId, term, academicYear) {
   const result = await query(
-    `SELECT * FROM weekly_marks 
-     WHERE learner_id = $1 AND term = $2 AND academic_year = $3 
+    `SELECT tw.week_number,
+            wm.quiz_score,
+            wm.typing_score,
+            wm.active_course_score,
+            wm.active_course_modules_completed,
+            wm.active_course_modules_total
+     FROM terms t
+     JOIN academic_years ay ON ay.id = t.academic_year_id
+     JOIN term_weeks tw ON tw.term_id = t.id
+     LEFT JOIN weekly_marks wm
+       ON wm.learner_id = $1
+      AND wm.term = t.name
+      AND wm.academic_year = ay.year
+      AND wm.week_number = tw.week_number
+     WHERE t.name = $2 AND ay.year = $3
+     ORDER BY tw.week_number`,
+    [learnerId, term, academicYear]
+  );
+  if (result.rows.length > 0) return result.rows;
+  const fallback = await query(
+    `SELECT * FROM weekly_marks
+     WHERE learner_id = $1 AND term = $2 AND academic_year = $3
      ORDER BY week_number`,
     [learnerId, term, academicYear]
   );
-  return result.rows;
+  return fallback.rows;
 }
 
 // Get weekly marks for multiple learners (class or school)
@@ -276,9 +296,14 @@ function drawSectionTitle(doc, number, title, x, y, width) {
 }
 
 function drawLineChart(doc, rows, key, x, y, width, height, suffix = "") {
-  const data = rows
-    .map((row) => ({ week: row.week_number, value: Number(row[key]) }))
-    .filter((row) => !Number.isNaN(row.value));
+  const axis = rows.map((row) => ({
+    week: row.week_number,
+    value:
+      row[key] === null || row[key] === undefined || row[key] === ""
+        ? null
+        : Number(row[key]),
+  }));
+  const data = axis.filter((row) => row.value !== null && !Number.isNaN(row.value));
 
   doc.strokeColor("#c6ccd8").lineWidth(1);
   doc
@@ -286,6 +311,23 @@ function drawLineChart(doc, rows, key, x, y, width, height, suffix = "") {
     .lineTo(x + 35, y + height - 25)
     .lineTo(x + width - 20, y + height - 25)
     .stroke();
+
+  const plotLeft = x + 35;
+  const plotRight = x + width - 28;
+  const plotTop = y + 18;
+  const plotBottom = y + height - 25;
+  const step = axis.length === 1 ? 0 : (plotRight - plotLeft) / Math.max(axis.length - 1, 1);
+  axis.forEach((item, index) => {
+    const labelX = axis.length === 1 ? (plotLeft + plotRight) / 2 : plotLeft + index * step;
+    doc
+      .fillColor("#4d5b73")
+      .font("Helvetica")
+      .fontSize(axis.length > 12 ? 5 : 6)
+      .text(`W${item.week}`, labelX - 8, plotBottom + 7, {
+        width: 16,
+        align: "center",
+      });
+  });
 
   if (data.length === 0) {
     doc
@@ -296,15 +338,12 @@ function drawLineChart(doc, rows, key, x, y, width, height, suffix = "") {
     return;
   }
 
-  const plotLeft = x + 35;
-  const plotRight = x + width - 28;
-  const plotTop = y + 18;
-  const plotBottom = y + height - 25;
   const max = Math.max(100, ...data.map((item) => item.value));
-  const step =
-    data.length === 1 ? 0 : (plotRight - plotLeft) / (data.length - 1);
-  const points = data.map((item, index) => ({
-    x: data.length === 1 ? (plotLeft + plotRight) / 2 : plotLeft + index * step,
+  const points = data.map((item) => ({
+    x:
+      axis.length === 1
+        ? (plotLeft + plotRight) / 2
+        : plotLeft + axis.findIndex((entry) => entry.week === item.week) * step,
     y: plotBottom - (item.value / max) * (plotBottom - plotTop),
     ...item,
   }));
@@ -327,14 +366,6 @@ function drawLineChart(doc, rows, key, x, y, width, height, suffix = "") {
       .fontSize(7)
       .text(`${point.value}${suffix}`, point.x - 14, point.y - 14, {
         width: 28,
-        align: "center",
-      });
-    doc
-      .fillColor("#001b44")
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .text(`Week ${point.week}`, point.x - 18, plotBottom + 7, {
-        width: 36,
         align: "center",
       });
   });

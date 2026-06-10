@@ -41,6 +41,17 @@ async function updateTest(req, res) {
   }
 }
 
+async function duplicateTest(req, res) {
+  try {
+    const test = await quizTestsService.duplicateTest(req.user, req.params.id);
+    if (!test) return res.status(404).json({ error: "Quiz not found" });
+    res.status(201).json(test);
+  } catch (error) {
+    console.error("Duplicate quiz test error:", error);
+    res.status(400).json({ error: error.message || "Failed to duplicate quiz test" });
+  }
+}
+
 async function deleteTest(req, res) {
   try {
     const test = await quizTestsService.deleteTest(req.params.id);
@@ -75,6 +86,7 @@ module.exports = {
   getTest,
   createTest,
   updateTest,
+  duplicateTest,
   deleteTest,
   submitAttempt,
   report,

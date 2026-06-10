@@ -55,6 +55,32 @@ function isValidDate(value) {
   return value instanceof Date && !Number.isNaN(value.getTime());
 }
 
+function dateBoundary(value, endOfDay = false) {
+  if (value instanceof Date && isValidDate(value)) {
+    return new Date(
+      value.getFullYear(),
+      value.getMonth(),
+      value.getDate(),
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 999 : 0
+    );
+  }
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    endOfDay ? 23 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 999 : 0
+  );
+  return isValidDate(date) ? date : null;
+}
+
 function computeAvailability(test, now = new Date()) {
   const storedPublished = normalizeBoolean(test.is_published);
   const storedOpen = normalizeBoolean(test.is_open);
@@ -75,10 +101,10 @@ function computeAvailability(test, now = new Date()) {
     };
   }
 
-  const weekStart = test.week_start_date ? new Date(test.week_start_date) : null;
-  const termEnd = test.term_end_date ? new Date(test.term_end_date) : null;
+  const weekStart = dateBoundary(test.week_start_date);
+  const weekEnd = dateBoundary(test.week_end_date, true);
 
-  if (!isValidDate(weekStart) || !isValidDate(termEnd)) {
+  if (!weekStart || !weekEnd) {
     return {
       effective_is_published: true,
       effective_is_open: false,
@@ -86,7 +112,7 @@ function computeAvailability(test, now = new Date()) {
     };
   }
 
-  if (now > termEnd) {
+  if (now < weekStart || now > weekEnd) {
     return {
       effective_is_published: true,
       effective_is_open: false,
@@ -96,7 +122,7 @@ function computeAvailability(test, now = new Date()) {
 
   return {
     effective_is_published: true,
-    effective_is_open: storedOpen,
+    effective_is_open: storedOpen && now >= weekStart && now <= weekEnd,
     availability_mode: "scheduled",
   };
 }
