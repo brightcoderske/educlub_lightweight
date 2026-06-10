@@ -80,10 +80,24 @@ const emptyQuizForm = () => ({
   pass_score: 50,
   max_attempts: 1,
   duration_seconds: 600,
+  total_points: 1,
   is_published: false,
   is_open: false,
   questions: defaultQuestions(),
 });
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Could not read image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function shuffled(items = []) {
+  return [...items].sort(() => Math.random() - 0.5);
+}
 
 const gradeOptions = Array.from({ length: 12 }, (_, index) => `Grade ${index + 1}`);
 
@@ -124,6 +138,7 @@ function WeeklyLearning() {
   const [activeQuiz, setActiveQuiz] = useState(null);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizResult, setQuizResult] = useState(null);
+  const [previewImage, setPreviewImage] = useState("");
   const [bulkForm, setBulkForm] = useState({
     grade: "",
     stream: "",
@@ -509,23 +524,61 @@ function WeeklyLearning() {
     }));
   };
 
+  const uploadQuizQuestionImage = async (index, file) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Question images are capped at 2MB.");
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const uploaded = await apiClient.post("/courses/activity-images", {
+        fileName: file.name,
+        dataUrl,
+      });
+      updateQuizQuestion(index, { image_url: uploaded.url });
+    } catch (err) {
+      setError(err.message || "Could not upload question image.");
+    }
+  };
+
   const saveQuizTest = async () => {
     setMessage("");
     setError("");
     try {
+      const allocated = quizForm.questions.reduce(
+        (sum, question) => sum + Number(question.points ?? 0),
+        0
+      );
+      if (allocated > Number(quizForm.total_points ?? 0)) {
+        setError(
+          `Question marks total ${allocated}, which exceeds the quiz total of ${quizForm.total_points}.`
+        );
+        return;
+      }
       const payload = {
         ...quizForm,
         competition_id: quizForm.quiz_type === "competition" ? quizForm.competition_id : "",
         questions: quizForm.questions.map((question, index) => ({
           ...question,
           position: index + 1,
-          options: question.options.filter(Boolean),
+          options: question.options.filter((option) =>
+            typeof option === "object" ? option.left || option.right : Boolean(option)
+          ),
           correct_answer:
             question.question_type === "multiple_choice"
               ? String(question.correct_answer || "")
                   .split(",")
                   .map((item) => item.trim())
                   .filter(Boolean)
+              : question.question_type === "matching"
+              ? Object.fromEntries(
+                  question.options
+                    .filter((pair) => pair.left)
+                    .map((pair) => [pair.left, pair.right])
+                )
+              : question.question_type === "ordering"
+              ? question.options
               : question.correct_answer,
         })),
       };
@@ -555,10 +608,15 @@ function WeeklyLearning() {
         questions: response.questions?.length
           ? response.questions.map((question) => ({
               ...question,
-              correct_answer: Array.isArray(question.correct_answer)
-                ? question.correct_answer.join(", ")
-                : question.correct_answer || "",
-              options: question.options?.length ? question.options : ["", "", "", ""],
+              correct_answer:
+                question.question_type !== "ordering" && Array.isArray(question.correct_answer)
+                  ? question.correct_answer.join(", ")
+                  : question.correct_answer || "",
+              options: question.options?.length
+                ? question.options
+                : question.question_type === "matching"
+                ? [{ left: "", right: "" }]
+                : ["", "", "", ""],
             }))
           : defaultQuestions(),
       });
@@ -587,9 +645,16 @@ function WeeklyLearning() {
   const openQuizTest = async (test) => {
     setError("");
     setQuizResult(null);
-    setQuizAnswers({});
     try {
-      setActiveQuiz(await apiClient.get(`/quiz-tests/tests/${test.id}`));
+      const quiz = await apiClient.get(`/quiz-tests/tests/${test.id}`);
+      setActiveQuiz(quiz);
+      setQuizAnswers(
+        Object.fromEntries(
+          (quiz.questions || [])
+            .filter((question) => question.question_type === "ordering")
+            .map((question) => [question.id, shuffled(question.options)])
+        )
+      );
     } catch (err) {
       setError(err.message || "Could not open quiz.");
     }
@@ -1383,6 +1448,17 @@ function WeeklyLearning() {
                     </Grid>
                     <Grid item xs={12} md={3}>
                       <MDInput
+                        label="Total Marks"
+                        type="number"
+                        fullWidth
+                        value={quizForm.total_points}
+                        onChange={(event) =>
+                          setQuizForm({ ...quizForm, total_points: event.target.value })
+                        }
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <MDInput
                         select
                         label="Status"
                         fullWidth
@@ -1437,14 +1513,28 @@ function WeeklyLearning() {
                                   label="Answer type"
                                   fullWidth
                                   value={question.question_type}
-                                  onChange={(event) =>
-                                    updateQuizQuestion(index, { question_type: event.target.value })
-                                  }
+                                  onChange={(event) => {
+                                    const questionType = event.target.value;
+                                    updateQuizQuestion(index, {
+                                      question_type: questionType,
+                                      options:
+                                        questionType === "matching"
+                                          ? [{ left: "", right: "" }]
+                                          : question.options?.some(
+                                              (option) => typeof option === "object"
+                                            )
+                                          ? ["", "", "", ""]
+                                          : question.options,
+                                      correct_answer: questionType === "multiple_choice" ? [] : "",
+                                    });
+                                  }}
                                   SelectProps={{ native: true }}
                                 >
                                   <option value="single_choice">Single choice</option>
                                   <option value="multiple_choice">Multiple choice</option>
                                   <option value="short_answer">Short answer</option>
+                                  <option value="matching">Matching pairs</option>
+                                  <option value="ordering">Arrange in order</option>
                                 </MDInput>
                               </Grid>
                               <Grid item xs={12} md={3}>
@@ -1458,37 +1548,157 @@ function WeeklyLearning() {
                                   }
                                 />
                               </Grid>
-                              <Grid item xs={12} md={8}>
-                                <MDInput
-                                  label="Options separated by comma"
-                                  fullWidth
-                                  value={(question.options || []).join(", ")}
-                                  onChange={(event) =>
-                                    updateQuizQuestion(index, {
-                                      options: event.target.value
-                                        .split(",")
-                                        .map((item) => item.trim()),
-                                    })
-                                  }
-                                />
+                              <Grid item xs={12}>
+                                <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                                  <MDButton
+                                    component="label"
+                                    variant="outlined"
+                                    color="info"
+                                    size="small"
+                                  >
+                                    {question.image_url ? "Replace Image" : "Add Image"}
+                                    <input
+                                      hidden
+                                      type="file"
+                                      accept="image/png,image/jpeg,image/gif,image/webp"
+                                      onChange={(event) =>
+                                        uploadQuizQuestionImage(index, event.target.files?.[0])
+                                      }
+                                    />
+                                  </MDButton>
+                                  {question.image_url && (
+                                    <>
+                                      <MDBox
+                                        component="img"
+                                        src={question.image_url}
+                                        alt=""
+                                        sx={{
+                                          width: 120,
+                                          maxHeight: 90,
+                                          objectFit: "contain",
+                                          borderRadius: "6px",
+                                        }}
+                                      />
+                                      <MDButton
+                                        variant="text"
+                                        color="error"
+                                        size="small"
+                                        onClick={() => updateQuizQuestion(index, { image_url: "" })}
+                                      >
+                                        Remove
+                                      </MDButton>
+                                    </>
+                                  )}
+                                </MDBox>
                               </Grid>
-                              <Grid item xs={12} md={4}>
-                                <MDInput
-                                  label="Correct answer"
-                                  fullWidth
-                                  value={question.correct_answer}
-                                  onChange={(event) =>
-                                    updateQuizQuestion(index, {
-                                      correct_answer: event.target.value,
-                                    })
-                                  }
-                                />
-                              </Grid>
+                              {question.question_type === "matching" ? (
+                                <Grid item xs={12}>
+                                  <MDBox display="flex" flexDirection="column" gap={1}>
+                                    {(question.options || []).map((pair, pairIndex) => (
+                                      <Grid container spacing={1} key={`pair-${pairIndex + 1}`}>
+                                        <Grid item xs={5}>
+                                          <MDInput
+                                            label="Item"
+                                            fullWidth
+                                            value={pair.left || ""}
+                                            onChange={(event) => {
+                                              const options = [...question.options];
+                                              options[pairIndex] = {
+                                                ...pair,
+                                                left: event.target.value,
+                                              };
+                                              updateQuizQuestion(index, { options });
+                                            }}
+                                          />
+                                        </Grid>
+                                        <Grid item xs={2}>
+                                          <MDTypography textAlign="center">matches</MDTypography>
+                                        </Grid>
+                                        <Grid item xs={5}>
+                                          <MDInput
+                                            label="Match"
+                                            fullWidth
+                                            value={pair.right || ""}
+                                            onChange={(event) => {
+                                              const options = [...question.options];
+                                              options[pairIndex] = {
+                                                ...pair,
+                                                right: event.target.value,
+                                              };
+                                              updateQuizQuestion(index, { options });
+                                            }}
+                                          />
+                                        </Grid>
+                                      </Grid>
+                                    ))}
+                                    <MDButton
+                                      variant="outlined"
+                                      color="info"
+                                      size="small"
+                                      onClick={() =>
+                                        updateQuizQuestion(index, {
+                                          options: [
+                                            ...(question.options || []),
+                                            { left: "", right: "" },
+                                          ],
+                                        })
+                                      }
+                                    >
+                                      Add Pair
+                                    </MDButton>
+                                  </MDBox>
+                                </Grid>
+                              ) : (
+                                <>
+                                  <Grid item xs={12} md={8}>
+                                    <MDInput
+                                      label={
+                                        question.question_type === "ordering"
+                                          ? "Items in the correct order, separated by comma"
+                                          : "Options separated by comma"
+                                      }
+                                      fullWidth
+                                      value={(question.options || []).join(", ")}
+                                      onChange={(event) =>
+                                        updateQuizQuestion(index, {
+                                          options: event.target.value
+                                            .split(",")
+                                            .map((item) => item.trim()),
+                                        })
+                                      }
+                                    />
+                                  </Grid>
+                                  {question.question_type !== "ordering" && (
+                                    <Grid item xs={12} md={4}>
+                                      <MDInput
+                                        label="Correct answer"
+                                        fullWidth
+                                        value={question.correct_answer}
+                                        onChange={(event) =>
+                                          updateQuizQuestion(index, {
+                                            correct_answer: event.target.value,
+                                          })
+                                        }
+                                      />
+                                    </Grid>
+                                  )}
+                                </>
+                              )}
                             </Grid>
                           </MDBox>
                         </Card>
                       </Grid>
                     ))}
+                    <Grid item xs={12}>
+                      <MDTypography variant="caption" color="text">
+                        Allocated marks:{" "}
+                        {quizForm.questions.reduce(
+                          (sum, question) => sum + Number(question.points ?? 0),
+                          0
+                        )}{" "}
+                        / {Number(quizForm.total_points || 0)}
+                      </MDTypography>
+                    </Grid>
                     <Grid item xs={12}>
                       <MDButton variant="outlined" color="dark" onClick={addQuizQuestion}>
                         Add Question
@@ -2256,6 +2466,23 @@ function WeeklyLearning() {
                           <MDTypography variant="button" fontWeight="bold">
                             {index + 1}. {question.prompt}
                           </MDTypography>
+                          {question.image_url && (
+                            <MDBox
+                              component="img"
+                              src={question.image_url}
+                              alt=""
+                              onClick={() => setPreviewImage(question.image_url)}
+                              sx={{
+                                display: "block",
+                                width: "min(100%, 360px)",
+                                maxHeight: 240,
+                                objectFit: "contain",
+                                mt: 1,
+                                borderRadius: "6px",
+                                cursor: "zoom-in",
+                              }}
+                            />
+                          )}
                           {question.question_type === "short_answer" ? (
                             <MDInput
                               fullWidth
@@ -2269,6 +2496,83 @@ function WeeklyLearning() {
                               }
                               sx={{ mt: 1 }}
                             />
+                          ) : question.question_type === "matching" ? (
+                            <MDBox display="flex" flexDirection="column" gap={1} mt={1}>
+                              {(question.options || []).map((pair) => (
+                                <Grid container spacing={1} key={pair.left}>
+                                  <Grid item xs={12} sm={5}>
+                                    <MDTypography variant="body2" fontWeight="bold">
+                                      {pair.left}
+                                    </MDTypography>
+                                  </Grid>
+                                  <Grid item xs={12} sm={7}>
+                                    <MDInput
+                                      select
+                                      fullWidth
+                                      value={quizAnswers[question.id]?.[pair.left] || ""}
+                                      onChange={(event) =>
+                                        setQuizAnswers({
+                                          ...quizAnswers,
+                                          [question.id]: {
+                                            ...(quizAnswers[question.id] || {}),
+                                            [pair.left]: event.target.value,
+                                          },
+                                        })
+                                      }
+                                      SelectProps={{ native: true }}
+                                    >
+                                      <option value="">Choose match</option>
+                                      {(question.options || []).map((choice) => (
+                                        <option key={choice.right} value={choice.right}>
+                                          {choice.right}
+                                        </option>
+                                      ))}
+                                    </MDInput>
+                                  </Grid>
+                                </Grid>
+                              ))}
+                            </MDBox>
+                          ) : question.question_type === "ordering" ? (
+                            <MDBox display="flex" flexDirection="column" gap={1} mt={1}>
+                              {(quizAnswers[question.id] || question.options || []).map(
+                                (option, optionIndex) => (
+                                  <MDBox
+                                    key={`${option}-${optionIndex}`}
+                                    display="flex"
+                                    alignItems="center"
+                                    gap={1}
+                                  >
+                                    <MDTypography variant="button">{optionIndex + 1}.</MDTypography>
+                                    <MDInput
+                                      select
+                                      fullWidth
+                                      value={option}
+                                      onChange={(event) => {
+                                        const ordered = [
+                                          ...(quizAnswers[question.id] || question.options || []),
+                                        ];
+                                        const swapIndex = ordered.indexOf(event.target.value);
+                                        [ordered[optionIndex], ordered[swapIndex]] = [
+                                          ordered[swapIndex],
+                                          ordered[optionIndex],
+                                        ];
+                                        setQuizAnswers({
+                                          ...quizAnswers,
+                                          [question.id]: ordered,
+                                        });
+                                      }}
+                                      SelectProps={{ native: true }}
+                                    >
+                                      {(question.options || []).map((choice) => (
+                                        <option key={choice} value={choice}>
+                                          {choice}
+                                        </option>
+                                      ))}
+                                    </MDInput>
+                                  </MDBox>
+                                )
+                              )}
+                            </MDBox>
                           ) : (
                             <MDBox display="flex" flexDirection="column" gap={1} mt={1}>
                               {(question.options || []).map((option) => {
@@ -2315,6 +2619,16 @@ function WeeklyLearning() {
               )}
             </MDBox>
           )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(previewImage)} onClose={() => setPreviewImage("")} maxWidth="md">
+        <DialogContent>
+          <MDBox
+            component="img"
+            src={previewImage}
+            alt=""
+            sx={{ display: "block", maxWidth: "100%", maxHeight: "75vh", objectFit: "contain" }}
+          />
         </DialogContent>
       </Dialog>
     </DashboardLayout>

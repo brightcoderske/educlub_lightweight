@@ -225,12 +225,14 @@ function activityDone(status) {
 }
 
 function normalizeQuestion(question = {}, index = 0, includeAnswer = false) {
+  const points = Number(question.points ?? 1);
   const normalized = {
     id: question.id || `${index + 1}`,
     question_type: question.question_type || question.type || "multiple_choice",
     prompt: question.prompt || question.question || "",
     options: Array.isArray(question.options) ? question.options : [],
-    points: Number(question.points || 1),
+    image_url: question.image_url || "",
+    points: Number.isFinite(points) && points >= 0 ? points : 1,
     position: Number(question.position || index + 1),
     feedback: question.feedback || "",
   };
@@ -254,24 +256,63 @@ function sanitizeActivityContent(content = {}, includeAnswers = false) {
   return sanitized;
 }
 
-function normalizeAnswer(value) {
+function normalizeAnswer(value, preserveOrder = false) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.entries(value)
+      .map(([key, item]) => [
+        String(key).trim().toLowerCase(),
+        String(item ?? "")
+          .trim()
+          .toLowerCase(),
+      ])
+      .sort(([left], [right]) => left.localeCompare(right));
+  }
   if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim().toLowerCase()).sort();
+    const normalized = value.map((item) =>
+      typeof item === "object"
+        ? JSON.stringify(item)
+        : String(item ?? "")
+            .trim()
+            .toLowerCase(),
+    );
+    return preserveOrder ? normalized : normalized.sort();
   }
   return String(value ?? "")
     .trim()
     .toLowerCase();
 }
 
-function answersMatch(expected, actual) {
-  const normalizedExpected = normalizeAnswer(expected);
-  const normalizedActual = normalizeAnswer(actual);
+function answersMatch(expected, actual, questionType = "") {
+  const preserveOrder = questionType === "ordering";
+  const normalizedExpected = normalizeAnswer(expected, preserveOrder);
+  const normalizedActual = normalizeAnswer(actual, preserveOrder);
 
   if (Array.isArray(normalizedExpected) || Array.isArray(normalizedActual)) {
     return JSON.stringify(normalizedExpected) === JSON.stringify(normalizedActual);
   }
 
   return normalizedExpected === normalizedActual;
+}
+
+function validateQuizAllocation(data = {}) {
+  if (data.activity_type !== "quiz") return;
+  const questions = Array.isArray(data.content?.questions) ? data.content.questions : [];
+  const allocated = questions.reduce((sum, question) => {
+    const points = Number(question.points ?? 1);
+    if (!Number.isFinite(points) || points < 0) {
+      throw new Error("Each quiz question must have valid non-negative marks.");
+    }
+    return sum + points;
+  }, 0);
+  const available = Number(data.points ?? 0);
+  if (!Number.isFinite(available) || available < 0) {
+    throw new Error("Quiz total marks must be a valid non-negative number.");
+  }
+  if (allocated > available) {
+    throw new Error(
+      `Question marks total ${allocated}, which exceeds the quiz total of ${available}.`,
+    );
+  }
 }
 
 function moduleSummary(module) {
@@ -685,7 +726,7 @@ async function submitQuiz(activityId, user = {}, data = {}) {
 
   questions.forEach((question) => {
     const answer = answers[question.id] ?? answers[question.position];
-    const correct = answersMatch(question.correct_answer, answer);
+    const correct = answersMatch(question.correct_answer, answer, question.question_type);
     if (correct) earned += Number(question.points || 0);
     feedback[question.id] = {
       correct,
@@ -1194,6 +1235,7 @@ async function createManagedActivity(moduleId, user = {}, data = {}) {
   const allowed = await assertCourseManageAccess(courseId, user);
   if (!allowed) throw new Error("You cannot edit this module.");
 
+  validateQuizAllocation(data);
   const activity = await createActivity(moduleId, data);
   await syncDiscussionSetup(activity, user);
   await bumpSchoolCourseVersion(courseId);
@@ -1214,6 +1256,7 @@ async function updateActivity(activityId, user = {}, data = {}) {
   const allowed = await assertCourseManageAccess(courseId, user);
   if (!allowed) throw new Error("You cannot edit this activity.");
 
+  validateQuizAllocation(data);
   const result = await query(
     `UPDATE learning_activities
      SET title = $1,

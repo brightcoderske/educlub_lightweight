@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
@@ -146,7 +146,7 @@ function questionsFromCsv(text) {
           .map((option) => option.trim())
           .filter(Boolean),
         correct_answer: correctAnswer,
-        points: Number(points || 1),
+        points: Number(points ?? 1),
         position: index + 1,
       };
     });
@@ -159,7 +159,8 @@ function normalizeQuestionForm(question = {}, index = 0) {
     prompt: question.prompt || question.question || "",
     options: Array.isArray(question.options) ? question.options : [],
     correct_answer: question.correct_answer || question.answer || "",
-    points: Number(question.points || 1),
+    image_url: question.image_url || "",
+    points: Number(question.points ?? 1),
     position: Number(question.position || index + 1),
   };
 }
@@ -217,6 +218,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
   const [orderedAnchor, setOrderedAnchor] = useState(null);
   const [unorderedAnchor, setUnorderedAnchor] = useState(null);
   const [tableAnchor, setTableAnchor] = useState(null);
+  const [selectedObject, setSelectedObject] = useState(null);
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== (value || "")) {
@@ -224,10 +226,24 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     }
   }, [value]);
 
+  const emitChange = () => {
+    const outline = selectedObject?.style.outline;
+    const outlineOffset = selectedObject?.style.outlineOffset;
+    if (selectedObject) {
+      selectedObject.style.outline = "";
+      selectedObject.style.outlineOffset = "";
+    }
+    onChange(editorRef.current?.innerHTML || "");
+    if (selectedObject) {
+      selectedObject.style.outline = outline;
+      selectedObject.style.outlineOffset = outlineOffset;
+    }
+  };
+
   const runCommand = (command, commandValue = null) => {
     editorRef.current?.focus();
     document.execCommand(command, false, commandValue);
-    onChange(editorRef.current?.innerHTML || "");
+    emitChange();
   };
 
   const insertHtml = (html) => runCommand("insertHTML", html);
@@ -249,10 +265,12 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
       list.style.paddingLeft = "2rem";
       list.style.marginLeft = "0.5rem";
     }
-    onChange(editorRef.current?.innerHTML || "");
+    emitChange();
   };
 
   const selectedCell = () => {
+    if (selectedObject?.matches?.("td,th")) return selectedObject;
+    if (selectedObject?.matches?.("table")) return selectedObject.querySelector("td,th");
     const selection = window.getSelection();
     const node =
       selection?.anchorNode?.nodeType === 3
@@ -270,14 +288,14 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
       child.innerHTML = "Text";
     });
     row.after(clone);
-    onChange(editorRef.current?.innerHTML || "");
+    emitChange();
   };
 
   const deleteTableRow = () => {
     const row = selectedCell()?.parentElement;
     if (row) {
       row.remove();
-      onChange(editorRef.current?.innerHTML || "");
+      emitChange();
     }
   };
 
@@ -291,7 +309,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
       newCell.innerHTML = row.rowIndex === 0 ? "Heading" : "Text";
       row.cells[index].after(newCell);
     });
-    onChange(editorRef.current?.innerHTML || "");
+    emitChange();
   };
 
   const deleteTableColumn = () => {
@@ -300,7 +318,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     const table = cell?.closest("table");
     if (!table || index < 0) return;
     Array.from(table.rows).forEach((row) => row.cells[index]?.remove());
-    onChange(editorRef.current?.innerHTML || "");
+    emitChange();
   };
 
   const insertLink = () => {
@@ -310,7 +328,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
 
   const insertImageLink = () => {
     const url = window.prompt("Paste the image URL");
-    if (url) insertHtml(`<img src="${url}" alt="" />`);
+    if (url) insertHtml(`<img src="${url}" alt="" style="max-width:70%;height:auto" />`);
   };
 
   const uploadImage = async (event) => {
@@ -322,7 +340,38 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
       return;
     }
     const url = await onImageUpload(file);
-    insertHtml(`<img src="${url}" alt="${file.name}" />`);
+    insertHtml(
+      `<img src="${url}" alt="${file.name}" style="max-width:70%;height:auto;cursor:pointer" />`
+    );
+  };
+
+  const selectEditorObject = (event) => {
+    const object = event.target.closest?.("img,table,td,th,pre,a");
+    if (selectedObject && selectedObject !== object) {
+      selectedObject.style.outline = "";
+      selectedObject.style.outlineOffset = "";
+    }
+    if (object) {
+      object.style.outline = "2px solid #2563eb";
+      object.style.outlineOffset = "2px";
+    }
+    setSelectedObject(object || null);
+  };
+
+  const updateSelectedObject = (action) => {
+    if (!selectedObject) return;
+    const target = selectedObject.matches("td,th")
+      ? selectedObject.closest("table")
+      : selectedObject;
+    if (action === "delete") {
+      target.remove();
+      setSelectedObject(null);
+    } else if (target.matches("img")) {
+      target.style.maxWidth = action;
+      target.style.width = "auto";
+      target.style.height = "auto";
+    }
+    emitChange();
   };
 
   const insertEmbed = () => {
@@ -501,6 +550,38 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         <MenuItem onClick={addTableColumn}>Add Column</MenuItem>
         <MenuItem onClick={deleteTableColumn}>Delete Column</MenuItem>
       </Menu>
+      {selectedObject && (
+        <MDBox
+          display="flex"
+          alignItems="center"
+          gap={0.5}
+          mb={1}
+          p={0.75}
+          border="1px solid #bfdbfe"
+          borderRadius="md"
+          sx={{ bgcolor: "#eff6ff" }}
+        >
+          <MDTypography variant="caption" fontWeight="bold">
+            Selected {selectedObject.tagName.toLowerCase()}
+          </MDTypography>
+          {selectedObject.matches("img") && (
+            <>
+              <MDButton size="small" color="info" onClick={() => updateSelectedObject("35%")}>
+                Small
+              </MDButton>
+              <MDButton size="small" color="info" onClick={() => updateSelectedObject("70%")}>
+                Medium
+              </MDButton>
+              <MDButton size="small" color="info" onClick={() => updateSelectedObject("100%")}>
+                Full
+              </MDButton>
+            </>
+          )}
+          <IconButton color="error" onClick={() => updateSelectedObject("delete")}>
+            <Icon>delete</Icon>
+          </IconButton>
+        </MDBox>
+      )}
       <input
         ref={imageInputRef}
         type="file"
@@ -512,7 +593,8 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         ref={editorRef}
         contentEditable
         suppressContentEditableWarning
-        onInput={() => onChange(editorRef.current?.innerHTML || "")}
+        onInput={emitChange}
+        onClick={selectEditorObject}
         p={2}
         border="1px solid #d1d5db"
         borderRadius="md"
@@ -531,10 +613,12 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
 function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload, onSave }) {
   const [form, setForm] = useState(activityToManagerForm(activity));
   const [csvText, setCsvText] = useState("");
+  const [validationError, setValidationError] = useState("");
 
   useEffect(() => {
     setForm(activityToManagerForm(activity));
     setCsvText("");
+    setValidationError("");
   }, [activity?.id, open]);
 
   if (!activity) return null;
@@ -572,12 +656,28 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
   };
 
   const addOption = (index) => {
+    const isMatching = form.questions[index].question_type === "matching";
     updateQuestion(index, {
       options: [
         ...form.questions[index].options,
-        `Option ${form.questions[index].options.length + 1}`,
+        isMatching ? { left: "", right: "" } : `Option ${form.questions[index].options.length + 1}`,
       ],
     });
+  };
+
+  const uploadQuestionImage = async (index, file) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setValidationError("Question images are capped at 2MB.");
+      return;
+    }
+    try {
+      const imageUrl = await onImageUpload(file);
+      updateQuestion(index, { image_url: imageUrl });
+      setValidationError("");
+    } catch (error) {
+      setValidationError(error.message || "Could not upload question image.");
+    }
   };
 
   const toggleCorrectOption = (index, option) => {
@@ -595,6 +695,17 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
   };
 
   const save = () => {
+    const allocatedMarks = form.questions.reduce(
+      (sum, question) => sum + Number(question.points ?? 0),
+      0
+    );
+    const quizMarks = Number(form.points ?? 0);
+    if (form.activity_type === "quiz" && allocatedMarks > quizMarks) {
+      setValidationError(
+        `Question marks total ${allocatedMarks}, which exceeds the quiz total of ${quizMarks}.`
+      );
+      return;
+    }
     const content = {
       description: form.description,
       rich_html: form.rich_html,
@@ -612,7 +723,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
               .split("|")
               .map((option) => option.trim())
               .filter(Boolean),
-        points: Number(question.points || 1),
+        points: Number(question.points ?? 1),
         position: index + 1,
       })),
     };
@@ -634,6 +745,13 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Manage Activity</DialogTitle>
       <DialogContent dividers>
+        {validationError && (
+          <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#fef2f2" }}>
+            <MDTypography variant="body2" color="error">
+              {validationError}
+            </MDTypography>
+          </MDBox>
+        )}
         <Grid container spacing={2}>
           <Grid item xs={12} md={5}>
             <MDInput
@@ -731,6 +849,11 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
               <MDTypography variant="h6" fontWeight="bold" mb={1}>
                 Quiz Questions
               </MDTypography>
+              <MDTypography variant="caption" color="text">
+                Allocated marks:{" "}
+                {form.questions.reduce((sum, question) => sum + Number(question.points ?? 0), 0)} /{" "}
+                {Number(form.points || 0)}
+              </MDTypography>
               <MDBox display="flex" flexDirection="column" gap={1.5}>
                 {form.questions.map((question, index) => (
                   <MDBox key={question.id} p={2} border="1px solid #e5e7eb" borderRadius="md">
@@ -751,14 +874,31 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                           label="Answer mode"
                           fullWidth
                           value={question.question_type}
-                          onChange={(event) =>
-                            updateQuestion(index, { question_type: event.target.value })
-                          }
+                          onChange={(event) => {
+                            const questionType = event.target.value;
+                            updateQuestion(index, {
+                              question_type: questionType,
+                              options:
+                                questionType === "matching"
+                                  ? [{ left: "", right: "" }]
+                                  : question.options.some((option) => typeof option === "object")
+                                  ? ["Option 1", "Option 2"]
+                                  : question.options,
+                              correct_answer:
+                                questionType === "multi_select"
+                                  ? []
+                                  : questionType === "ordering"
+                                  ? question.options
+                                  : "",
+                            });
+                          }}
                           SelectProps={{ native: true }}
                         >
                           <option value="multiple_choice">Choose one</option>
                           <option value="multi_select">Choose many</option>
                           <option value="short_answer">Short answer</option>
+                          <option value="matching">Matching pairs</option>
+                          <option value="ordering">Arrange in order</option>
                         </MDInput>
                       </Grid>
                       <Grid item xs={6} md={2}>
@@ -783,6 +923,44 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                           }
                         />
                       </Grid>
+                      <Grid item xs={12}>
+                        <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                          <MDButton component="label" variant="outlined" color="info" size="small">
+                            {question.image_url ? "Replace Image" : "Add Image"}
+                            <input
+                              hidden
+                              type="file"
+                              accept="image/png,image/jpeg,image/gif,image/webp"
+                              onChange={(event) =>
+                                uploadQuestionImage(index, event.target.files?.[0])
+                              }
+                            />
+                          </MDButton>
+                          {question.image_url && (
+                            <>
+                              <MDBox
+                                component="img"
+                                src={question.image_url}
+                                alt=""
+                                sx={{
+                                  width: 120,
+                                  maxHeight: 90,
+                                  objectFit: "contain",
+                                  borderRadius: "6px",
+                                }}
+                              />
+                              <MDButton
+                                variant="text"
+                                color="error"
+                                size="small"
+                                onClick={() => updateQuestion(index, { image_url: "" })}
+                              >
+                                Remove
+                              </MDButton>
+                            </>
+                          )}
+                        </MDBox>
+                      </Grid>
                       {question.question_type === "short_answer" ? (
                         <Grid item xs={12}>
                           <MDInput
@@ -793,6 +971,70 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                               updateQuestion(index, { correct_answer: event.target.value })
                             }
                           />
+                        </Grid>
+                      ) : question.question_type === "matching" ? (
+                        <Grid item xs={12}>
+                          <MDBox display="flex" flexDirection="column" gap={1}>
+                            {question.options.map((pair, optionIndex) => (
+                              <Grid container spacing={1} key={`${question.id}-${optionIndex}`}>
+                                <Grid item xs={5}>
+                                  <MDInput
+                                    label="Item"
+                                    fullWidth
+                                    value={pair.left || ""}
+                                    onChange={(event) => {
+                                      const options = [...question.options];
+                                      options[optionIndex] = {
+                                        ...pair,
+                                        left: event.target.value,
+                                      };
+                                      updateQuestion(index, {
+                                        options,
+                                        correct_answer: Object.fromEntries(
+                                          options
+                                            .filter((item) => item.left)
+                                            .map((item) => [item.left, item.right])
+                                        ),
+                                      });
+                                    }}
+                                  />
+                                </Grid>
+                                <Grid item xs={2}>
+                                  <MDTypography textAlign="center">matches</MDTypography>
+                                </Grid>
+                                <Grid item xs={5}>
+                                  <MDInput
+                                    label="Match"
+                                    fullWidth
+                                    value={pair.right || ""}
+                                    onChange={(event) => {
+                                      const options = [...question.options];
+                                      options[optionIndex] = {
+                                        ...pair,
+                                        right: event.target.value,
+                                      };
+                                      updateQuestion(index, {
+                                        options,
+                                        correct_answer: Object.fromEntries(
+                                          options
+                                            .filter((item) => item.left)
+                                            .map((item) => [item.left, item.right])
+                                        ),
+                                      });
+                                    }}
+                                  />
+                                </Grid>
+                              </Grid>
+                            ))}
+                            <MDButton
+                              variant="outlined"
+                              color="info"
+                              size="small"
+                              onClick={() => addOption(index)}
+                            >
+                              Add Pair
+                            </MDButton>
+                          </MDBox>
                         </Grid>
                       ) : (
                         <Grid item xs={12}>
@@ -835,6 +1077,9 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                                       const oldOption = nextOptions[optionIndex];
                                       nextOptions[optionIndex] = event.target.value;
                                       const nextPatch = { options: nextOptions };
+                                      if (question.question_type === "ordering") {
+                                        nextPatch.correct_answer = nextOptions;
+                                      }
                                       if (question.correct_answer === oldOption) {
                                         nextPatch.correct_answer = event.target.value;
                                       }
@@ -1291,7 +1536,9 @@ function CourseBuilder() {
   const { templateId, courseId } = useParams();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isTemplate = pathname.startsWith("/system-admin");
+  const reviewMode = !isTemplate && searchParams.get("review") === "1";
   const entityId = isTemplate ? templateId : courseId;
   const [data, setData] = useState(null);
   const [selectedModuleId, setSelectedModuleId] = useState(null);
@@ -1379,6 +1626,19 @@ function CourseBuilder() {
     setExpandedModules({});
     loadBuilder();
   }, [entityId, isTemplate]);
+
+  useEffect(() => {
+    if (!reviewMode || modules.length === 0) return;
+    setExpandedModules(
+      modules.reduce(
+        (expanded, courseModule) => ({
+          ...expanded,
+          [courseModule.id]: true,
+        }),
+        {}
+      )
+    );
+  }, [reviewMode, modules.length]);
 
   useEffect(() => {
     if (selectedModule) {
@@ -1725,6 +1985,23 @@ function CourseBuilder() {
             {!isTemplate && (
               <>
                 <MDButton
+                  variant={reviewMode ? "gradient" : "outlined"}
+                  color="success"
+                  onClick={() =>
+                    setSearchParams((current) => {
+                      const next = new URLSearchParams(current);
+                      if (reviewMode) {
+                        next.delete("review");
+                      } else {
+                        next.set("review", "1");
+                      }
+                      return next;
+                    })
+                  }
+                >
+                  {reviewMode ? "Exit Review" : "Review Learner Work"}
+                </MDButton>
+                <MDButton
                   variant="outlined"
                   color="info"
                   disabled={saving}
@@ -1763,6 +2040,14 @@ function CourseBuilder() {
           <MDTypography variant="caption" color="success" display="block" mb={2}>
             {message}
           </MDTypography>
+        )}
+        {reviewMode && (
+          <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#dcfce7" }}>
+            <MDTypography variant="body2" color="success" fontWeight="medium">
+              Review mode is active. Select the grading icon beside an activity to inspect learner
+              submissions, quiz answers, code, files, comments, and grades.
+            </MDTypography>
+          </MDBox>
         )}
 
         {loading ? (
@@ -1946,16 +2231,29 @@ function CourseBuilder() {
                                         {activity.activity_type} | {activity.points || 0} marks
                                       </MDTypography>
                                     </MDBox>
-                                    <IconButton
-                                      size="small"
-                                      aria-label="Activity actions"
-                                      onClick={(event) => {
-                                        setActionTarget({ module: courseModule, activity });
-                                        setActivityActionAnchor(event.currentTarget);
-                                      }}
-                                    >
-                                      <Icon>more_vert</Icon>
-                                    </IconButton>
+                                    <MDBox display="flex" alignItems="center" gap={0.25}>
+                                      {!isTemplate && (
+                                        <IconButton
+                                          size="small"
+                                          color={reviewMode ? "success" : "default"}
+                                          aria-label={`Review ${activity.title}`}
+                                          title="Review learner submissions and grades"
+                                          onClick={() => openActivityReview(courseModule, activity)}
+                                        >
+                                          <Icon>grading</Icon>
+                                        </IconButton>
+                                      )}
+                                      <IconButton
+                                        size="small"
+                                        aria-label="Activity actions"
+                                        onClick={(event) => {
+                                          setActionTarget({ module: courseModule, activity });
+                                          setActivityActionAnchor(event.currentTarget);
+                                        }}
+                                      >
+                                        <Icon>more_vert</Icon>
+                                      </IconButton>
+                                    </MDBox>
                                   </MDBox>
                                 ))
                               )}

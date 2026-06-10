@@ -4,7 +4,12 @@ const QUIZ_CATEGORIES = new Set(["quiz", "maths", "science", "stem"]);
 
 function normalizeList(value) {
   if (Array.isArray(value)) {
-    return [...new Set(value.map((item) => String(item || "").trim()).filter(Boolean))];
+    return value
+      .map((item) => {
+        if (item && typeof item === "object") return item;
+        return String(item || "").trim();
+      })
+      .filter((item) => (typeof item === "object" ? true : Boolean(item)));
   }
   return [];
 }
@@ -60,15 +65,53 @@ function computeAvailability(test, now = new Date()) {
   };
 }
 
-function normalizeAnswer(value) {
+function normalizeAnswer(value, preserveOrder = false) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.entries(value)
+      .map(([key, item]) => [
+        String(key).trim().toLowerCase(),
+        String(item ?? "")
+          .trim()
+          .toLowerCase(),
+      ])
+      .sort(([left], [right]) => left.localeCompare(right));
+  }
   if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim().toLowerCase()).sort();
+    const normalized = value.map((item) =>
+      String(item ?? "")
+        .trim()
+        .toLowerCase()
+    );
+    return preserveOrder ? normalized : normalized.sort();
   }
   return [String(value ?? "").trim().toLowerCase()].filter(Boolean);
 }
 
-function answersMatch(expected, actual) {
-  return JSON.stringify(normalizeAnswer(expected)) === JSON.stringify(normalizeAnswer(actual));
+function answersMatch(expected, actual, questionType = "") {
+  const preserveOrder = questionType === "ordering";
+  return (
+    JSON.stringify(normalizeAnswer(expected, preserveOrder)) ===
+    JSON.stringify(normalizeAnswer(actual, preserveOrder))
+  );
+}
+
+function validateQuestionAllocation(data = {}) {
+  const totalPoints = Number(data.total_points ?? 0);
+  const allocated = (data.questions || []).reduce((sum, question) => {
+    const points = Number(question.points ?? 1);
+    if (!Number.isFinite(points) || points < 0) {
+      throw new Error("Each quiz question must have valid non-negative marks.");
+    }
+    return sum + points;
+  }, 0);
+  if (!Number.isFinite(totalPoints) || totalPoints < 0) {
+    throw new Error("Quiz total marks must be a valid non-negative number.");
+  }
+  if (allocated > totalPoints) {
+    throw new Error(
+      `Question marks total ${allocated}, which exceeds the quiz total of ${totalPoints}.`
+    );
+  }
 }
 
 async function getLearnerForUser(userId) {
@@ -168,17 +211,21 @@ async function saveQuestions(testId, questions = []) {
   for (const [index, question] of questions.entries()) {
     await query(
       `INSERT INTO quiz_test_questions (
-         quiz_test_id, position, question_type, prompt, options, correct_answer, points
+         quiz_test_id, position, question_type, prompt, image_url, options, correct_answer, points
        )
-       VALUES ($1::integer, $2::integer, $3::varchar, $4::text, $5::jsonb, $6::jsonb, $7::numeric)`,
+       VALUES (
+         $1::integer, $2::integer, $3::varchar, $4::text, $5::text,
+         $6::jsonb, $7::jsonb, $8::numeric
+       )`,
       [
         testId,
         Number(question.position || index + 1),
         question.question_type || "single_choice",
         question.prompt || "",
+        question.image_url || "",
         JSON.stringify(normalizeList(question.options)),
-        JSON.stringify(normalizeAnswer(question.correct_answer)),
-        Number(question.points || 1),
+        JSON.stringify(question.correct_answer ?? ""),
+        Number(question.points ?? 1),
       ]
     );
   }
@@ -232,19 +279,20 @@ async function getTest(testId, user) {
 }
 
 async function createTest(user, data) {
+  validateQuestionAllocation(data);
   const quizType = data.quiz_type === "competition" ? "competition" : "weekly";
   const result = await query(
     `INSERT INTO quiz_tests (
        name, description, term, academic_year, week_number, quiz_type, competition_id,
        school_id, quiz_category, eligible_grades, eligible_streams, pass_score,
-       max_attempts, duration_seconds, is_published, is_open, created_by_user_id
+       max_attempts, duration_seconds, total_points, is_published, is_open, created_by_user_id
      )
      VALUES (
        $1::varchar, $2::text, NULLIF($3::text, ''), NULLIF($4::text, '')::integer,
        NULLIF($5::text, '')::integer, $6::varchar, NULLIF($7::text, '')::integer,
        NULLIF($8::text, '')::integer, $9::varchar, $10::jsonb, $11::jsonb,
-       $12::numeric, $13::integer, $14::integer, $15::boolean, $16::boolean,
-       NULLIF($17::text, '')::integer
+       $12::numeric, $13::integer, $14::integer, $15::numeric, $16::boolean, $17::boolean,
+       NULLIF($18::text, '')::integer
      )
      RETURNING *`,
     [
@@ -262,6 +310,7 @@ async function createTest(user, data) {
       Number(data.pass_score || 50),
       Number(data.max_attempts || 1),
       Number(data.duration_seconds || 600),
+      Number(data.total_points ?? 0),
       Boolean(data.is_published),
       Boolean(data.is_open),
       user.userId ? String(user.userId) : "",
@@ -272,6 +321,7 @@ async function createTest(user, data) {
 }
 
 async function updateTest(user, testId, data) {
+  validateQuestionAllocation(data);
   const quizType = data.quiz_type === "competition" ? "competition" : "weekly";
   const result = await query(
     `UPDATE quiz_tests
@@ -289,10 +339,11 @@ async function updateTest(user, testId, data) {
          pass_score = $12::numeric,
          max_attempts = $13::integer,
          duration_seconds = $14::integer,
-         is_published = $15::boolean,
-         is_open = $16::boolean,
+         total_points = $15::numeric,
+         is_published = $16::boolean,
+         is_open = $17::boolean,
          updated_at = NOW()
-     WHERE id = $17::integer
+     WHERE id = $18::integer
      RETURNING *`,
     [
       data.name,
@@ -309,6 +360,7 @@ async function updateTest(user, testId, data) {
       Number(data.pass_score || 50),
       Number(data.max_attempts || 1),
       Number(data.duration_seconds || 600),
+      Number(data.total_points ?? 0),
       Boolean(data.is_published),
       Boolean(data.is_open),
       testId,
@@ -357,7 +409,7 @@ async function submitAttempt(user, testId, data = {}) {
     const points = Number(question.points || 0);
     total += points;
     const answer = answers[question.id] ?? answers[question.position];
-    const correct = answersMatch(question.correct_answer, answer);
+    const correct = answersMatch(question.correct_answer, answer, question.question_type);
     if (correct) earned += points;
     feedback[question.id] = { correct, points: correct ? points : 0, max_points: points };
   });

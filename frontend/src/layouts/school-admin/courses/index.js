@@ -48,8 +48,10 @@ function Courses() {
     }
   };
 
-  if (!isSchoolAdmin()) {
-    return <MDBox>Access denied. School Admin only.</MDBox>;
+  const canManageCourses = isSchoolAdmin() || user?.role === "teacher";
+
+  if (!canManageCourses) {
+    return <MDBox>Access denied. School staff only.</MDBox>;
   }
 
   const builderReadyCount = courses.filter((c) => c.description || c.estimated_weeks).length;
@@ -222,6 +224,7 @@ function Courses() {
                           <TableCell>Level</TableCell>
                           <TableCell>Weeks</TableCell>
                           <TableCell>Status</TableCell>
+                          <TableCell align="center">Actions</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -291,6 +294,30 @@ function Courses() {
                                 color={course.is_active ? "success" : "default"}
                                 size="small"
                               />
+                            </TableCell>
+                            <TableCell align="center">
+                              <MDBox display="flex" gap={0.5} justifyContent="center">
+                                <MDButton
+                                  variant="outlined"
+                                  color="info"
+                                  size="small"
+                                  onClick={() =>
+                                    navigate(`/school-admin/courses/${course.id}/builder`)
+                                  }
+                                >
+                                  Build
+                                </MDButton>
+                                <MDButton
+                                  variant="gradient"
+                                  color="success"
+                                  size="small"
+                                  onClick={() =>
+                                    navigate(`/school-admin/courses/${course.id}/builder?review=1`)
+                                  }
+                                >
+                                  Review Work
+                                </MDButton>
+                              </MDBox>
                             </TableCell>
                           </TableRow>
                         ))}

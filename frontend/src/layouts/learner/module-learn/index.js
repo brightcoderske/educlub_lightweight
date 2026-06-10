@@ -4,6 +4,8 @@ import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
 import Grid from "@mui/material/Grid";
 import Icon from "@mui/material/Icon";
 import IconButton from "@mui/material/IconButton";
@@ -46,6 +48,10 @@ function readFileAsDataUrl(file) {
     reader.onerror = () => reject(new Error("Could not read file."));
     reader.readAsDataURL(file);
   });
+}
+
+function shuffled(items = []) {
+  return [...items].sort(() => Math.random() - 0.5);
 }
 
 function buildDiscussionThreads(replies = []) {
@@ -145,6 +151,7 @@ function ActivityBody({
   onSubmitDiscussionReply,
   onSubmitQuiz,
 }) {
+  const [previewImage, setPreviewImage] = useState("");
   const content = activity?.content || {};
   const description = content.description || "";
   const body = content.body || content.text || content.instructions || "";
@@ -241,30 +248,119 @@ function ActivityBody({
               <MDTypography variant="button" fontWeight="medium">
                 {index + 1}. {question.prompt || question.question || "Question"}
               </MDTypography>
+              {question.image_url && (
+                <MDBox
+                  component="img"
+                  src={question.image_url}
+                  alt=""
+                  onClick={() => setPreviewImage(question.image_url)}
+                  sx={{
+                    display: "block",
+                    width: "min(100%, 360px)",
+                    maxHeight: 240,
+                    objectFit: "contain",
+                    mt: 1.25,
+                    borderRadius: "6px",
+                    cursor: "zoom-in",
+                    bgcolor: "#ffffff",
+                  }}
+                />
+              )}
               <MDBox mt={1} display="flex" flexDirection="column" gap={0.75}>
-                {(question.options || []).map((option) => (
-                  <MDBox
-                    key={option}
-                    display="flex"
-                    alignItems="center"
-                    gap={1}
-                    p={1}
-                    border="1px solid #d8dee9"
-                    borderRadius="md"
-                    sx={{ cursor: "pointer", bgcolor: "#ffffff" }}
-                    onClick={() => onAnswerChange(question.id, option, question.question_type)}
-                  >
-                    {question.question_type === "multi_select" ? (
-                      <Checkbox checked={(answers[question.id] || []).includes(option)} />
-                    ) : (
-                      <Radio checked={answers[question.id] === option} />
-                    )}
-                    <MDTypography variant="body2" color="text">
-                      {option}
-                    </MDTypography>
+                {question.question_type === "matching" &&
+                  (question.options || []).map((pair) => (
+                    <Grid container spacing={1} key={pair.left}>
+                      <Grid item xs={12} sm={5}>
+                        <MDTypography variant="body2" fontWeight="bold">
+                          {pair.left}
+                        </MDTypography>
+                      </Grid>
+                      <Grid item xs={12} sm={7}>
+                        <MDInput
+                          select
+                          fullWidth
+                          value={answers[question.id]?.[pair.left] || ""}
+                          onChange={(event) =>
+                            onAnswerChange(
+                              question.id,
+                              {
+                                ...(answers[question.id] || {}),
+                                [pair.left]: event.target.value,
+                              },
+                              "matching"
+                            )
+                          }
+                          SelectProps={{ native: true }}
+                        >
+                          <option value="">Choose match</option>
+                          {(question.options || []).map((choice) => (
+                            <option key={choice.right} value={choice.right}>
+                              {choice.right}
+                            </option>
+                          ))}
+                        </MDInput>
+                      </Grid>
+                    </Grid>
+                  ))}
+                {question.question_type === "ordering" && (
+                  <MDBox display="flex" flexDirection="column" gap={1}>
+                    {(answers[question.id] || question.options || []).map((option, optionIndex) => (
+                      <MDBox
+                        key={`${option}-${optionIndex}`}
+                        display="flex"
+                        alignItems="center"
+                        gap={1}
+                      >
+                        <MDTypography variant="button">{optionIndex + 1}.</MDTypography>
+                        <MDInput
+                          select
+                          fullWidth
+                          value={option}
+                          onChange={(event) => {
+                            const ordered = [...(answers[question.id] || question.options || [])];
+                            const swapIndex = ordered.indexOf(event.target.value);
+                            [ordered[optionIndex], ordered[swapIndex]] = [
+                              ordered[swapIndex],
+                              ordered[optionIndex],
+                            ];
+                            onAnswerChange(question.id, ordered, "ordering");
+                          }}
+                          SelectProps={{ native: true }}
+                        >
+                          {(question.options || []).map((choice) => (
+                            <option key={choice} value={choice}>
+                              {choice}
+                            </option>
+                          ))}
+                        </MDInput>
+                      </MDBox>
+                    ))}
                   </MDBox>
-                ))}
-                {(!question.options || question.options.length === 0) && (
+                )}
+                {!["matching", "ordering"].includes(question.question_type) &&
+                  (question.options || []).map((option) => (
+                    <MDBox
+                      key={option}
+                      display="flex"
+                      alignItems="center"
+                      gap={1}
+                      p={1}
+                      border="1px solid #d8dee9"
+                      borderRadius="md"
+                      sx={{ cursor: "pointer", bgcolor: "#ffffff" }}
+                      onClick={() => onAnswerChange(question.id, option, question.question_type)}
+                    >
+                      {question.question_type === "multi_select" ? (
+                        <Checkbox checked={(answers[question.id] || []).includes(option)} />
+                      ) : (
+                        <Radio checked={answers[question.id] === option} />
+                      )}
+                      <MDTypography variant="body2" color="text">
+                        {option}
+                      </MDTypography>
+                    </MDBox>
+                  ))}
+                {question.question_type === "short_answer" && (
                   <MDInput
                     label="Your answer"
                     fullWidth
@@ -462,6 +558,16 @@ function ActivityBody({
           {asText(code)}
         </MDBox>
       )}
+      <Dialog open={Boolean(previewImage)} onClose={() => setPreviewImage("")} maxWidth="md">
+        <DialogContent>
+          <MDBox
+            component="img"
+            src={previewImage}
+            alt=""
+            sx={{ display: "block", maxWidth: "100%", maxHeight: "75vh", objectFit: "contain" }}
+          />
+        </DialogContent>
+      </Dialog>
     </MDBox>
   );
 }
@@ -599,8 +705,8 @@ function ModuleLearn() {
     [data, activeActivityId]
   );
 
-  const loadModule = async () => {
-    setLoading(true);
+  const loadModule = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError("");
     try {
       const response = await apiClient.get(`/courses/${courseId}/modules/${moduleId}/learn`);
@@ -609,8 +715,52 @@ function ModuleLearn() {
     } catch (err) {
       setError(err.message || "Failed to load module");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
+  };
+
+  const patchActivityProgress = (activityId, progress = {}) => {
+    setData((current) => {
+      if (!current?.module?.activities) return current;
+      const activities = current.module.activities.map((activity) =>
+        activity.id === activityId
+          ? {
+              ...activity,
+              status: progress.status || activity.status,
+              score: progress.score ?? activity.score,
+            }
+          : activity
+      );
+      const completedActivities = activities.filter((activity) => done(activity.status)).length;
+      const totalActivities = activities.length;
+      const moduleWasDone = Boolean(current.module.is_done);
+      const moduleIsDone = totalActivities > 0 && completedActivities === totalActivities;
+      const courseSummary = { ...(current.course_summary || {}) };
+      if (!moduleWasDone && moduleIsDone && "completed_modules" in courseSummary) {
+        courseSummary.completed_modules = Number(courseSummary.completed_modules || 0) + 1;
+        courseSummary.progress_percent = Math.round(
+          (courseSummary.completed_modules /
+            Math.max(Number(courseSummary.total_modules || 1), 1)) *
+            100
+        );
+        courseSummary.is_done =
+          courseSummary.completed_modules >= Number(courseSummary.total_modules || 1);
+      }
+      return {
+        ...current,
+        course_summary: courseSummary,
+        module: {
+          ...current.module,
+          activities,
+          completed_activities: completedActivities,
+          total_activities: totalActivities,
+          progress_percent: totalActivities
+            ? Math.round((completedActivities / totalActivities) * 100)
+            : 0,
+          is_done: moduleIsDone,
+        },
+      };
+    });
   };
 
   useEffect(() => {
@@ -619,7 +769,13 @@ function ModuleLearn() {
   }, [courseId, moduleId]);
 
   useEffect(() => {
-    setAnswers({});
+    setAnswers(
+      Object.fromEntries(
+        (activeActivity?.content?.questions || [])
+          .filter((question) => question.question_type === "ordering")
+          .map((question) => [question.id, shuffled(question.options)])
+      )
+    );
     setQuizResult(null);
     setDiscussion(null);
     setDiscussionReply("");
@@ -652,10 +808,14 @@ function ModuleLearn() {
     if (!activity) return;
     setSaving(true);
     try {
-      await apiClient.post(`/courses/activities/${activity.id}/progress`, { status });
-      await loadModule();
+      patchActivityProgress(activity.id, { status });
+      const progress = await apiClient.post(`/courses/activities/${activity.id}/progress`, {
+        status,
+      });
+      patchActivityProgress(activity.id, progress);
     } catch (err) {
       setError(err.message || "Failed to save progress");
+      await loadModule(true);
     } finally {
       setSaving(false);
     }
@@ -695,7 +855,7 @@ function ModuleLearn() {
         }
       );
       setQuizResult(response);
-      await loadModule();
+      patchActivityProgress(activeActivity.id, { status: "graded", score: response.score });
     } catch (err) {
       setError(err.message || "Failed to submit quiz");
     } finally {
@@ -731,7 +891,7 @@ function ModuleLearn() {
           output: activeActivity.activity_type === "coding" ? codeOutput : null,
         },
       });
-      await loadModule();
+      patchActivityProgress(activeActivity.id, { status: "submitted" });
     } catch (err) {
       setError(err.message || "Failed to submit work");
     } finally {
@@ -777,7 +937,7 @@ function ModuleLearn() {
       setReplyTarget(null);
       const response = await apiClient.get(`/courses/activities/${activeActivity.id}/discussion`);
       setDiscussion(response);
-      await loadModule();
+      patchActivityProgress(activeActivity.id, { status: "submitted" });
     } catch (err) {
       setError(err.message || "Failed to post reply");
     } finally {

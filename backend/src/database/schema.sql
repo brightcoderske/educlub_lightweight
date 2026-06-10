@@ -353,8 +353,9 @@ CREATE TABLE IF NOT EXISTS activity_grades (
 CREATE TABLE IF NOT EXISTS quiz_questions (
   id SERIAL PRIMARY KEY,
   activity_id INTEGER REFERENCES learning_activities(id) ON DELETE CASCADE,
-  question_type VARCHAR(50) NOT NULL CHECK (question_type IN ('multiple_choice', 'true_false', 'short_answer')),
+  question_type VARCHAR(50) NOT NULL CHECK (question_type IN ('multiple_choice', 'multi_select', 'true_false', 'short_answer', 'matching', 'ordering')),
   prompt TEXT NOT NULL,
+  image_url TEXT,
   options JSONB DEFAULT '[]'::jsonb,
   correct_answer JSONB DEFAULT '{}'::jsonb,
   points NUMERIC(8, 2) DEFAULT 1,
@@ -362,6 +363,14 @@ CREATE TABLE IF NOT EXISTS quiz_questions (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE quiz_questions
+  ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE quiz_questions
+  DROP CONSTRAINT IF EXISTS quiz_questions_question_type_check;
+ALTER TABLE quiz_questions
+  ADD CONSTRAINT quiz_questions_question_type_check
+  CHECK (question_type IN ('multiple_choice', 'multi_select', 'true_false', 'short_answer', 'matching', 'ordering'));
 
 CREATE TABLE IF NOT EXISTS quiz_attempts (
   id SERIAL PRIMARY KEY,
@@ -546,6 +555,7 @@ CREATE TABLE IF NOT EXISTS quiz_tests (
   pass_score NUMERIC(8, 2) DEFAULT 50,
   max_attempts INTEGER DEFAULT 1,
   duration_seconds INTEGER DEFAULT 600,
+  total_points NUMERIC(8, 2) DEFAULT 0 CHECK (total_points >= 0),
   is_published BOOLEAN DEFAULT FALSE,
   is_open BOOLEAN DEFAULT FALSE,
   created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -558,8 +568,9 @@ CREATE TABLE IF NOT EXISTS quiz_test_questions (
   quiz_test_id INTEGER REFERENCES quiz_tests(id) ON DELETE CASCADE,
   position INTEGER NOT NULL DEFAULT 1,
   question_type VARCHAR(50) DEFAULT 'single_choice'
-    CHECK (question_type IN ('single_choice', 'multiple_choice', 'short_answer')),
+    CHECK (question_type IN ('single_choice', 'multiple_choice', 'short_answer', 'matching', 'ordering')),
   prompt TEXT NOT NULL,
+  image_url TEXT,
   options JSONB DEFAULT '[]'::jsonb,
   correct_answer JSONB DEFAULT '[]'::jsonb,
   points NUMERIC(8, 2) DEFAULT 1,
@@ -567,6 +578,18 @@ CREATE TABLE IF NOT EXISTS quiz_test_questions (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(quiz_test_id, position)
 );
+
+ALTER TABLE quiz_tests
+  ADD COLUMN IF NOT EXISTS total_points NUMERIC(8, 2) DEFAULT 0;
+
+ALTER TABLE quiz_test_questions
+  ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+ALTER TABLE quiz_test_questions
+  DROP CONSTRAINT IF EXISTS quiz_test_questions_question_type_check;
+ALTER TABLE quiz_test_questions
+  ADD CONSTRAINT quiz_test_questions_question_type_check
+  CHECK (question_type IN ('single_choice', 'multiple_choice', 'short_answer', 'matching', 'ordering'));
 
 CREATE TABLE IF NOT EXISTS quiz_test_attempts (
   id SERIAL PRIMARY KEY,
