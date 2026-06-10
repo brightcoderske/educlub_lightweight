@@ -81,13 +81,13 @@ function computeAvailability(test, now = new Date()) {
     return { effective_is_published: true, effective_is_open: true };
   }
   const weekStart = dateBoundary(test.week_start_date);
-  const weekEnd = dateBoundary(test.week_end_date, true);
-  if (!weekStart || !weekEnd) {
+  const termEnd = dateBoundary(test.term_end_date, true);
+  if (!weekStart || !termEnd) {
     return { effective_is_published: true, effective_is_open: false };
   }
   return {
     effective_is_published: true,
-    effective_is_open: normalizeBoolean(test.is_open) && now >= weekStart && now <= weekEnd,
+    effective_is_open: normalizeBoolean(test.is_open) && now >= weekStart && now <= termEnd,
   };
 }
 

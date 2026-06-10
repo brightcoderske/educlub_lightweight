@@ -102,9 +102,9 @@ function computeAvailability(test, now = new Date()) {
   }
 
   const weekStart = dateBoundary(test.week_start_date);
-  const weekEnd = dateBoundary(test.week_end_date, true);
+  const termEnd = dateBoundary(test.term_end_date, true);
 
-  if (!weekStart || !weekEnd) {
+  if (!weekStart || !termEnd) {
     return {
       effective_is_published: true,
       effective_is_open: false,
@@ -112,7 +112,15 @@ function computeAvailability(test, now = new Date()) {
     };
   }
 
-  if (now < weekStart || now > weekEnd) {
+  if (now < weekStart) {
+    return {
+      effective_is_published: true,
+      effective_is_open: false,
+      availability_mode: "upcoming",
+    };
+  }
+
+  if (now > termEnd) {
     return {
       effective_is_published: true,
       effective_is_open: false,
@@ -122,7 +130,7 @@ function computeAvailability(test, now = new Date()) {
 
   return {
     effective_is_published: true,
-    effective_is_open: storedOpen && now >= weekStart && now <= weekEnd,
+    effective_is_open: storedOpen,
     availability_mode: "scheduled",
   };
 }
