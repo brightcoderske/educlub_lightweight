@@ -25,3 +25,10 @@ export function starterCode(content = {}) {
     content.starter_css ? `<style>\n${content.starter_css}\n</style>` : "",
   ].filter(Boolean).join("\n");
 }
+
+export function webPreview(html = "", css = "", allowJavaScript = false) {
+  const safeHtml = allowJavaScript
+    ? html
+    : html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+  return `${safeHtml}${css ? `<style>${css}</style>` : ""}`;
+}

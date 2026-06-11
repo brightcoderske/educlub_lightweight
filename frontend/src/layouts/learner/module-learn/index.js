@@ -17,7 +17,7 @@ import MDInput from "components/MDInput";
 import MDProgress from "components/MDProgress";
 import MDTypography from "components/MDTypography";
 import { apiClient } from "lib/api";
-import { selectActivityContent, starterCode } from "./activityContent";
+import { selectActivityContent, starterCode, webPreview } from "./activityContent";
 
 function done(status) {
   return ["completed", "graded"].includes(status);
@@ -591,6 +591,7 @@ function ActivityBody({
               component="iframe"
               title="Code preview"
               srcDoc={codePreviewHtml}
+              sandbox={(content.language || "").toLowerCase() === "html_css_js" ? "allow-scripts" : ""}
               mt={1.5}
               width="100%"
               height="320"
@@ -886,7 +887,7 @@ function ModuleLearn() {
     if (!activeActivity) return;
     const language = (activeActivity.content?.language || "").toLowerCase();
     if (!["html_css", "html_css_js"].includes(language)) return;
-    const preview = `${htmlDraft}${cssDraft ? `<style>${cssDraft}</style>` : ""}`;
+    const preview = webPreview(htmlDraft, cssDraft, language === "html_css_js");
     setCodeDraft(preview);
     setCodePreviewHtml(preview);
     setCodeOutput("Live preview updates as you type.");

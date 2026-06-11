@@ -1,4 +1,8 @@
-import { selectActivityContent, starterCode } from "../layouts/learner/module-learn/activityContent";
+import {
+  selectActivityContent,
+  starterCode,
+  webPreview,
+} from "../layouts/learner/module-learn/activityContent";
 
 test("keeps teacher notes out and returns learner support", () => {
   const selected = selectActivityContent({
@@ -16,4 +20,10 @@ test("combines separate starter HTML and CSS", () => {
     starter_html: "<h1>Hello</h1>",
     starter_css: "h1 { color: blue; }",
   })).toContain("<style>");
+});
+
+test("HTML CSS preview removes scripts unless JavaScript is enabled", () => {
+  const html = "<h1>Hello</h1><script>window.alert('no')</script>";
+  expect(webPreview(html, "h1 { color: blue; }", false)).not.toContain("<script>");
+  expect(webPreview(html, "", true)).toContain("<script>");
 });

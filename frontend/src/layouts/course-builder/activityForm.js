@@ -28,7 +28,7 @@ export function activityToStructuredForm(activity = {}) {
     video_title: media.video_title || "",
     transcript: media.transcript || "",
     friendly_hints_text: (content.friendly_hints || []).join("\n"),
-    level_up: content.level_up || "",
+    level_up: content.level_up || content.project_brief || "",
     teacher_notes: content.teacher_notes || "",
     badge_name: content.module_badge?.name || "",
     badge_image_url: content.module_badge?.image_url || "",
