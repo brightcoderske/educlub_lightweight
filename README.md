@@ -14,6 +14,21 @@ This repository is intentionally scaffolded without dummy data. Real users, scho
 - Role-aware notifications for learner registration and course allocation.
 - Versioned privacy notice and user agreement consent capture.
 
+### Web Development 1 master template
+
+eduClub includes the editable `WEB-DEV-1` master course template. Backend startup
+creates or updates its eight modules and eighty activities in one transaction.
+The import preserves template module and activity identities, so schools can
+adopt the course and safely receive later template updates.
+
+System administrators edit the master in Course Templates. School administrators
+see it in their course library and adopt an independently editable school copy.
+The import can also be run directly from `backend/`:
+
+```powershell
+npm run import:web-development-1
+```
+
 ## Local Setup
 
 1. Create a backend `.env` from `.env.example`.
