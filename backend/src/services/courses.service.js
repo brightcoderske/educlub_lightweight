@@ -765,8 +765,14 @@ async function submitQuiz(activityId, user = {}, data = {}) {
 
   const passScore = Number(activity.pass_score ?? 0);
   const passed = score >= passScore;
+  const previousProgress = await query(
+    `SELECT status FROM activity_progress
+     WHERE learner_id = $1::integer AND activity_id = $2::integer`,
+    [learner.id, activityId],
+  );
+  const alreadyMastered = activityDone(previousProgress.rows[0]?.status);
   await upsertActivityProgress(activityId, user, {
-    status: passed ? "graded" : "in_progress",
+    status: passed || alreadyMastered ? "graded" : "in_progress",
     score,
   });
 

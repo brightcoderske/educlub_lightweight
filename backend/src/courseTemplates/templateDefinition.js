@@ -70,11 +70,20 @@ function validateTemplateDefinition(input) {
         if (!questions.every((question) => question.hint && question.explanation)) {
           throw new Error(`${activity.title} questions need hints and explanations.`);
         }
+        if (!questions.every((question) =>
+          question.id && question.prompt && question.question_type &&
+          Array.isArray(question.options) && question.correct_answer !== undefined &&
+          Number.isFinite(Number(question.points))
+        )) throw new Error(`${activity.title} questions are incomplete.`);
         if (Number(activity.pass_score) !== 80) throw new Error(`${activity.title} pass score must be 80.`);
+      }
+      if (activity.content?.purpose === "reading") {
+        if (!activity.content.body?.trim()) throw new Error(`${activity.title} needs reading content.`);
+        if (!activity.content.media?.image_alt?.trim()) throw new Error(`${activity.title} needs image alternative text.`);
       }
       if (activity.content?.purpose === "video") {
         const media = activity.content.media || {};
-        if (!media.video_title || !media.transcript) throw new Error(`${activity.title} needs a video title and transcript.`);
+        if (!media.video_title || !media.transcript || !media.image_alt) throw new Error(`${activity.title} needs complete media fallbacks.`);
       }
     }
   }

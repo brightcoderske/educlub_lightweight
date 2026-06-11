@@ -10,5 +10,5 @@ test("quiz submission preserves hints and only completes after pass score", () =
   );
   assert.match(source, /hint: question\.hint/);
   assert.match(source, /explanation: question\.explanation/);
-  assert.match(source, /status: passed \? "graded" : "in_progress"/);
+  assert.match(source, /passed \|\| alreadyMastered \? "graded" : "in_progress"/);
 });

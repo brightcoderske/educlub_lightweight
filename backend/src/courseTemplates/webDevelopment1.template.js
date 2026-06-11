@@ -135,8 +135,9 @@ function questionsFor(mission, week) {
 }
 
 function activitiesFor(mission, week) {
-  const readingBody = `${mission.summary}\n\nLook at websites you already know. Notice how the content is arranged and how each part helps a visitor. In this mission, you will learn the real web-development words, try a small example, and use the idea in your own website.\n\nRemember: work one small step at a time, preview your changes, and never publish private information.`;
-  const transcript = `${mission.video}. ${mission.summary} The demonstration shows the idea one step at a time. Pause after each step, find the matching code in the editor, and check the live preview. If the video is unavailable, this transcript and the guided practice contain everything needed for the mission.`;
+  const vocabularyText = mission.concepts.map(([term, meaning]) => `${term} means ${meaning.toLowerCase()}.`).join(" ");
+  const readingBody = `${mission.summary}\n\n${vocabularyText}\n\nYour mission is to connect this idea to your own website. ${mission.practice} Then ${mission.build.toLowerCase()} Work one small step at a time, preview every change, and keep private information out of your page.`;
+  const transcript = `${mission.video}. First, review this idea: ${mission.summary} Next, open the eduClub editor. ${mission.practice} Preview the result and check each change. Then complete the mission build: ${mission.build} Finally, use the quiz and reflection to explain what you learned.`;
   const media = { image_url: "", image_alt: mission.imageAlt, video_url: "", video_title: mission.video, transcript };
   const badge = { name: mission.badge, image_url: "" };
   return [
