@@ -136,6 +136,8 @@ function ActivityBody({
   submissionText,
   submissionFile,
   codeDraft,
+  htmlDraft,
+  cssDraft,
   codeOutput,
   codePreviewHtml,
   quizResult,
@@ -143,6 +145,8 @@ function ActivityBody({
   saving,
   onAnswerChange,
   onCodeChange,
+  onHtmlChange,
+  onCssChange,
   onRunCode,
   onSetReplyTarget,
   onSubmissionFileChange,
@@ -405,7 +409,11 @@ function ActivityBody({
                 <MDBox mt={1} p={1.25} borderRadius="md" sx={{ bgcolor: learnerContent.questionFeedback[question.id].correct ? "#ecfdf5" : "#fff7ed" }}>
                   <MDTypography variant="body2" color="text">
                     {learnerContent.questionFeedback[question.id].correct ? "Correct. " : "Try again. "}
-                    {learnerContent.questionFeedback[question.id].explanation || learnerContent.questionFeedback[question.id].hint}
+                    {learnerContent.questionFeedback[question.id].explanation}
+                    {!learnerContent.questionFeedback[question.id].correct &&
+                    learnerContent.questionFeedback[question.id].hint
+                      ? ` Hint: ${learnerContent.questionFeedback[question.id].hint}`
+                      : ""}
                   </MDTypography>
                 </MDBox>
               )}
@@ -525,6 +533,16 @@ function ActivityBody({
           <MDTypography variant="button" fontWeight="bold">
             Code Workspace
           </MDTypography>
+          {["html_css", "html_css_js"].includes((content.language || "").toLowerCase()) ? (
+            <Grid container spacing={1.5} mt={0.25}>
+              <Grid item xs={12} md={6}>
+                <MDInput label="HTML" multiline rows={12} fullWidth value={htmlDraft} onChange={(event) => onHtmlChange(event.target.value)} sx={{ "& textarea": { fontFamily: "monospace", bgcolor: "#0f172a", color: "#e2e8f0", borderRadius: "8px", p: 1.5 } }} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <MDInput label="CSS" multiline rows={12} fullWidth value={cssDraft} onChange={(event) => onCssChange(event.target.value)} sx={{ "& textarea": { fontFamily: "monospace", bgcolor: "#172554", color: "#e2e8f0", borderRadius: "8px", p: 1.5 } }} />
+              </Grid>
+            </Grid>
+          ) : (
           <MDInput
             multiline
             rows={10}
@@ -542,6 +560,7 @@ function ActivityBody({
               },
             }}
           />
+          )}
           <MDBox mt={1.5} display="flex" gap={1} flexWrap="wrap">
             <MDButton variant="gradient" color="info" disabled={saving} onClick={onRunCode}>
               Run Code
@@ -629,9 +648,13 @@ ActivityBody.propTypes = {
   discussion: PropTypes.object,
   discussionReply: PropTypes.string.isRequired,
   codeDraft: PropTypes.string.isRequired,
+  htmlDraft: PropTypes.string.isRequired,
+  cssDraft: PropTypes.string.isRequired,
   codeOutput: PropTypes.string.isRequired,
   codePreviewHtml: PropTypes.string.isRequired,
   onCodeChange: PropTypes.func.isRequired,
+  onHtmlChange: PropTypes.func.isRequired,
+  onCssChange: PropTypes.func.isRequired,
   onAnswerChange: PropTypes.func.isRequired,
   onDiscussionReplyChange: PropTypes.func.isRequired,
   onRunCode: PropTypes.func.isRequired,
@@ -658,6 +681,9 @@ ActivityBody.defaultProps = {
 function CompletionCelebration({ data, onNext, onClose }) {
   const moduleDone = data?.module?.is_done;
   const courseDone = data?.course_summary?.is_done;
+  const badgeName = data?.module?.activities
+    ?.map((activity) => activity.content?.module_badge?.name)
+    .find(Boolean);
 
   if (!moduleDone) return null;
 
@@ -693,6 +719,7 @@ function CompletionCelebration({ data, onNext, onClose }) {
           Performance: {data.module.score_percent}% marks, {data.module.completed_activities} of{" "}
           {data.module.total_activities} activities done.
         </MDTypography>
+        {badgeName && <Chip label={`Badge earned: ${badgeName}`} color="warning" sx={{ mt: 1.5 }} />}
         <MDBox display="flex" gap={1.5} flexWrap="wrap" mt={2}>
           {data.next_module?.is_open && (
             <MDButton variant="contained" color="white" onClick={onNext}>
@@ -714,6 +741,7 @@ CompletionCelebration.propTypes = {
       is_done: PropTypes.bool,
     }),
     module: PropTypes.shape({
+      activities: PropTypes.arrayOf(PropTypes.shape({ content: PropTypes.object })),
       completed_activities: PropTypes.number,
       is_done: PropTypes.bool,
       score_percent: PropTypes.number,
@@ -739,6 +767,8 @@ function ModuleLearn() {
   const [submissionText, setSubmissionText] = useState("");
   const [submissionFile, setSubmissionFile] = useState(null);
   const [codeDraft, setCodeDraft] = useState("");
+  const [htmlDraft, setHtmlDraft] = useState("");
+  const [cssDraft, setCssDraft] = useState("");
   const [codeOutput, setCodeOutput] = useState("");
   const [codePreviewHtml, setCodePreviewHtml] = useState("");
   const [quizResult, setQuizResult] = useState(null);
@@ -829,6 +859,8 @@ function ModuleLearn() {
     setSubmissionText("");
     setSubmissionFile(null);
     setCodeDraft(starterCode(activeActivity?.content || {}));
+    setHtmlDraft(activeActivity?.content?.starter_html || "");
+    setCssDraft(activeActivity?.content?.starter_css || "");
     setCodeOutput("");
     setCodePreviewHtml("");
 
@@ -849,6 +881,16 @@ function ModuleLearn() {
       if (interval) clearInterval(interval);
     };
   }, [activeActivity?.id]);
+
+  useEffect(() => {
+    if (!activeActivity) return;
+    const language = (activeActivity.content?.language || "").toLowerCase();
+    if (!["html_css", "html_css_js"].includes(language)) return;
+    const preview = `${htmlDraft}${cssDraft ? `<style>${cssDraft}</style>` : ""}`;
+    setCodeDraft(preview);
+    setCodePreviewHtml(preview);
+    setCodeOutput("Live preview updates as you type.");
+  }, [activeActivity?.id, htmlDraft, cssDraft]);
 
   const updateProgress = async (activity, status) => {
     if (!activity) return;
@@ -1117,11 +1159,15 @@ function ModuleLearn() {
                       submissionText={submissionText}
                       submissionFile={submissionFile}
                       codeDraft={codeDraft}
+                      htmlDraft={htmlDraft}
+                      cssDraft={cssDraft}
                       codeOutput={codeOutput}
                       codePreviewHtml={codePreviewHtml}
                       replyTarget={replyTarget}
                       onAnswerChange={updateAnswer}
                       onCodeChange={setCodeDraft}
+                      onHtmlChange={setHtmlDraft}
+                      onCssChange={setCssDraft}
                       onDiscussionReplyChange={setDiscussionReply}
                       onRunCode={runCode}
                       onSetReplyTarget={setReplyTarget}

@@ -873,7 +873,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
             <MDInput label="Image alternative text" fullWidth value={form.image_alt} onChange={(event) => setForm({ ...form, image_alt: event.target.value })} />
           </Grid>
           <Grid item xs={12} md={6}>
-            <MDInput label="Video URL" fullWidth value={form.video_url} onChange={(event) => setForm({ ...form, video_url: event.target.value })} />
+            <MDInput label="Teacher-approved external video URL" fullWidth value={form.video_url} onChange={(event) => setForm({ ...form, video_url: event.target.value })} />
           </Grid>
           <Grid item xs={12} md={6}>
             <MDInput label="Video title" fullWidth value={form.video_title} onChange={(event) => setForm({ ...form, video_title: event.target.value })} />
@@ -886,6 +886,9 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
           </Grid>
           <Grid item xs={12} md={6}>
             <MDInput label="Teacher notes (hidden from learners)" multiline rows={3} fullWidth value={form.teacher_notes} onChange={(event) => setForm({ ...form, teacher_notes: event.target.value })} />
+          </Grid>
+          <Grid item xs={12}>
+            <MDInput label="Optional Level Up challenge" multiline rows={3} fullWidth value={form.level_up} onChange={(event) => setForm({ ...form, level_up: event.target.value })} />
           </Grid>
           <Grid item xs={12} md={4}>
             <MDInput

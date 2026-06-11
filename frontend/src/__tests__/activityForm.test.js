@@ -21,6 +21,7 @@ test("loads editable course-template fields", () => {
 
 test("saves separate HTML CSS media and friendly hints", () => {
   const content = structuredFormContent({
+    original_content: { vocabulary: [{ term: "HTML", meaning: "Structure" }], unlimited_retries: true },
     starter_html: "<h1>Hello</h1>", starter_css: "h1 { color: blue; }",
     friendly_hints_text: "Check the heading.\nPreview the page.",
     image_alt: "A page heading.", transcript: "Add an h1 element.",
@@ -29,4 +30,6 @@ test("saves separate HTML CSS media and friendly hints", () => {
   expect(content.starter_css).toBe("h1 { color: blue; }");
   expect(content.friendly_hints).toEqual(["Check the heading.", "Preview the page."]);
   expect(content.media.image_alt).toBe("A page heading.");
+  expect(content.vocabulary).toEqual([{ term: "HTML", meaning: "Structure" }]);
+  expect(content.unlimited_retries).toBe(true);
 });

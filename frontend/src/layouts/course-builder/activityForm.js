@@ -2,6 +2,7 @@ export function activityToStructuredForm(activity = {}) {
   const content = activity.content || {};
   const media = content.media || {};
   return {
+    original_content: content,
     title: activity.title || "",
     activity_type: activity.activity_type || "lesson",
     points: activity.points || 0,
@@ -30,6 +31,7 @@ export function activityToStructuredForm(activity = {}) {
     level_up: content.level_up || "",
     teacher_notes: content.teacher_notes || "",
     badge_name: content.module_badge?.name || "",
+    badge_image_url: content.module_badge?.image_url || "",
     milestone_key: content.milestone_key || "",
     questions: Array.isArray(content.questions) ? content.questions : [],
   };
@@ -37,6 +39,7 @@ export function activityToStructuredForm(activity = {}) {
 
 export function structuredFormContent(form, questions) {
   return {
+    ...(form.original_content || {}),
     purpose: form.purpose || "",
     description: form.description || "",
     rich_html: form.rich_html || "",
@@ -58,7 +61,7 @@ export function structuredFormContent(form, questions) {
     friendly_hints: String(form.friendly_hints_text || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
     level_up: form.level_up || "",
     teacher_notes: form.teacher_notes || "",
-    module_badge: { name: form.badge_name || "", image_url: "" },
+    module_badge: { name: form.badge_name || "", image_url: form.badge_image_url || "" },
     milestone_key: form.milestone_key || "",
     questions,
   };
