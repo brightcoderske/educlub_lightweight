@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { mergeProgress } = require("../src/services/progressMastery");
+const { masteryUpdateSql, mergeProgress } = require("../src/services/progressMastery");
 
 test("a failed retry cannot remove previously earned mastery", () => {
   assert.deepEqual(
@@ -37,4 +37,13 @@ test("ordinary progress updates may replace status and score", () => {
     ),
     { status: "in_progress", score: 20 },
   );
+});
+
+test("production SQL uses the same mastery-preserving contract", () => {
+  const sql = masteryUpdateSql("$6");
+  assert.match(sql.status, /activity_progress\.status/);
+  assert.match(sql.status, /ELSE EXCLUDED\.status/);
+  assert.match(sql.score, /GREATEST/);
+  assert.match(sql.score, /activity_progress\.score/);
+  assert.match(sql.score, /EXCLUDED\.score/);
 });

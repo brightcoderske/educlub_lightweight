@@ -15,4 +15,23 @@ function mergeProgress(existing = {}, incoming = {}, preserveMastery = false) {
   };
 }
 
-module.exports = { mergeProgress };
+function masteryUpdateSql(preserveParameter = "$6") {
+  return {
+    status: `CASE
+         WHEN ${preserveParameter}::boolean
+          AND activity_progress.status IN ('completed'::varchar, 'graded'::varchar)
+         THEN activity_progress.status
+         ELSE EXCLUDED.status
+       END`,
+    score: `CASE
+         WHEN ${preserveParameter}::boolean
+         THEN GREATEST(
+           COALESCE(activity_progress.score, 0),
+           COALESCE(EXCLUDED.score, 0)
+         )
+         ELSE COALESCE(EXCLUDED.score, activity_progress.score)
+       END`,
+  };
+}
+
+module.exports = { masteryUpdateSql, mergeProgress };

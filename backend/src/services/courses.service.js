@@ -1,4 +1,5 @@
 const { query } = require("../config");
+const { masteryUpdateSql } = require("./progressMastery");
 const courseTemplatesService = require("./courseTemplates.service");
 
 function normalizeCourseCategory(category) {
@@ -853,6 +854,7 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
       : status === "completed"
         ? 100
         : null;
+  const masterySql = masteryUpdateSql("$6");
 
   const result = await query(
     `INSERT INTO activity_progress (
@@ -869,20 +871,8 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
      )
      ON CONFLICT (learner_id, activity_id)
      DO UPDATE SET
-       status = CASE
-         WHEN $6::boolean
-          AND activity_progress.status IN ('completed'::varchar, 'graded'::varchar)
-         THEN activity_progress.status
-         ELSE EXCLUDED.status
-       END,
-       score = CASE
-         WHEN $6::boolean
-         THEN GREATEST(
-           COALESCE(activity_progress.score, 0),
-           COALESCE(EXCLUDED.score, 0)
-         )
-         ELSE COALESCE(EXCLUDED.score, activity_progress.score)
-       END,
+       status = ${masterySql.status},
+       score = ${masterySql.score},
        opened_at = COALESCE(activity_progress.opened_at, NOW()),
        completed_at = CASE
          WHEN EXCLUDED.status IN ('completed'::varchar, 'graded'::varchar)
