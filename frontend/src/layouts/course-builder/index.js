@@ -24,6 +24,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { apiClient } from "lib/api";
+import { activityToStructuredForm, structuredFormContent } from "./activityForm";
 
 const activityTypes = [
   "lesson",
@@ -162,6 +163,8 @@ function normalizeQuestionForm(question = {}, index = 0) {
     image_url: question.image_url || "",
     points: Number(question.points ?? 1),
     position: Number(question.position || index + 1),
+    hint: question.hint || "",
+    explanation: question.explanation || "",
   };
 }
 
@@ -187,28 +190,8 @@ function readFileAsDataUrl(file) {
 }
 
 function activityToManagerForm(activity) {
-  const content = activity?.content || {};
-  return {
-    title: activity?.title || "",
-    activity_type: activity?.activity_type || "lesson",
-    points: activity?.points || 0,
-    position: activity?.position || 1,
-    is_required: activity?.is_required !== false,
-    completion_rule: activity?.completion_rule || "manual",
-    pass_score: activity?.pass_score || "",
-    is_published: activity?.is_published !== false,
-    description: content.description || content.body || "",
-    rich_html: content.rich_html || "",
-    discussion_prompt: content.discussion_prompt || content.prompt || "",
-    starter_code: content.starter_code || content.code || "",
-    language: content.language || "html_css_js",
-    submission_instructions: content.submission_instructions || "",
-    reflection_prompt: content.reflection_prompt || "",
-    project_brief: content.project_brief || "",
-    questions: Array.isArray(content.questions)
-      ? content.questions.map((question, index) => normalizeQuestionForm(question, index))
-      : [],
-  };
+  const form = activityToStructuredForm(activity || {});
+  return { ...form, questions: form.questions.map((question, index) => normalizeQuestionForm(question, index)) };
 }
 
 function RichContentEditor({ value, onChange, onImageUpload }) {
@@ -768,16 +751,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
       );
       return;
     }
-    const content = {
-      description: form.description,
-      rich_html: form.rich_html,
-      discussion_prompt: form.discussion_prompt,
-      starter_code: form.starter_code,
-      language: form.language,
-      submission_instructions: form.submission_instructions,
-      reflection_prompt: form.reflection_prompt,
-      project_brief: form.project_brief,
-      questions: form.questions.map((question, index) => ({
+    const normalizedQuestions = form.questions.map((question, index) => ({
         ...question,
         options: Array.isArray(question.options)
           ? question.options
@@ -787,8 +761,8 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
               .filter(Boolean),
         points: Number(question.points ?? 1),
         position: index + 1,
-      })),
-    };
+      }));
+    const content = structuredFormContent(form, normalizedQuestions);
 
     onSave({
       title: form.title,
@@ -882,6 +856,36 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
               <option value="graded">Graded</option>
               <option value="score_at_least">Score at least</option>
             </MDInput>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <MDInput label="Activity purpose" fullWidth value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <MDInput label="Badge name" fullWidth value={form.badge_name} onChange={(event) => setForm({ ...form, badge_name: event.target.value })} />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <MDInput label="Milestone key" fullWidth value={form.milestone_key} onChange={(event) => setForm({ ...form, milestone_key: event.target.value })} />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <MDInput label="Image URL" fullWidth value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <MDInput label="Image alternative text" fullWidth value={form.image_alt} onChange={(event) => setForm({ ...form, image_alt: event.target.value })} />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <MDInput label="Video URL" fullWidth value={form.video_url} onChange={(event) => setForm({ ...form, video_url: event.target.value })} />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <MDInput label="Video title" fullWidth value={form.video_title} onChange={(event) => setForm({ ...form, video_title: event.target.value })} />
+          </Grid>
+          <Grid item xs={12}>
+            <MDInput label="Video transcript or text alternative" multiline rows={3} fullWidth value={form.transcript} onChange={(event) => setForm({ ...form, transcript: event.target.value })} />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <MDInput label="Friendly hints (one per line)" multiline rows={3} fullWidth value={form.friendly_hints_text} onChange={(event) => setForm({ ...form, friendly_hints_text: event.target.value })} />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <MDInput label="Teacher notes (hidden from learners)" multiline rows={3} fullWidth value={form.teacher_notes} onChange={(event) => setForm({ ...form, teacher_notes: event.target.value })} />
           </Grid>
           <Grid item xs={12} md={4}>
             <MDInput
@@ -1170,6 +1174,22 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                           disabled
                         />
                       </Grid>
+                      <Grid item xs={12} md={6}>
+                        <MDInput
+                          label="Friendly hint"
+                          fullWidth
+                          value={question.hint}
+                          onChange={(event) => updateQuestion(index, { hint: event.target.value })}
+                        />
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <MDInput
+                          label="Answer explanation"
+                          fullWidth
+                          value={question.explanation}
+                          onChange={(event) => updateQuestion(index, { explanation: event.target.value })}
+                        />
+                      </Grid>
                     </Grid>
                   </MDBox>
                 ))}
@@ -1270,6 +1290,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                   onChange={(event) => setForm({ ...form, language: event.target.value })}
                   SelectProps={{ native: true }}
                 >
+                  <option value="html_css">HTML/CSS</option>
                   <option value="html_css_js">HTML/CSS/JavaScript</option>
                   <option value="javascript">JavaScript</option>
                   <option value="python">Python</option>
@@ -1287,6 +1308,12 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                   onChange={(event) => setForm({ ...form, starter_code: event.target.value })}
                   sx={{ "& textarea": { fontFamily: "monospace" } }}
                 />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <MDInput label="Starter HTML" multiline rows={7} fullWidth value={form.starter_html} onChange={(event) => setForm({ ...form, starter_html: event.target.value })} sx={{ "& textarea": { fontFamily: "monospace" } }} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <MDInput label="Starter CSS" multiline rows={7} fullWidth value={form.starter_css} onChange={(event) => setForm({ ...form, starter_css: event.target.value })} sx={{ "& textarea": { fontFamily: "monospace" } }} />
               </Grid>
             </>
           )}

@@ -1,0 +1,65 @@
+export function activityToStructuredForm(activity = {}) {
+  const content = activity.content || {};
+  const media = content.media || {};
+  return {
+    title: activity.title || "",
+    activity_type: activity.activity_type || "lesson",
+    points: activity.points || 0,
+    position: activity.position || 1,
+    is_required: activity.is_required !== false,
+    completion_rule: activity.completion_rule || "manual",
+    pass_score: activity.pass_score || "",
+    is_published: activity.is_published !== false,
+    purpose: content.purpose || "",
+    description: content.description || content.body || "",
+    rich_html: content.rich_html || "",
+    discussion_prompt: content.discussion_prompt || content.prompt || "",
+    starter_code: content.starter_code || content.code || "",
+    starter_html: content.starter_html || "",
+    starter_css: content.starter_css || "",
+    language: content.language || "html_css",
+    submission_instructions: content.submission_instructions || "",
+    reflection_prompt: content.reflection_prompt || "",
+    project_brief: content.project_brief || "",
+    image_url: media.image_url || "",
+    image_alt: media.image_alt || "",
+    video_url: media.video_url || "",
+    video_title: media.video_title || "",
+    transcript: media.transcript || "",
+    friendly_hints_text: (content.friendly_hints || []).join("\n"),
+    level_up: content.level_up || "",
+    teacher_notes: content.teacher_notes || "",
+    badge_name: content.module_badge?.name || "",
+    milestone_key: content.milestone_key || "",
+    questions: Array.isArray(content.questions) ? content.questions : [],
+  };
+}
+
+export function structuredFormContent(form, questions) {
+  return {
+    purpose: form.purpose || "",
+    description: form.description || "",
+    rich_html: form.rich_html || "",
+    discussion_prompt: form.discussion_prompt || "",
+    starter_code: form.starter_code || "",
+    starter_html: form.starter_html || "",
+    starter_css: form.starter_css || "",
+    language: form.language || "html_css",
+    submission_instructions: form.submission_instructions || "",
+    reflection_prompt: form.reflection_prompt || "",
+    project_brief: form.project_brief || "",
+    media: {
+      image_url: form.image_url || "",
+      image_alt: form.image_alt || "",
+      video_url: form.video_url || "",
+      video_title: form.video_title || "",
+      transcript: form.transcript || "",
+    },
+    friendly_hints: String(form.friendly_hints_text || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+    level_up: form.level_up || "",
+    teacher_notes: form.teacher_notes || "",
+    module_badge: { name: form.badge_name || "", image_url: "" },
+    milestone_key: form.milestone_key || "",
+    questions,
+  };
+}

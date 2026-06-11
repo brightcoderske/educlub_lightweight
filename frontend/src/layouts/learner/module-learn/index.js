@@ -17,6 +17,7 @@ import MDInput from "components/MDInput";
 import MDProgress from "components/MDProgress";
 import MDTypography from "components/MDTypography";
 import { apiClient } from "lib/api";
+import { selectActivityContent, starterCode } from "./activityContent";
 
 function done(status) {
   return ["completed", "graded"].includes(status);
@@ -153,6 +154,7 @@ function ActivityBody({
 }) {
   const [previewImage, setPreviewImage] = useState("");
   const content = activity?.content || {};
+  const learnerContent = selectActivityContent(content, quizResult || {});
   const description = content.description || "";
   const body = content.body || content.text || content.instructions || "";
   const code = content.starter_code || content.code || content.template;
@@ -173,6 +175,9 @@ function ActivityBody({
       <MDTypography variant="caption" color="text" textTransform="uppercase">
         {activity.activity_type} | {activity.points || 0} marks
       </MDTypography>
+      {learnerContent.badgeName && (
+        <Chip label={learnerContent.badgeName} color="info" size="small" sx={{ ml: 1 }} />
+      )}
 
       {description && (
         <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
@@ -218,6 +223,33 @@ function ActivityBody({
               This activity is ready for the course builder content.
             </MDTypography>
           ) : null}
+        </MDBox>
+      )}
+
+      {(learnerContent.media.image_url || learnerContent.media.video_url || learnerContent.media.transcript) && (
+        <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
+          {learnerContent.media.image_url && (
+            <MDBox component="img" src={learnerContent.media.image_url} alt={learnerContent.media.image_alt || ""} sx={{ display: "block", maxWidth: "100%", maxHeight: 320, objectFit: "contain", borderRadius: "8px" }} />
+          )}
+          {learnerContent.media.video_url && (
+            <MDButton component="a" href={learnerContent.media.video_url} target="_blank" rel="noopener noreferrer" variant="outlined" color="info" sx={{ mt: 1 }}>
+              Watch {learnerContent.media.video_title || "video"}
+            </MDButton>
+          )}
+          {learnerContent.media.transcript && (
+            <MDTypography variant="body2" color="text" mt={1} sx={{ whiteSpace: "pre-wrap" }}>
+              {learnerContent.media.transcript}
+            </MDTypography>
+          )}
+        </MDBox>
+      )}
+
+      {learnerContent.hints.length > 0 && (
+        <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#fff7ed", border: "1px solid #fed7aa" }}>
+          <MDTypography variant="button" fontWeight="bold">Need a hint?</MDTypography>
+          {learnerContent.hints.map((hint) => (
+            <MDTypography key={hint} variant="body2" color="text">• {hint}</MDTypography>
+          ))}
         </MDBox>
       )}
 
@@ -369,6 +401,14 @@ function ActivityBody({
                   />
                 )}
               </MDBox>
+              {quizResult && learnerContent.questionFeedback[question.id] && (
+                <MDBox mt={1} p={1.25} borderRadius="md" sx={{ bgcolor: learnerContent.questionFeedback[question.id].correct ? "#ecfdf5" : "#fff7ed" }}>
+                  <MDTypography variant="body2" color="text">
+                    {learnerContent.questionFeedback[question.id].correct ? "Correct. " : "Try again. "}
+                    {learnerContent.questionFeedback[question.id].explanation || learnerContent.questionFeedback[question.id].hint}
+                  </MDTypography>
+                </MDBox>
+              )}
             </MDBox>
           ))}
           <MDBox mt={2}>
@@ -556,6 +596,12 @@ function ActivityBody({
           }}
         >
           {asText(code)}
+        </MDBox>
+      )}
+      {content.purpose === "level_up" && learnerContent.levelUp && (
+        <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#faf5ff", border: "1px solid #ddd6fe" }}>
+          <MDTypography variant="button" fontWeight="bold">Optional Level Up</MDTypography>
+          <MDTypography variant="body2" color="text">{learnerContent.levelUp}</MDTypography>
         </MDBox>
       )}
       <Dialog open={Boolean(previewImage)} onClose={() => setPreviewImage("")} maxWidth="md">
@@ -782,7 +828,7 @@ function ModuleLearn() {
     setReplyTarget(null);
     setSubmissionText("");
     setSubmissionFile(null);
-    setCodeDraft(activeActivity?.content?.starter_code || activeActivity?.content?.code || "");
+    setCodeDraft(starterCode(activeActivity?.content || {}));
     setCodeOutput("");
     setCodePreviewHtml("");
 
@@ -903,7 +949,7 @@ function ModuleLearn() {
     if (!activeActivity) return;
     const language = activeActivity.content?.language || "javascript";
     setCodePreviewHtml("");
-    if (["html_css_js", "html", "web"].includes(language.toLowerCase())) {
+    if (["html_css", "html_css_js", "html", "web"].includes(language.toLowerCase())) {
       setCodePreviewHtml(codeDraft);
       setCodeOutput("Rendered browser preview below.");
       return;
