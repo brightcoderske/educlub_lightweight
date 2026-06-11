@@ -945,7 +945,10 @@ function ModuleLearn() {
         }
       );
       setQuizResult(response);
-      patchActivityProgress(activeActivity.id, { status: "graded", score: response.score });
+      patchActivityProgress(activeActivity.id, {
+        status: response.passed ? "graded" : "in_progress",
+        score: response.score,
+      });
     } catch (err) {
       setError(err.message || "Failed to submit quiz");
     } finally {
@@ -1192,10 +1195,18 @@ function ModuleLearn() {
                       <MDButton
                         variant="gradient"
                         color="success"
-                        disabled={saving || done(activeActivity.status)}
+                        disabled={
+                          saving ||
+                          done(activeActivity.status) ||
+                          activeActivity.activity_type === "quiz"
+                        }
                         onClick={() => updateProgress(activeActivity, "completed")}
                       >
-                        {done(activeActivity.status) ? "Completed" : "Mark Complete"}
+                        {activeActivity.activity_type === "quiz"
+                          ? "Pass Quiz to Complete"
+                          : done(activeActivity.status)
+                          ? "Completed"
+                          : "Mark Complete"}
                       </MDButton>
                     </MDBox>
                   </>

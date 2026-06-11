@@ -153,7 +153,11 @@ const PORT = env.port;
 if (env.nodeEnv !== "test") {
   importBuiltInTemplates()
     .then((result) => {
-      console.log(`Built-in templates ready: ${result.modules} modules, ${result.activities} activities.`);
+      console.log(
+        result.skipped
+          ? `Built-in template already exists: ${result.template_id}.`
+          : `Built-in templates ready: ${result.modules} modules, ${result.activities} activities.`,
+      );
       app.listen(PORT, () => {
         console.log(`eduClub Backend Server running on port ${PORT}`);
         console.log(`Environment: ${env.nodeEnv}`);

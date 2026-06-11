@@ -833,7 +833,7 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
     throw new Error("Learner profile is not linked to this account.");
 
   const access = await query(
-    `SELECT la.id, la.points
+    `SELECT la.id, la.points, la.activity_type, la.completion_rule, la.pass_score
      FROM learning_activities la
      JOIN course_modules cm ON cm.id = la.module_id
      JOIN course_allocations ca ON ca.course_id = cm.course_id
@@ -848,6 +848,13 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
     throw new Error("Activity is not available to this learner.");
 
   const status = normalizeStatus(data.status);
+  if (
+    access.rows[0].activity_type === "quiz" &&
+    ["completed", "graded"].includes(status) &&
+    data.preserve_mastery !== true
+  ) {
+    throw new Error("Quiz completion requires a passing quiz attempt.");
+  }
   const score =
     data.score !== undefined && data.score !== null && data.score !== ""
       ? Math.max(0, Math.min(100, Number(data.score)))
