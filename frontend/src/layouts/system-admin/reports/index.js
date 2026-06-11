@@ -27,10 +27,20 @@ function SystemAdminReports() {
 
   useEffect(() => {
     if (!isSystemAdmin()) return;
-    Promise.all([apiClient.get("/schools"), apiClient.get("/learners")])
-      .then(([schoolsRes, learnersRes]) => {
+    Promise.all([
+      apiClient.get("/schools"),
+      apiClient.get("/learners"),
+      apiClient.get("/academic/terms/current").catch(() => null),
+    ])
+      .then(([schoolsRes, learnersRes, activeTerm]) => {
         setSchools(schoolsRes);
         setLearners(learnersRes);
+        if (activeTerm?.name) {
+          setTerm(activeTerm.name);
+          setAcademicYear(
+            activeTerm.academic_year || new Date(activeTerm.start_date || Date.now()).getFullYear()
+          );
+        }
       })
       .catch((err) => setError(err.message));
   }, []);

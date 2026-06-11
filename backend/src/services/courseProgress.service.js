@@ -59,7 +59,7 @@ async function getCachedCourseProgressForPeriod(learnerId, term, academicYear) {
   return result.rows.map((row) => row.progress_data);
 }
 
-async function getActiveAllocations(learnerId) {
+async function getActiveAllocations(learnerId, term = null, academicYear = null) {
   const result = await query(
     `SELECT a.id AS allocation_id,
             a.term,
@@ -71,8 +71,10 @@ async function getActiveAllocations(learnerId) {
      WHERE a.learner_id = $1
        AND a.status IN ('active', 'in_progress', 'completed')
        AND COALESCE(c.course_category, 'general') = 'general'
+       AND ($2::varchar IS NULL OR a.term = $2::varchar)
+       AND ($3::integer IS NULL OR a.academic_year = $3::integer)
      ORDER BY a.allocated_at DESC`,
-    [learnerId]
+    [learnerId, term, academicYear ? Number(academicYear) : null]
   );
   return result.rows;
 }
@@ -228,7 +230,11 @@ async function getLearnerCourseProgress(learnerId, term, academicYear, options =
     return getCachedCourseProgressForPeriod(learnerId, requestedTerm, requestedAcademicYear);
   }
 
-  const allocations = await getActiveAllocations(learnerId);
+  const allocations = await getActiveAllocations(
+    learnerId,
+    requestedTerm,
+    requestedAcademicYear
+  );
   const progress = [];
 
   for (const course of allocations) {

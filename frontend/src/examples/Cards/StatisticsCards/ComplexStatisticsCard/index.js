@@ -27,8 +27,14 @@ import MDTypography from "components/MDTypography";
 
 function ComplexStatisticsCard({ color, title, count, percentage, icon }) {
   return (
-    <Card>
-      <MDBox display="flex" justifyContent="space-between" pt={1} px={2}>
+    <Card sx={{ height: "100%" }}>
+      <MDBox
+        display="flex"
+        justifyContent="space-between"
+        alignItems={{ xs: "center", sm: "flex-start" }}
+        pt={{ xs: 1.5, sm: 1 }}
+        px={{ xs: 1.5, sm: 2 }}
+      >
         <MDBox
           variant="gradient"
           bgColor={color}
@@ -38,9 +44,11 @@ function ComplexStatisticsCard({ color, title, count, percentage, icon }) {
           display="flex"
           justifyContent="center"
           alignItems="center"
-          width="4rem"
-          height="4rem"
-          mt={-3}
+          width={{ xs: "3rem", sm: "4rem" }}
+          height={{ xs: "3rem", sm: "4rem" }}
+          mt={{ xs: 0, sm: -3 }}
+          flexShrink={0}
+          sx={{ borderRadius: { xs: "8px", sm: "0.75rem" } }}
         >
           <Icon fontSize="medium" color="inherit">
             {icon}
@@ -50,11 +58,13 @@ function ComplexStatisticsCard({ color, title, count, percentage, icon }) {
           <MDTypography variant="button" fontWeight="light" color="text">
             {title}
           </MDTypography>
-          <MDTypography variant="h4">{count}</MDTypography>
+          <MDTypography variant="h4" sx={{ fontSize: { xs: "1.5rem", sm: "1.5rem" } }}>
+            {count}
+          </MDTypography>
         </MDBox>
       </MDBox>
-      <Divider />
-      <MDBox pb={2} px={2}>
+      <Divider sx={{ my: { xs: 1, sm: 2 } }} />
+      <MDBox pb={{ xs: 1.5, sm: 2 }} px={{ xs: 1.5, sm: 2 }}>
         <MDTypography component="p" variant="button" color="text" display="flex">
           <MDTypography
             component="span"

@@ -217,7 +217,9 @@ async function generateLearnerReportPDF(req, res) {
       if (activeTerm) {
         term = term || activeTerm.name;
         academicYear =
-          academicYear || new Date(activeTerm.start_date).getFullYear();
+          academicYear ||
+          activeTerm.academic_year ||
+          new Date(activeTerm.start_date).getFullYear();
       } else {
         return res.status(400).json({
           error: "No active term found. Please specify term and academic year.",
@@ -253,7 +255,9 @@ async function generateClassReportsPDF(req, res) {
       if (activeTerm) {
         term = term || activeTerm.name;
         academicYear =
-          academicYear || new Date(activeTerm.start_date).getFullYear();
+          academicYear ||
+          activeTerm.academic_year ||
+          new Date(activeTerm.start_date).getFullYear();
       } else {
         return res.status(400).json({
           error: "No active term found. Please specify term and academic year.",
@@ -309,7 +313,9 @@ async function generateSchoolReportsPDF(req, res) {
       if (activeTerm) {
         term = term || activeTerm.name;
         academicYear =
-          academicYear || new Date(activeTerm.start_date).getFullYear();
+          academicYear ||
+          activeTerm.academic_year ||
+          new Date(activeTerm.start_date).getFullYear();
       } else {
         return res.status(400).json({
           error: "No active term found. Please specify term and academic year.",

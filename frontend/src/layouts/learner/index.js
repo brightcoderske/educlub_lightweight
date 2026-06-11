@@ -230,8 +230,15 @@ function LearnerDashboard() {
   return (
     <DashboardLayout>
       <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3} display="flex" justifyContent="space-between" alignItems="center">
+      <MDBox py={{ xs: 2, sm: 3 }}>
+        <MDBox
+          mb={{ xs: 2, sm: 3 }}
+          display="flex"
+          flexDirection={{ xs: "column", md: "row" }}
+          justifyContent="space-between"
+          alignItems={{ xs: "stretch", md: "center" }}
+          gap={{ xs: 1.5, md: 2 }}
+        >
           <DashboardIdentity
             user={user}
             title="My Dashboard"
@@ -243,25 +250,46 @@ function LearnerDashboard() {
                 : "Your courses and progress will appear after your learner profile is linked."
             }
           />
-          <MDTypography variant="caption" color="text">
-            Current term: {currentTerm?.name || "None"} | Past terms: {pastTerms}
-          </MDTypography>
-          <MDButton variant="gradient" color="info" onClick={() => navigate("/learner/profile")}>
-            My Profile
-          </MDButton>
-          <MDButton
-            variant="gradient"
-            color="warning"
-            startIcon={<Icon fontSize="small">emoji_events</Icon>}
-            onClick={() => navigate("/learner/competitions")}
+          <MDBox
+            display="flex"
+            flexDirection={{ xs: "column", sm: "row" }}
+            alignItems={{ xs: "stretch", sm: "center" }}
+            gap={1}
+            width={{ xs: "100%", md: "auto" }}
           >
-            Competitions
-          </MDButton>
+            <MDTypography variant="caption" color="text" sx={{ flexGrow: 1, lineHeight: 1.4 }}>
+              Current term: {currentTerm?.name || "None"} | Past terms: {pastTerms}
+            </MDTypography>
+            <MDBox
+              display="grid"
+              gridTemplateColumns="minmax(0, 1fr) minmax(0, 1fr)"
+              gap={1}
+              width={{ xs: "100%", sm: "auto" }}
+            >
+              <MDButton
+                variant="gradient"
+                color="info"
+                onClick={() => navigate("/learner/profile")}
+                sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
+              >
+                My Profile
+              </MDButton>
+              <MDButton
+                variant="gradient"
+                color="warning"
+                startIcon={<Icon fontSize="small">emoji_events</Icon>}
+                onClick={() => navigate("/learner/competitions")}
+                sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
+              >
+                Competitions
+              </MDButton>
+            </MDBox>
+          </MDBox>
         </MDBox>
 
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6} lg={3}>
-            <MDBox mb={1.5}>
+        <Grid container spacing={{ xs: 1.5, sm: 3 }}>
+          <Grid item xs={6} md={6} lg={3}>
+            <MDBox mb={{ xs: 0, sm: 1.5 }} height="100%">
               <ComplexStatisticsCard
                 color="dark"
                 icon="menu_book"
@@ -275,8 +303,8 @@ function LearnerDashboard() {
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={3}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} md={6} lg={3}>
+            <MDBox mb={{ xs: 0, sm: 1.5 }} height="100%">
               <ComplexStatisticsCard
                 color="info"
                 icon="play_circle"
@@ -290,8 +318,8 @@ function LearnerDashboard() {
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={3}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} md={6} lg={3}>
+            <MDBox mb={{ xs: 0, sm: 1.5 }} height="100%">
               <ComplexStatisticsCard
                 color="warning"
                 icon="trending_up"
@@ -305,8 +333,8 @@ function LearnerDashboard() {
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={3}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} md={6} lg={3}>
+            <MDBox mb={{ xs: 0, sm: 1.5 }} height="100%">
               <ComplexStatisticsCard
                 color="success"
                 icon="check_circle"
@@ -323,7 +351,7 @@ function LearnerDashboard() {
 
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={{ xs: 1.5, sm: 3 }}>
                 <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <MDTypography variant="h6" fontWeight="bold">
                     My Courses
@@ -360,58 +388,105 @@ function LearnerDashboard() {
                     </MDTypography>
                   </MDBox>
                 ) : (
-                  <TableContainer>
-                    <Table>
-                      <TableHead sx={{ display: "table-header-group" }}>
-                        <TableRow>
-                          <TableCell>Course Name</TableCell>
-                          <TableCell>Term</TableCell>
-                          <TableCell>Academic Year</TableCell>
-                          <TableCell>Status</TableCell>
-                          <TableCell align="center">Action</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {allocations.map((allocation) => (
-                          <TableRow key={allocation.id} hover>
-                            <TableCell>
-                              <MDTypography variant="body2" fontWeight="medium">
+                  <>
+                    <MDBox display={{ xs: "flex", sm: "none" }} flexDirection="column" gap={1}>
+                      {allocations.map((allocation) => (
+                        <MDBox
+                          key={`mobile-${allocation.id}`}
+                          p={1.5}
+                          border="1px solid #e5e7eb"
+                          borderRadius="md"
+                          sx={{ bgcolor: "#ffffff" }}
+                        >
+                          <MDBox
+                            display="flex"
+                            justifyContent="space-between"
+                            alignItems="flex-start"
+                            gap={1}
+                          >
+                            <MDBox minWidth={0}>
+                              <MDTypography variant="button" fontWeight="bold">
                                 {allocation.course_name}
                               </MDTypography>
-                            </TableCell>
-                            <TableCell>
-                              <MDTypography variant="body2" color="text">
-                                {allocation.term}
+                              <MDTypography variant="caption" color="text" display="block">
+                                {allocation.term} {allocation.academic_year}
                               </MDTypography>
-                            </TableCell>
-                            <TableCell>
-                              <MDTypography variant="body2" color="text">
-                                {allocation.academic_year}
-                              </MDTypography>
-                            </TableCell>
-                            <TableCell>
-                              <Chip
-                                label={getStatusLabel(allocation.status)}
-                                color={getStatusColor(allocation.status)}
-                                size="small"
-                              />
-                            </TableCell>
-                            <TableCell align="center">
-                              <MDButton
-                                variant="gradient"
-                                color="success"
-                                onClick={() => navigate(`/learner/courses/${allocation.course_id}`)}
-                                size="small"
-                                startIcon={<Icon fontSize="small">menu_book</Icon>}
-                              >
-                                Open Course
-                              </MDButton>
-                            </TableCell>
+                            </MDBox>
+                            <Chip
+                              label={getStatusLabel(allocation.status)}
+                              color={getStatusColor(allocation.status)}
+                              size="small"
+                            />
+                          </MDBox>
+                          <MDButton
+                            variant="gradient"
+                            color="success"
+                            onClick={() => navigate(`/learner/courses/${allocation.course_id}`)}
+                            size="small"
+                            fullWidth
+                            startIcon={<Icon fontSize="small">menu_book</Icon>}
+                            sx={{ mt: 1.25 }}
+                          >
+                            Open Course
+                          </MDButton>
+                        </MDBox>
+                      ))}
+                    </MDBox>
+                    <TableContainer sx={{ display: { xs: "none", sm: "block" } }}>
+                      <Table>
+                        <TableHead sx={{ display: "table-header-group" }}>
+                          <TableRow>
+                            <TableCell>Course Name</TableCell>
+                            <TableCell>Term</TableCell>
+                            <TableCell>Academic Year</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align="center">Action</TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
+                        </TableHead>
+                        <TableBody>
+                          {allocations.map((allocation) => (
+                            <TableRow key={allocation.id} hover>
+                              <TableCell>
+                                <MDTypography variant="body2" fontWeight="medium">
+                                  {allocation.course_name}
+                                </MDTypography>
+                              </TableCell>
+                              <TableCell>
+                                <MDTypography variant="body2" color="text">
+                                  {allocation.term}
+                                </MDTypography>
+                              </TableCell>
+                              <TableCell>
+                                <MDTypography variant="body2" color="text">
+                                  {allocation.academic_year}
+                                </MDTypography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={getStatusLabel(allocation.status)}
+                                  color={getStatusColor(allocation.status)}
+                                  size="small"
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <MDButton
+                                  variant="gradient"
+                                  color="success"
+                                  onClick={() =>
+                                    navigate(`/learner/courses/${allocation.course_id}`)
+                                  }
+                                  size="small"
+                                  startIcon={<Icon fontSize="small">menu_book</Icon>}
+                                >
+                                  Open Course
+                                </MDButton>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </>
                 )}
               </MDBox>
             </Card>

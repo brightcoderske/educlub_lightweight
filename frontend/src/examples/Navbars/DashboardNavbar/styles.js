@@ -52,6 +52,13 @@ function navbar(theme, ownerState) {
     paddingRight: absolute ? pxToRem(8) : 0,
     paddingLeft: absolute ? pxToRem(16) : 0,
 
+    [breakpoints.down("sm")]: {
+      top: pxToRem(6),
+      minHeight: "auto",
+      borderRadius: pxToRem(8),
+      padding: `${pxToRem(6)} ${pxToRem(8)}`,
+    },
+
     "& > *": {
       transition: transitions.create("all", {
         easing: transitions.easing.easeInOut,
@@ -78,6 +85,7 @@ const navbarContainer = ({ breakpoints }) => ({
   justifyContent: "space-between",
   pt: 0.5,
   pb: 0.5,
+  gap: 0.5,
 
   [breakpoints.up("md")]: {
     flexDirection: "row",
@@ -92,6 +100,7 @@ const navbarRow = ({ breakpoints }, { isMini }) => ({
   alignItems: "center",
   justifyContent: "space-between",
   width: "100%",
+  minWidth: 0,
 
   [breakpoints.up("md")]: {
     justifyContent: isMini ? "space-between" : "stretch",

@@ -185,20 +185,46 @@ function DashboardNavbar({ absolute, light, isMini }) {
         </MDBox>
         {isMini ? null : (
           <MDBox sx={(theme) => navbarRow(theme, { isMini })}>
-            <MDBox display="flex" alignItems="center" gap={1.25} mr={1.5}>
+            <MDBox
+              display="flex"
+              alignItems="center"
+              gap={{ xs: 0.75, sm: 1.25 }}
+              mr={{ xs: 0.5, sm: 1.5 }}
+              minWidth={0}
+            >
               <MDAvatar bgColor="info" size="sm" shadow="sm">
                 {getUserInitials(user)}
               </MDAvatar>
-              <MDBox lineHeight={1}>
-                <MDTypography variant="button" fontWeight="medium" color={light ? "white" : "text"}>
+              <MDBox lineHeight={1} minWidth={0}>
+                <MDTypography
+                  variant="button"
+                  fontWeight="medium"
+                  color={light ? "white" : "text"}
+                  sx={{
+                    display: "block",
+                    maxWidth: { xs: 115, sm: "none" },
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {getUserDisplayName(user)}
                 </MDTypography>
-                <MDTypography variant="caption" color={light ? "white" : "text"} display="block">
+                <MDTypography
+                  variant="caption"
+                  color={light ? "white" : "text"}
+                  display={{ xs: "none", sm: "block" }}
+                >
                   {getRoleLabel(user?.role)}
                 </MDTypography>
               </MDBox>
             </MDBox>
-            <MDBox color={light ? "white" : "inherit"}>
+            <MDBox
+              color={light ? "white" : "inherit"}
+              display="flex"
+              alignItems="center"
+              flexShrink={0}
+            >
               {user?.role === "learner" && (
                 <IconButton
                   size="small"

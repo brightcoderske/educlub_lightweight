@@ -32,6 +32,11 @@ const quizTestsRoutes = require("./routes/quizTests.routes");
 const app = express();
 const privateUploadPrefixes = ["/reports", "/report-cards", "/learner-files"];
 
+app.disable("x-powered-by");
+if (env.nodeEnv === "production") {
+  app.set("trust proxy", 1);
+}
+
 const rateLimitJsonHandler = (req, res, next, options) => {
   res.status(options.statusCode).json({
     error:

@@ -1,4 +1,5 @@
 require("dotenv").config();
+const { validateProductionEnv } = require("./validateProductionEnv");
 
 const requiredEnvVars = [
   "DATABASE_URL",
@@ -21,6 +22,8 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
+validateProductionEnv(process.env);
+
 module.exports = {
   port: process.env.PORT || 4000,
   nodeEnv: process.env.NODE_ENV || "development",
@@ -33,7 +36,9 @@ module.exports = {
   refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "7d",
   standaloneLmsEnabled: process.env.STANDALONE_LMS_ENABLED !== "false",
   frontendUrl: process.env.FRONTEND_URL,
-  corsOrigins: process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),
+  corsOrigins: process.env.CORS_ORIGINS.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   flutterwaveSecretKey: process.env.FLUTTERWAVE_SECRET_KEY || "",
   flutterwavePublicKey: process.env.FLUTTERWAVE_PUBLIC_KEY || "",
   flutterwaveEncryptionKey: process.env.FLUTTERWAVE_ENCRYPTION_KEY || "",

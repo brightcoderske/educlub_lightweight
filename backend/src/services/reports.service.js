@@ -371,6 +371,61 @@ function drawLineChart(doc, rows, key, x, y, width, height, suffix = "") {
   });
 }
 
+async function getTypingTargets(term, academicYear) {
+  const result = await query(
+    `SELECT week_number, MAX(pass_threshold)::numeric AS pass_threshold
+     FROM typing_tests
+     WHERE test_type = 'weekly'
+       AND term = $1
+       AND academic_year = $2
+     GROUP BY week_number`,
+    [term, Number(academicYear)]
+  );
+  return new Map(
+    result.rows.map((row) => [Number(row.week_number), Number(row.pass_threshold || 25)])
+  );
+}
+
+function average(values = []) {
+  const valid = values.filter((value) => Number.isFinite(Number(value))).map(Number);
+  if (valid.length === 0) return null;
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
+
+function calculateOverallPerformance(weeklyMarks, courseProgress, typingTargets) {
+  const quizAverage = average(
+    weeklyMarks
+      .filter((row) => row.quiz_score !== null && row.quiz_score !== undefined)
+      .map((row) => row.quiz_score)
+  );
+  const typingAverage = average(
+    weeklyMarks
+      .filter((row) => row.typing_score !== null && row.typing_score !== undefined)
+      .map((row) => {
+        const target = typingTargets.get(Number(row.week_number)) || 25;
+        return Math.min(100, (Number(row.typing_score) / Math.max(target, 1)) * 100);
+      })
+  );
+  const completedModuleScores = courseProgress.flatMap((course) =>
+    (course.modules || [])
+      .filter(
+        (module) =>
+          Number(module.total_activities || 0) > 0 &&
+          Number(module.completed_activities || 0) >= Number(module.total_activities || 0)
+      )
+      .map((module) => module.score_percent)
+  );
+  const courseAverage = average(completedModuleScores);
+  const overall = average([quizAverage, typingAverage, courseAverage]);
+
+  return {
+    overall: overall === null ? 0 : Math.round(overall),
+    quizAverage,
+    typingAverage,
+    courseAverage,
+  };
+}
+
 function fitText(text, limit) {
   const value = String(text || "");
   return value.length > limit ? `${value.slice(0, limit - 3)}...` : value;
@@ -539,24 +594,13 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
       return [];
     });
   const weeklyMarks = await getWeeklyMarks(learnerId, term, academicYear);
+  const typingTargets = await getTypingTargets(term, academicYear);
   const reportFeedback = await getReportFeedback(learnerId, term, academicYear);
-  const allocationsResult = await query(
-    `SELECT c.name AS course_name
-     FROM course_allocations a
-     JOIN courses c ON c.id = a.course_id
-     WHERE a.learner_id = $1
-       AND a.term = $2
-       AND a.academic_year = $3
-       AND a.status IN ('active', 'in_progress', 'completed')
-       AND COALESCE(c.course_category, 'general') = 'general'
-     ORDER BY a.allocated_at DESC
-     LIMIT 1`,
-    [learnerId, term, Number(academicYear)]
+  const performance = calculateOverallPerformance(
+    weeklyMarks,
+    activeCourseProgress,
+    typingTargets
   );
-  const activeCourse =
-    activeCourseProgress[0]?.course_name ||
-    allocationsResult.rows[0]?.course_name ||
-    "Active Course";
 
   const doc = new PDFDocument({ size: "A4", margin: 42 });
   const outputPath = path.join(
@@ -581,9 +625,29 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
 
   if (learner.school_logo) {
     const localLogo = getUploadLocalPath(learner.school_logo);
-    if (fs.existsSync(localLogo)) {
+    if (localLogo && fs.existsSync(localLogo)) {
       doc.image(localLogo, 55, 46, { width: 42 });
+    } else {
+      doc.circle(76, 67, 21).fill("#eef4ff");
+      doc
+        .fillColor("#003f91")
+        .font("Helvetica-Bold")
+        .fontSize(14)
+        .text((learner.school_name || "S")[0].toUpperCase(), 64, 60, {
+          width: 24,
+          align: "center",
+        });
     }
+  } else {
+    doc.circle(76, 67, 21).fill("#eef4ff");
+    doc
+      .fillColor("#003f91")
+      .font("Helvetica-Bold")
+      .fontSize(14)
+      .text((learner.school_name || "S")[0].toUpperCase(), 64, 60, {
+        width: 24,
+        align: "center",
+      });
   }
 
   doc
@@ -670,19 +734,7 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
     .fontSize(8)
     .text("-", 265, infoY + 52);
 
-  const overall = weeklyMarks.length
-    ? Math.round(
-        weeklyMarks.reduce(
-          (sum, row) =>
-            sum +
-            Number(row.quiz_score || 0) +
-            Number(row.typing_score || 0) +
-            Number(row.active_course_score || 0),
-          0
-        ) /
-          (weeklyMarks.length * 3)
-      )
-    : 0;
+  const overall = performance.overall;
   doc
     .fillColor("#4d5b73")
     .font("Helvetica")
@@ -690,10 +742,10 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
     .text("Overall Performance", 70, infoY + 70);
   drawPill(
     doc,
-    getPerformanceLabel(overall).toUpperCase(),
+    `${getPerformanceLabel(overall).toUpperCase()} (${overall}%)`,
     70,
     infoY + 81,
-    138,
+    168,
     "#0b5fc7"
   );
   doc.circle(480, 166, 22).fill("#004aad");
@@ -732,85 +784,72 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
   doc.roundedRect(305, 246, 235, 170, 7).strokeColor("#cfd8e8").stroke();
   drawLineChart(doc, weeklyMarks, "quiz_score", 318, 286, 200, 105, "%");
 
-  const latest = weeklyMarks[weeklyMarks.length - 1] || {};
-  const courseModules = activeCourseProgress[0]?.modules || [];
-  const modules =
-    courseModules.length > 0
-      ? courseModules.map((module) => ({
-          name: `${module.module_number}. ${module.name}`,
-          progress: `${module.progress_percent}%`,
-          mark:
-            module.score_percent !== null && module.score_percent !== undefined
-              ? `${module.score_percent}%`
-              : "-",
-          performance: module.grade_label.toUpperCase(),
-        }))
-      : [
-          {
-            name: `1. ${fitText(activeCourse, 28)}`,
-            progress: `${latest.active_course_score || overall || 0}%`,
-            mark: latest.active_course_score
-              ? `${latest.active_course_score}%`
-              : "-",
-            performance: getPerformanceLabel(
-              latest.active_course_score || overall
-            ).toUpperCase(),
-          },
-          {
-            name: "2. Weekly learning activities",
-            progress: `${latest.quiz_score || overall || 0}%`,
-            mark: latest.quiz_score ? `${latest.quiz_score}%` : "-",
-            performance: getPerformanceLabel(
-              latest.quiz_score || overall
-            ).toUpperCase(),
-          },
-        ];
-
-  function drawCourseTableHeader(
-    y,
-    title = `ACTIVE COURSE: ${activeCourse.toUpperCase()}`
-  ) {
-    drawSectionTitle(doc, "3", title, 55, y, 485);
+  function drawCourseTableHeader(y, title, sectionNumber = "3") {
+    drawSectionTitle(doc, sectionNumber, title, 55, y, 485);
     doc.roundedRect(55, y + 28, 485, 24, 0).fill("#eef4ff");
     doc.fillColor("#003f91").font("Helvetica-Bold").fontSize(8);
     doc.text("Module", 65, y + 37);
-    doc.text("Progress", 305, y + 37);
-    doc.text("Mark", 365, y + 37);
-    doc.text("Performance", 435, y + 37);
+    doc.text("Progress", 326, y + 37);
+    doc.text("Mark", 382, y + 37);
+    doc.text("Performance", 433, y + 37);
     return y + 62;
   }
 
-  let moduleY = drawCourseTableHeader(432);
-  modules.forEach((module, index) => {
-    if (moduleY + 38 > 760) {
-      drawReportFooter(doc);
-      doc.addPage();
-      moduleY = drawCourseTableHeader(55, "ACTIVE COURSE CONTINUED");
-    }
+  let moduleY = 432;
+  if (activeCourseProgress.length === 0) {
+    moduleY = drawCourseTableHeader(moduleY, "ACTIVE COURSES");
     doc
-      .roundedRect(55, moduleY - 7, 485, 34, 4)
-      .fill(index % 2 === 0 ? "#ffffff" : "#f7faff");
-    doc
-      .roundedRect(55, moduleY - 7, 485, 34, 4)
-      .strokeColor("#dbe5f5")
-      .stroke();
-    doc
-      .fillColor("#001b44")
+      .fillColor("#4d5b73")
       .font("Helvetica")
-      .fontSize(8)
-      .text(module.name, 65, moduleY, { width: 220, height: 20 });
-    doc.text(module.progress, 307, moduleY, { width: 45 });
-    doc.text(module.mark, 367, moduleY, { width: 45 });
-    drawPill(
-      doc,
-      module.performance,
-      430,
-      moduleY - 2,
-      96,
-      module.performance === "APPROACHING" ? "#f59e0b" : "#0b5fc7"
-    );
-    moduleY += 40;
-  });
+      .fontSize(9)
+      .text("No active course modules recorded for this term.", 65, moduleY, { width: 450 });
+    moduleY += 34;
+  } else {
+    activeCourseProgress.forEach((course, courseIndex) => {
+      const title = `ACTIVE COURSE: ${String(course.course_name || "Course").toUpperCase()}`;
+      if (moduleY + 70 > 760) {
+        drawReportFooter(doc);
+        doc.addPage();
+        moduleY = 55;
+      }
+      moduleY = drawCourseTableHeader(moduleY, title, String(courseIndex + 3));
+      (course.modules || []).forEach((module, moduleIndex) => {
+        const moduleName = `${module.module_number}. ${module.name}`;
+        const textHeight = doc.heightOfString(moduleName, { width: 245 });
+        const rowHeight = Math.max(34, textHeight + 14);
+        if (moduleY + rowHeight > 760) {
+          drawReportFooter(doc);
+          doc.addPage();
+          moduleY = drawCourseTableHeader(
+            55,
+            `${String(course.course_name || "Course").toUpperCase()} CONTINUED`,
+            String(courseIndex + 3)
+          );
+        }
+        doc
+          .roundedRect(55, moduleY - 7, 485, rowHeight, 4)
+          .fill(moduleIndex % 2 === 0 ? "#ffffff" : "#f7faff");
+        doc.roundedRect(55, moduleY - 7, 485, rowHeight, 4).strokeColor("#dbe5f5").stroke();
+        doc
+          .fillColor("#001b44")
+          .font("Helvetica")
+          .fontSize(8)
+          .text(moduleName, 65, moduleY, { width: 245 });
+        doc.text(`${module.progress_percent}%`, 329, moduleY, { width: 42 });
+        doc.text(`${module.score_percent}%`, 385, moduleY, { width: 38 });
+        drawPill(
+          doc,
+          getPerformanceLabel(module.score_percent).toUpperCase(),
+          426,
+          moduleY - 2,
+          104,
+          getPerformanceLabel(module.score_percent) === "Approaching" ? "#f59e0b" : "#0b5fc7"
+        );
+        moduleY += rowHeight + 6;
+      });
+      moduleY += 14;
+    });
+  }
 
   if (reportFeedback?.comment_text) {
     const feedbackHeight = Math.max(

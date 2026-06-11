@@ -39,8 +39,12 @@ function DashboardLayout({ children }) {
   return (
     <MDBox
       sx={({ breakpoints, transitions, functions: { pxToRem } }) => ({
-        p: 3,
+        p: 1.5,
         position: "relative",
+
+        [breakpoints.up("sm")]: {
+          p: 3,
+        },
 
         [breakpoints.up("xl")]: {
           marginLeft: miniSidenav ? pxToRem(120) : pxToRem(274),
