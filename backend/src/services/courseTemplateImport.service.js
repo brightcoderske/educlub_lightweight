@@ -62,6 +62,11 @@ async function importTemplateDefinition(input, query) {
         );
         activityCount += 1;
       }
+      await query(
+        `DELETE FROM course_template_activities
+         WHERE template_module_id = $1 AND position > $2`,
+        [moduleResult.rows[0].id, module.activities.length],
+      );
     }
     await query(
       `DELETE FROM course_template_modules

@@ -41,5 +41,6 @@ test("preserves module and activity identities during re-import", async () => {
   await importTemplateDefinition(template, query);
   assert.ok(sqlCalls.some((sql) => sql.includes("ON CONFLICT (template_id, position) DO UPDATE")));
   assert.ok(sqlCalls.some((sql) => sql.includes("ON CONFLICT (template_module_id, position) DO UPDATE")));
+  assert.ok(sqlCalls.some((sql) => sql.includes("DELETE FROM course_template_activities")));
   assert.ok(!sqlCalls.some((sql) => sql === "DELETE FROM course_template_modules WHERE template_id = $1"));
 });

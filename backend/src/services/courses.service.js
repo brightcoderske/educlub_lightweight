@@ -765,15 +765,10 @@ async function submitQuiz(activityId, user = {}, data = {}) {
 
   const passScore = Number(activity.pass_score ?? 0);
   const passed = score >= passScore;
-  const previousProgress = await query(
-    `SELECT status FROM activity_progress
-     WHERE learner_id = $1::integer AND activity_id = $2::integer`,
-    [learner.id, activityId],
-  );
-  const alreadyMastered = activityDone(previousProgress.rows[0]?.status);
   await upsertActivityProgress(activityId, user, {
-    status: passed || alreadyMastered ? "graded" : "in_progress",
+    status: passed ? "graded" : "in_progress",
     score,
+    preserve_mastery: true,
   });
 
   return {
@@ -874,8 +869,20 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
      )
      ON CONFLICT (learner_id, activity_id)
      DO UPDATE SET
-       status = EXCLUDED.status,
-       score = COALESCE(EXCLUDED.score, activity_progress.score),
+       status = CASE
+         WHEN $6::boolean
+          AND activity_progress.status IN ('completed'::varchar, 'graded'::varchar)
+         THEN activity_progress.status
+         ELSE EXCLUDED.status
+       END,
+       score = CASE
+         WHEN $6::boolean
+         THEN GREATEST(
+           COALESCE(activity_progress.score, 0),
+           COALESCE(EXCLUDED.score, 0)
+         )
+         ELSE COALESCE(EXCLUDED.score, activity_progress.score)
+       END,
        opened_at = COALESCE(activity_progress.opened_at, NOW()),
        completed_at = CASE
          WHEN EXCLUDED.status IN ('completed'::varchar, 'graded'::varchar)
@@ -884,7 +891,7 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
        END,
        updated_at = NOW()
      RETURNING *`,
-    [learner.id, activityId, status, score, data.opened_at || null],
+    [learner.id, activityId, status, score, data.opened_at || null, data.preserve_mastery === true],
   );
 
   return result.rows[0];
