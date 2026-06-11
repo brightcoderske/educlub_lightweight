@@ -7,6 +7,7 @@ const path = require("path");
 
 const env = require("./config/env");
 const { errorHandler, notFoundHandler } = require("./middleware");
+const { importBuiltInTemplates } = require("./services/builtInTemplates.service");
 
 // Import routes
 const authRoutes = require("./routes/auth.routes");
@@ -150,16 +151,20 @@ app.use(errorHandler);
 const PORT = env.port;
 
 if (env.nodeEnv !== "test") {
-  app.listen(PORT, () => {
-    console.log(`eduClub Backend Server running on port ${PORT}`);
-    console.log(`Environment: ${env.nodeEnv}`);
-    console.log(
-      `Database URL: ${env.databaseUrl ? "configured" : "not configured"}`,
-    );
-    console.log(
-      `Standalone LMS: ${env.standaloneLmsEnabled ? "enabled" : "disabled"}`,
-    );
-  });
+  importBuiltInTemplates()
+    .then((result) => {
+      console.log(`Built-in templates ready: ${result.modules} modules, ${result.activities} activities.`);
+      app.listen(PORT, () => {
+        console.log(`eduClub Backend Server running on port ${PORT}`);
+        console.log(`Environment: ${env.nodeEnv}`);
+        console.log(`Database URL: ${env.databaseUrl ? "configured" : "not configured"}`);
+        console.log(`Standalone LMS: ${env.standaloneLmsEnabled ? "enabled" : "disabled"}`);
+      });
+    })
+    .catch((error) => {
+      console.error("Built-in template import failed; server was not started:", error);
+      process.exitCode = 1;
+    });
 }
 
 module.exports = app;
