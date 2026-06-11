@@ -1,3 +1,4 @@
+require("dotenv").config();
 const { pool } = require("../src/config");
 const template = require("../src/courseTemplates/webDevelopment1.template");
 const { importTemplateDefinition } = require("../src/services/courseTemplateImport.service");
