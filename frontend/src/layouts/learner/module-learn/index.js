@@ -17,7 +17,7 @@ import MDInput from "components/MDInput";
 import MDProgress from "components/MDProgress";
 import MDTypography from "components/MDTypography";
 import { apiClient } from "lib/api";
-import { selectActivityContent, starterCode, webPreview } from "./activityContent";
+import { selectActivityContent, starterCode, starterParts, webPreview } from "./activityContent";
 
 function done(status) {
   return ["completed", "graded"].includes(status);
@@ -860,8 +860,9 @@ function ModuleLearn() {
     setSubmissionText("");
     setSubmissionFile(null);
     setCodeDraft(starterCode(activeActivity?.content || {}));
-    setHtmlDraft(activeActivity?.content?.starter_html || "");
-    setCssDraft(activeActivity?.content?.starter_css || "");
+    const parts = starterParts(activeActivity?.content || {});
+    setHtmlDraft(parts.html);
+    setCssDraft(parts.css);
     setCodeOutput("");
     setCodePreviewHtml("");
 

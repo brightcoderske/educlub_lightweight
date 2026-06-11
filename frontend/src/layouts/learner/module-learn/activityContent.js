@@ -26,6 +26,19 @@ export function starterCode(content = {}) {
   ].filter(Boolean).join("\n");
 }
 
+export function starterParts(content = {}) {
+  if (content.starter_html || content.starter_css) {
+    return {
+      html: content.starter_html || "",
+      css: content.starter_css || "",
+    };
+  }
+  return {
+    html: content.starter_code || content.code || "",
+    css: "",
+  };
+}
+
 export function webPreview(html = "", css = "", allowJavaScript = false) {
   const safeHtml = allowJavaScript
     ? html

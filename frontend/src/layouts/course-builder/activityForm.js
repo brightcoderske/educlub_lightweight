@@ -52,6 +52,7 @@ export function structuredFormContent(form, questions) {
     reflection_prompt: form.reflection_prompt || "",
     project_brief: form.project_brief || "",
     media: {
+      ...(form.original_content?.media || {}),
       image_url: form.image_url || "",
       image_alt: form.image_alt || "",
       video_url: form.video_url || "",
@@ -61,7 +62,11 @@ export function structuredFormContent(form, questions) {
     friendly_hints: String(form.friendly_hints_text || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
     level_up: form.level_up || "",
     teacher_notes: form.teacher_notes || "",
-    module_badge: { name: form.badge_name || "", image_url: form.badge_image_url || "" },
+    module_badge: {
+      ...(form.original_content?.module_badge || {}),
+      name: form.badge_name || "",
+      image_url: form.badge_image_url || "",
+    },
     milestone_key: form.milestone_key || "",
     questions,
   };

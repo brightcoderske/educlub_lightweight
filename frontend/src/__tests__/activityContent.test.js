@@ -1,6 +1,7 @@
 import {
   selectActivityContent,
   starterCode,
+  starterParts,
   webPreview,
 } from "../layouts/learner/module-learn/activityContent";
 
@@ -26,4 +27,11 @@ test("HTML CSS preview removes scripts unless JavaScript is enabled", () => {
   const html = "<h1>Hello</h1><script>window.alert('no')</script>";
   expect(webPreview(html, "h1 { color: blue; }", false)).not.toContain("<script>");
   expect(webPreview(html, "", true)).toContain("<script>");
+});
+
+test("legacy starter code populates the HTML editor", () => {
+  expect(starterParts({ starter_code: "<h1>Legacy</h1>" })).toEqual({
+    html: "<h1>Legacy</h1>",
+    css: "",
+  });
 });
