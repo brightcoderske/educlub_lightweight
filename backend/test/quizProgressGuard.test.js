@@ -9,5 +9,7 @@ test("generic progress cannot complete a quiz without a passing attempt", () => 
     "utf8",
   );
   assert.match(source, /Quiz completion requires a passing quiz attempt/);
-  assert.match(source, /data\.preserve_mastery !== true/);
+  assert.match(source, /options\.allowQuizCompletion !== true/);
+  assert.match(source, /options\.preserveMastery === true/);
+  assert.doesNotMatch(source, /data\.preserve_mastery/);
 });

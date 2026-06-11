@@ -766,11 +766,12 @@ async function submitQuiz(activityId, user = {}, data = {}) {
 
   const passScore = Number(activity.pass_score ?? 0);
   const passed = score >= passScore;
-  await upsertActivityProgress(activityId, user, {
-    status: passed ? "graded" : "in_progress",
-    score,
-    preserve_mastery: true,
-  });
+  await upsertActivityProgress(
+    activityId,
+    user,
+    { status: passed ? "graded" : "in_progress", score },
+    { allowQuizCompletion: true, preserveMastery: true },
+  );
 
   return {
     attempt: attempt.rows[0],
@@ -827,7 +828,7 @@ async function getModuleLearning(courseId, moduleId, user = {}) {
   };
 }
 
-async function upsertActivityProgress(activityId, user = {}, data = {}) {
+async function upsertActivityProgress(activityId, user = {}, data = {}, options = {}) {
   const learner = await findLearnerForUser(user.userId);
   if (!learner)
     throw new Error("Learner profile is not linked to this account.");
@@ -851,7 +852,7 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
   if (
     access.rows[0].activity_type === "quiz" &&
     ["completed", "graded"].includes(status) &&
-    data.preserve_mastery !== true
+    options.allowQuizCompletion !== true
   ) {
     throw new Error("Quiz completion requires a passing quiz attempt.");
   }
@@ -888,7 +889,7 @@ async function upsertActivityProgress(activityId, user = {}, data = {}) {
        END,
        updated_at = NOW()
      RETURNING *`,
-    [learner.id, activityId, status, score, data.opened_at || null, data.preserve_mastery === true],
+    [learner.id, activityId, status, score, data.opened_at || null, options.preserveMastery === true],
   );
 
   return result.rows[0];
