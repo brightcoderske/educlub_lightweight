@@ -36,8 +36,10 @@ rollback() {
   cp -a "$BACKUP_DIR/package.json" "$APP_ROOT/package.json"
   cp -a "$BACKUP_DIR/package-lock.json" "$APP_ROOT/package-lock.json"
 
+  set +u
   # shellcheck disable=SC1091
   source "$NODE_ENV_ROOT/bin/activate"
+  set -u
   cd "$APP_ROOT"
   npm install --omit=dev --no-audit --no-fund
   mkdir -p "$APP_ROOT/tmp"
@@ -51,8 +53,10 @@ cp -a "$SOURCE_ROOT/backend/src" "$APP_ROOT/src"
 cp -a "$SOURCE_ROOT/backend/package.json" "$APP_ROOT/package.json"
 cp -a "$SOURCE_ROOT/backend/package-lock.json" "$APP_ROOT/package-lock.json"
 
+set +u
 # shellcheck disable=SC1091
 source "$NODE_ENV_ROOT/bin/activate"
+set -u
 cd "$APP_ROOT"
 npm install --omit=dev --no-audit --no-fund
 
