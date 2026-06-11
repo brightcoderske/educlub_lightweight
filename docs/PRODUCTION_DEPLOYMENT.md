@@ -131,3 +131,63 @@ Complete these checks from a private browser window:
 If launch verification fails, point the Vercel production alias back to the
 previous deployment. Do not change the Supabase schema during rollback unless
 the migration itself is known to be incompatible.
+
+## 6. Automatic Backend Deployment
+
+The workflow at `.github/workflows/deploy-backend.yml` deploys backend changes
+from the `main` branch to HostAfrica. It uses `tar`, `scp`, and SSH because
+`rsync` is unavailable on the shared hosting account.
+
+Add these repository secrets in GitHub under **Settings → Secrets and variables
+→ Actions**:
+
+```text
+HOSTAFRICA_HOST
+HOSTAFRICA_PORT
+HOSTAFRICA_USER
+HOSTAFRICA_SSH_KEY
+HOSTAFRICA_KNOWN_HOSTS
+```
+
+Use `codecham` for `HOSTAFRICA_USER`. Obtain the hostname and port from cPanel's
+SSH Access page. Create a dedicated SSH deployment key without reusing a
+personal key. Add its public half to cPanel's authorized keys and its private
+half to `HOSTAFRICA_SSH_KEY`.
+
+Populate `HOSTAFRICA_KNOWN_HOSTS` from a verified server host key. Compare the
+fingerprint with the value shown by HostAfrica or cPanel before trusting it:
+
+```bash
+ssh-keyscan -p SSH_PORT SSH_HOST
+```
+
+The workflow deploys only:
+
+```text
+backend/src
+backend/package.json
+backend/package-lock.json
+```
+
+It does not deploy or modify `.env`, `uploads`, reports, school logos, or learner
+files. It keeps the five newest code backups under
+`/home/codecham/educlub-backups`, restarts Passenger through
+`tmp/restart.txt`, and verifies the public health endpoint. Database migrations
+remain a deliberate manual operation.
+
+### cPanel Git Alternative
+
+When external SSH is unavailable, initialize the repository through cPanel Git
+using the read-only GitHub deploy key. The repository includes `.cpanel.yml`,
+which invokes `scripts/deploy-cpanel-git.sh`.
+
+After pushing to GitHub:
+
+1. Open the repository in cPanel Git.
+2. Select **Update from Remote**.
+3. Select **Deploy HEAD Commit**.
+
+The cPanel deployment follows the same production rules: `.env` and `uploads`
+are preserved, the previous code is backed up, dependencies are installed in
+the application-specific Node.js environment, Passenger is restarted, and
+`https://learn.educlub.co.ke/health` must pass.
