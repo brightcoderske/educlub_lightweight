@@ -27,13 +27,16 @@ async function importTemplateDefinition(input, query) {
         definition.course_category],
     );
     const templateId = templateResult.rows[0].id;
-    await query("DELETE FROM course_template_modules WHERE template_id = $1", [templateId]);
-
     for (const module of definition.modules) {
       const moduleResult = await query(
         `INSERT INTO course_template_modules (
            template_id, title, description, learning_outcomes, position, is_published, unlock_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, NULL) RETURNING id`,
+         ) VALUES ($1, $2, $3, $4, $5, $6, NULL)
+         ON CONFLICT (template_id, position) DO UPDATE SET
+           title = EXCLUDED.title, description = EXCLUDED.description,
+           learning_outcomes = EXCLUDED.learning_outcomes,
+           is_published = EXCLUDED.is_published, updated_at = CURRENT_TIMESTAMP
+         RETURNING id`,
         [templateId, module.title, module.description || "",
           JSON.stringify(module.learning_outcomes || []), module.position, module.is_published],
       );
@@ -43,7 +46,15 @@ async function importTemplateDefinition(input, query) {
           `INSERT INTO course_template_activities (
              template_module_id, title, activity_type, content, points, position,
              is_required, completion_rule, pass_score, is_published
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (template_module_id, position) DO UPDATE SET
+             title = EXCLUDED.title, activity_type = EXCLUDED.activity_type,
+             content = EXCLUDED.content, points = EXCLUDED.points,
+             is_required = EXCLUDED.is_required,
+             completion_rule = EXCLUDED.completion_rule,
+             pass_score = EXCLUDED.pass_score,
+             is_published = EXCLUDED.is_published,
+             updated_at = CURRENT_TIMESTAMP`,
           [moduleResult.rows[0].id, item.title, item.activity_type,
             JSON.stringify({ ...item.content, module_badge: module.badge, teacher_notes: module.teacher_notes, template_settings: definition.settings }),
             item.points, item.position, item.is_required, item.completion_rule,
@@ -52,6 +63,11 @@ async function importTemplateDefinition(input, query) {
         activityCount += 1;
       }
     }
+    await query(
+      `DELETE FROM course_template_modules
+       WHERE template_id = $1 AND position > $2`,
+      [templateId, definition.modules.length],
+    );
     await query("COMMIT");
     return { template_id: templateId, modules: moduleCount, activities: activityCount };
   } catch (error) {

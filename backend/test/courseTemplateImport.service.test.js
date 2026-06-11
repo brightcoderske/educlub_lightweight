@@ -28,3 +28,18 @@ test("rolls back if an insert fails", async () => {
   await assert.rejects(() => importTemplateDefinition(template, query), /database failed/);
   assert.equal(calls.at(-1), "ROLLBACK");
 });
+
+test("preserves module and activity identities during re-import", async () => {
+  const sqlCalls = [];
+  let moduleId = 20;
+  const query = async (sql) => {
+    sqlCalls.push(sql);
+    if (sql.includes("INSERT INTO course_templates")) return { rows: [{ id: 7 }] };
+    if (sql.includes("INSERT INTO course_template_modules")) return { rows: [{ id: moduleId++ }] };
+    return { rows: [] };
+  };
+  await importTemplateDefinition(template, query);
+  assert.ok(sqlCalls.some((sql) => sql.includes("ON CONFLICT (template_id, position) DO UPDATE")));
+  assert.ok(sqlCalls.some((sql) => sql.includes("ON CONFLICT (template_module_id, position) DO UPDATE")));
+  assert.ok(!sqlCalls.some((sql) => sql === "DELETE FROM course_template_modules WHERE template_id = $1"));
+});

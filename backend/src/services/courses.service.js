@@ -235,11 +235,13 @@ function normalizeQuestion(question = {}, index = 0, includeAnswer = false) {
     points: Number.isFinite(points) && points >= 0 ? points : 1,
     position: Number(question.position || index + 1),
     feedback: question.feedback || "",
+    hint: question.hint || "",
   };
 
   if (includeAnswer) {
     normalized.correct_answer =
       question.correct_answer ?? question.answer ?? question.correct ?? "";
+    normalized.explanation = question.explanation || "";
   }
 
   return normalized;
@@ -732,6 +734,8 @@ async function submitQuiz(activityId, user = {}, data = {}) {
       correct,
       points: correct ? Number(question.points || 0) : 0,
       max_points: Number(question.points || 0),
+      hint: correct ? "" : question.hint || "",
+      explanation: question.explanation || "",
     };
   });
 
@@ -759,8 +763,10 @@ async function submitQuiz(activityId, user = {}, data = {}) {
     ],
   );
 
+  const passScore = Number(activity.pass_score ?? 0);
+  const passed = score >= passScore;
   await upsertActivityProgress(activityId, user, {
-    status: "graded",
+    status: passed ? "graded" : "in_progress",
     score,
   });
 
@@ -770,6 +776,8 @@ async function submitQuiz(activityId, user = {}, data = {}) {
     earned_points: earned,
     total_points: total,
     feedback,
+    passed,
+    pass_score: passScore,
   };
 }
 

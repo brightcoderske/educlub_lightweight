@@ -106,20 +106,42 @@ const activity = (title, type, purpose, content, options = {}) => ({
 });
 
 function questionsFor(mission, week) {
+  const choicePrompts = [
+    "Which item is a web browser?",
+    "Which heading order gives a page the clearest structure?",
+    "Which alternative text best describes an image?",
+    "Which color combination is easiest to read?",
+    "Which CSS property adds space inside a border?",
+    "Which navigation label is clearest for visitors?",
+    "Which peer-feedback comment is kind and useful?",
+    "What should happen before a website is published?",
+  ];
+  const fillPrompts = [
+    "A collection of connected web pages is a ____.",
+    "Complete this paragraph element: <p>Hello ____",
+    "The ____ attribute describes an image for people who cannot see it.",
+    "Complete the CSS declaration: ____: blue;",
+    "The space outside an element's border is called ____.",
+    "Complete this link to the second page: href=\"____\".",
+    "Every meaningful image should have an ____ description.",
+    "Making a website available through a web address is called ____.",
+  ];
   return [
-    { id: `w${week}-choice`, question_type: "multiple_choice", prompt: `Choose the best answer for ${mission.reading}.`, options: mission.choice, correct_answer: mission.choiceAnswer, points: 1, hint: "Think back to the example in the reading.", explanation: `${mission.choiceAnswer} is the best answer.` },
+    { id: `w${week}-choice`, question_type: "multiple_choice", prompt: choicePrompts[week - 1], options: mission.choice, correct_answer: mission.choiceAnswer, points: 1, hint: "Think back to the example in the reading.", explanation: `${mission.choiceAnswer} is the best answer.` },
     { id: `w${week}-match`, question_type: "matching", prompt: "Match each term to its job.", options: mission.concepts.map(([left, right]) => ({ left, right })), correct_answer: Object.fromEntries(mission.concepts), points: 4, hint: "Say each term and its job aloud.", explanation: "Each web term has a specific job." },
-    { id: `w${week}-fill`, question_type: "short_answer", prompt: "Fill in the missing word.", options: [], correct_answer: mission.fill, points: 1, hint: `The answer begins with ${mission.fill[0].toUpperCase()}.`, explanation: `The missing answer is ${mission.fill}.` },
+    { id: `w${week}-fill`, question_type: "short_answer", prompt: fillPrompts[week - 1], options: [], correct_answer: mission.fill, points: 1, hint: `The answer begins with ${mission.fill[0].toUpperCase()}.`, explanation: `The missing answer is ${mission.fill}.` },
     { id: `w${week}-order`, question_type: "ordering", prompt: "Arrange these steps in the correct order.", options: [...mission.order].reverse(), correct_answer: mission.order, points: mission.order.length, hint: "Find what must happen first, then work forward.", explanation: `The correct order is: ${mission.order.join(" -> ")}.` },
   ];
 }
 
 function activitiesFor(mission, week) {
-  const media = { image_url: "", image_alt: mission.imageAlt, video_url: "", video_title: mission.video, transcript: mission.summary };
+  const readingBody = `${mission.summary}\n\nLook at websites you already know. Notice how the content is arranged and how each part helps a visitor. In this mission, you will learn the real web-development words, try a small example, and use the idea in your own website.\n\nRemember: work one small step at a time, preview your changes, and never publish private information.`;
+  const transcript = `${mission.video}. ${mission.summary} The demonstration shows the idea one step at a time. Pause after each step, find the matching code in the editor, and check the live preview. If the video is unavailable, this transcript and the guided practice contain everything needed for the mission.`;
+  const media = { image_url: "", image_alt: mission.imageAlt, video_url: "", video_title: mission.video, transcript };
   const badge = { name: mission.badge, image_url: "" };
   return [
     activity(`${mission.title}: Welcome`, "lesson", "welcome", { description: mission.summary, module_badge: badge, guided_topics: ["About Me", "A hobby", "A favorite animal", "A school club", "A local hero"] }),
-    activity(`Discover: ${mission.reading}`, "lesson", "reading", { body: mission.summary, media, vocabulary: mission.concepts.map(([term, meaning]) => ({ term, meaning })) }),
+    activity(`Discover: ${mission.reading}`, "lesson", "reading", { body: readingBody, media, vocabulary: mission.concepts.map(([term, meaning]) => ({ term, meaning })) }),
     activity(`Watch: ${mission.video}`, "lesson", "video", { description: mission.video, media }),
     activity("Talk: Class Discussion", "discussion", "discussion", { discussion_prompt: mission.discussion, moderation_notes: "Use kind, safe, topic-focused replies." }, { completion_rule: "submitted" }),
     activity("Try It: Guided Practice", "coding", "guided_practice", { description: mission.practice, starter_html: mission.starterHtml, starter_css: mission.starterCss, language: week === 8 ? "html_css_js" : "html_css", friendly_hints: ["Read one instruction at a time.", "Preview after each small change."] }, { completion_rule: "submitted" }),
