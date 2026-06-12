@@ -135,9 +135,102 @@ function validateWebDevelopment1(definition) {
   }
 }
 
+function validateScratchIntermediate(definition) {
+  const requiredPurposes = [
+    "overview", "visual_learning", "algorithm", "guided_practice",
+    "main_project", "challenge", "quiz", "reflection",
+  ];
+  const requiredTypes = [
+    "lesson", "lesson", "coding", "coding",
+    "project", "assignment", "quiz", "reflection",
+  ];
+
+  if (definition.estimated_weeks !== 10) {
+    throw new Error("Scratch Intermediate must contain ten estimated weeks.");
+  }
+  if (definition.settings?.mastery_score !== 80) {
+    throw new Error("Scratch Intermediate mastery score must be 80.");
+  }
+  if (definition.modules.length !== 10) {
+    throw new Error("Scratch Intermediate must contain ten modules.");
+  }
+
+  for (const module of definition.modules) {
+    if (!Array.isArray(module.learning_objectives) || module.learning_objectives.length < 4) {
+      throw new Error(`${module.title} needs at least four learning objectives.`);
+    }
+    if (!module.teacher_notes?.trim()) {
+      throw new Error(`${module.title} needs teacher notes.`);
+    }
+    if (module.activities.length !== 8) {
+      throw new Error(`${module.title} must contain eight activities.`);
+    }
+    if (JSON.stringify(module.activities.map((item) => item.content?.purpose)) !== JSON.stringify(requiredPurposes)) {
+      throw new Error(`${module.title} activities must follow the Scratch purpose order.`);
+    }
+    if (JSON.stringify(module.activities.map((item) => item.activity_type)) !== JSON.stringify(requiredTypes)) {
+      throw new Error(`${module.title} activities must use the required Scratch activity types.`);
+    }
+
+    const [overview, visual, algorithm, practice, project, challenge, quiz, reflection] = module.activities;
+    for (const item of [visual, algorithm]) {
+      const media = item.content?.media || {};
+      if (!media.image_url?.startsWith("/course-assets/scratch-intermediate/") || !media.image_alt?.trim()) {
+        throw new Error(`${item.title} needs an accessible Scratch Intermediate visual.`);
+      }
+    }
+    if (!Array.isArray(algorithm.content?.algorithm_steps) || algorithm.content.algorithm_steps.length < 5) {
+      throw new Error(`${algorithm.title} needs at least five algorithm steps.`);
+    }
+    if (!practice.content?.description?.trim()) {
+      throw new Error(`${practice.title} needs guided practice instructions.`);
+    }
+    if (!project.is_required || !Array.isArray(project.content?.success_checks) || project.content.success_checks.length < 4) {
+      throw new Error(`${project.title} must be a required project with success checks.`);
+    }
+    if (challenge.is_required) {
+      throw new Error(`${challenge.title} must be optional.`);
+    }
+    const quizQuestions = quiz.content?.questions || [];
+    const questionIds = quizQuestions.map((question) => question.id);
+    if (new Set(questionIds).size !== questionIds.length) {
+      throw new Error(`${quiz.title} must use unique question IDs.`);
+    }
+    if (!quizQuestions.every((question) =>
+      question.options.filter((option) => option === question.correct_answer).length === 1
+    )) {
+      throw new Error(`${quiz.title} questions must include the correct answer in its options.`);
+    }
+    if (
+      Number(quiz.pass_score) !== 80 ||
+      quizQuestions.length !== 5 ||
+      !quizQuestions.every((question) =>
+        question.question_type === "multiple_choice" &&
+        question.options.length === 4 &&
+        question.hint?.trim() &&
+        question.explanation?.trim()
+      )
+    ) {
+      throw new Error(`${quiz.title} needs five supported multiple-choice questions and an 80 pass score.`);
+    }
+    for (const item of [project, reflection]) {
+      if (
+        !Array.isArray(item.content?.submission_accept) ||
+        !item.content.submission_accept.includes(".sb3") ||
+        !item.content.submission_instructions?.includes(".sb3") ||
+        !Array.isArray(item.content.submission_help) ||
+        !item.content.submission_help.length
+      ) {
+        throw new Error(`${item.title} needs .sb3 submission instructions and help.`);
+      }
+    }
+  }
+}
+
 const PROFILE_VALIDATORS = {
   generic: () => {},
   web_development_1: validateWebDevelopment1,
+  scratch_intermediate: validateScratchIntermediate,
 };
 
 function validateTemplateDefinition(input) {
@@ -158,4 +251,5 @@ module.exports = {
   validateTemplateDefinition,
   validateSharedDefinition,
   validateWebDevelopment1,
+  validateScratchIntermediate,
 };
