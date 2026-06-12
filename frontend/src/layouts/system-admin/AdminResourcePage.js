@@ -71,7 +71,15 @@ function renderCell(item, column, navigate) {
   return formatCell(value);
 }
 
-function AdminResourcePage({ title, subtitle, endpoint, columns, formFields, createLabel }) {
+function AdminResourcePage({
+  title,
+  subtitle,
+  endpoint,
+  columns,
+  formFields,
+  createLabel,
+  actions,
+}) {
   const { isSystemAdmin, loading: authLoading, user } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
@@ -202,6 +210,7 @@ function AdminResourcePage({ title, subtitle, endpoint, columns, formFields, cre
                           {column.label}
                         </TableCell>
                       ))}
+                      {actions.length > 0 && <TableCell align="center">Actions</TableCell>}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -212,6 +221,23 @@ function AdminResourcePage({ title, subtitle, endpoint, columns, formFields, cre
                             {renderCell(item, column, navigate)}
                           </TableCell>
                         ))}
+                        {actions.length > 0 && (
+                          <TableCell align="center">
+                            <MDBox display="flex" gap={1} justifyContent="center" flexWrap="wrap">
+                              {actions.map((action) => (
+                                <MDButton
+                                  key={action.label}
+                                  variant={action.variant || "outlined"}
+                                  color={action.color || "info"}
+                                  size="small"
+                                  onClick={() => navigate(action.path(item))}
+                                >
+                                  {action.label}
+                                </MDButton>
+                              ))}
+                            </MDBox>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -229,6 +255,7 @@ function AdminResourcePage({ title, subtitle, endpoint, columns, formFields, cre
 AdminResourcePage.defaultProps = {
   formFields: [],
   createLabel: "Create",
+  actions: [],
 };
 
 AdminResourcePage.propTypes = {
@@ -238,6 +265,7 @@ AdminResourcePage.propTypes = {
   columns: PropTypes.arrayOf(PropTypes.object).isRequired,
   formFields: PropTypes.arrayOf(PropTypes.object),
   createLabel: PropTypes.string,
+  actions: PropTypes.arrayOf(PropTypes.object),
 };
 
 export default AdminResourcePage;

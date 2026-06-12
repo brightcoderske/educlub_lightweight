@@ -13,6 +13,7 @@ import SystemAdminLearners from "layouts/system-admin/learners";
 import SystemAdminSchoolAdmins from "layouts/system-admin/school-admins";
 import SystemAdminCourses from "layouts/system-admin/courses";
 import CourseBuilder from "layouts/course-builder";
+import CourseReviews from "layouts/course-reviews";
 import SystemAdminAcademic from "layouts/system-admin/academic";
 import SystemAdminCompetitions from "layouts/system-admin/competitions";
 import SystemAdminReports from "layouts/system-admin/reports";
@@ -206,6 +207,16 @@ const routes = [
     icon: <Icon fontSize="small">construction</Icon>,
     route: "/system-admin/courses/:templateId/builder",
     component: <CourseBuilder />,
+    roles: ["system_admin"],
+    hidden: true,
+  },
+  {
+    type: "collapse",
+    name: "Course Reviews",
+    key: "system-admin-course-reviews",
+    icon: <Icon fontSize="small">reviews</Icon>,
+    route: "/system-admin/courses/:templateId/reviews",
+    component: <CourseReviews />,
     roles: ["system_admin"],
     hidden: true,
   },
@@ -452,6 +463,16 @@ const routes = [
     icon: <Icon fontSize="small">construction</Icon>,
     route: "/school-admin/courses/:courseId/builder",
     component: <CourseBuilder />,
+    roles: ["school_admin", "teacher"],
+    hidden: true,
+  },
+  {
+    type: "collapse",
+    name: "Course Reviews",
+    key: "school-admin-course-reviews",
+    icon: <Icon fontSize="small">reviews</Icon>,
+    route: "/school-admin/courses/:courseId/reviews",
+    component: <CourseReviews />,
     roles: ["school_admin", "teacher"],
     hidden: true,
   },

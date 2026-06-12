@@ -473,6 +473,34 @@ async function getModuleFeedbackSummary(req, res) {
   }
 }
 
+async function getTemplateFeedbackReport(req, res) {
+  try {
+    res.json(
+      await coursesService.getTemplateFeedbackReport(
+        req.params.templateId,
+        req.user,
+        req.query,
+      ),
+    );
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to load course reviews" });
+  }
+}
+
+async function getCourseFeedbackReport(req, res) {
+  try {
+    res.json(
+      await coursesService.getCourseFeedbackReport(
+        req.params.courseId,
+        req.user,
+        req.query,
+      ),
+    );
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to load course reviews" });
+  }
+}
+
 async function revealModuleFeedbackIdentity(req, res) {
   try {
     res.json(
@@ -518,5 +546,7 @@ module.exports = {
   getLearnerBadges,
   submitModuleFeedback,
   getModuleFeedbackSummary,
+  getTemplateFeedbackReport,
+  getCourseFeedbackReport,
   revealModuleFeedbackIdentity,
 };

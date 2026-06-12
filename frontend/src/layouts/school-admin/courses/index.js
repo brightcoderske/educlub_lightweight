@@ -317,6 +317,16 @@ function Courses() {
                                 >
                                   Review Work
                                 </MDButton>
+                                <MDButton
+                                  variant="outlined"
+                                  color="dark"
+                                  size="small"
+                                  onClick={() =>
+                                    navigate(`/school-admin/courses/${course.id}/reviews`)
+                                  }
+                                >
+                                  Reviews
+                                </MDButton>
                               </MDBox>
                             </TableCell>
                           </TableRow>

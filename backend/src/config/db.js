@@ -1,5 +1,6 @@
 const { Pool } = require("pg");
 const { AsyncLocalStorage } = require("async_hooks");
+const { attachPoolErrorHandler } = require("./poolErrors");
 
 const requestContext = new AsyncLocalStorage();
 
@@ -26,6 +27,8 @@ const pool = new Pool({
       ? { rejectUnauthorized: false }
       : false,
 });
+
+attachPoolErrorHandler(pool);
 
 function runWithDbContext(context, callback) {
   return requestContext.run(context, callback);

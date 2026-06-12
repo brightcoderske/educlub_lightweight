@@ -20,6 +20,13 @@ function SystemAdminCourses() {
         { key: "version", label: "Version" },
         { key: "is_active", label: "Active" },
       ]}
+      actions={[
+        {
+          label: "Reviews",
+          color: "dark",
+          path: (course) => `/system-admin/courses/${course.id}/reviews`,
+        },
+      ]}
       formFields={[
         { name: "name", label: "Course title" },
         { name: "code", label: "Course code" },

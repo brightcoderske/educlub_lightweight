@@ -1601,6 +1601,15 @@ async function getModuleFeedbackSummary(moduleId, user = {}) {
   return moduleFeedbackService.getModuleFeedbackSummary(moduleId, user);
 }
 
+async function getTemplateFeedbackReport(templateId, user = {}, filters = {}) {
+  return moduleFeedbackService.getTemplateFeedbackReport(templateId, user, filters);
+}
+
+async function getCourseFeedbackReport(courseId, user = {}, filters = {}) {
+  if (!isStaff(user)) throw new Error("Staff access is required.");
+  return moduleFeedbackService.getCourseFeedbackReport(courseId, user, filters);
+}
+
 async function revealModuleFeedbackIdentity(feedbackId, user = {}, data = {}) {
   return moduleFeedbackService.revealFeedbackIdentity(feedbackId, user, data.reason);
 }
@@ -1635,6 +1644,8 @@ module.exports = {
   getLearnerBadges,
   submitModuleFeedback,
   getModuleFeedbackSummary,
+  getTemplateFeedbackReport,
+  getCourseFeedbackReport,
   revealModuleFeedbackIdentity,
   syncSchoolCourse: courseTemplatesService.syncSchoolCourse,
   rollbackSchoolCourse: courseTemplatesService.rollbackSchoolCourse,

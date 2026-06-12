@@ -42,6 +42,18 @@ router.get(
   canManageCourse,
   coursesController.getModuleFeedbackSummary,
 );
+router.get(
+  "/templates/:templateId/feedback-report",
+  authenticateToken,
+  isSystemAdmin,
+  coursesController.getTemplateFeedbackReport,
+);
+router.get(
+  "/:courseId/feedback-report",
+  authenticateToken,
+  canManageCourse,
+  coursesController.getCourseFeedbackReport,
+);
 router.post(
   "/feedback/:feedbackId/reveal",
   authenticateToken,
