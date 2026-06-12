@@ -1,6 +1,12 @@
 require("dotenv").config();
 const { validateProductionEnv } = require("./validateProductionEnv");
 
+const emailPort = parseInt(process.env.EMAIL_PORT, 10);
+const emailSecure =
+  process.env.EMAIL_SECURE === undefined
+    ? emailPort === 465
+    : process.env.EMAIL_SECURE === "true";
+
 const requiredEnvVars = [
   "DATABASE_URL",
   "JWT_SECRET",
@@ -50,10 +56,13 @@ module.exports = {
     process.env.FLUTTERWAVE_BASE_URL || "https://api.flutterwave.com/v3",
   // Email configuration for MFA (required)
   emailHost: process.env.EMAIL_HOST,
-  emailPort: parseInt(process.env.EMAIL_PORT),
+  emailPort,
+  emailSecure,
   emailUser: process.env.EMAIL_USER,
   emailPassword: process.env.EMAIL_PASSWORD,
-  emailFrom: process.env.EMAIL_FROM || "noreply@educlub.com",
+  emailFrom:
+    process.env.EMAIL_FROM || `eduClub <${process.env.EMAIL_USER}>`,
+  emailReplyTo: process.env.EMAIL_REPLY_TO || "support@educlub.co.ke",
   // Default passwords (required for initial setup)
   defaultAdminPassword: process.env.DEFAULT_ADMIN_PASSWORD,
   defaultSchoolAdminPassword: process.env.DEFAULT_SCHOOL_ADMIN_PASSWORD,
