@@ -26,13 +26,20 @@ fi
 
 mkdir -p "$BACKUP_DIR"
 cp -a "$APP_ROOT/src" "$BACKUP_DIR/src"
+if [[ -d "$APP_ROOT/scripts" ]]; then
+  cp -a "$APP_ROOT/scripts" "$BACKUP_DIR/scripts"
+fi
 cp -a "$APP_ROOT/package.json" "$BACKUP_DIR/package.json"
 cp -a "$APP_ROOT/package-lock.json" "$BACKUP_DIR/package-lock.json"
 
 rollback() {
   echo "Deployment failed; restoring $BACKUP_DIR." >&2
   rm -rf "$APP_ROOT/src"
+  rm -rf "$APP_ROOT/scripts"
   cp -a "$BACKUP_DIR/src" "$APP_ROOT/src"
+  if [[ -d "$BACKUP_DIR/scripts" ]]; then
+    cp -a "$BACKUP_DIR/scripts" "$APP_ROOT/scripts"
+  fi
   cp -a "$BACKUP_DIR/package.json" "$APP_ROOT/package.json"
   cp -a "$BACKUP_DIR/package-lock.json" "$APP_ROOT/package-lock.json"
 
@@ -48,8 +55,9 @@ rollback() {
 
 trap rollback ERR
 
-rm -rf "$APP_ROOT/src"
+rm -rf "$APP_ROOT/src" "$APP_ROOT/scripts"
 cp -a "$SOURCE_ROOT/backend/src" "$APP_ROOT/src"
+cp -a "$SOURCE_ROOT/backend/scripts" "$APP_ROOT/scripts"
 cp -a "$SOURCE_ROOT/backend/package.json" "$APP_ROOT/package.json"
 cp -a "$SOURCE_ROOT/backend/package-lock.json" "$APP_ROOT/package-lock.json"
 
