@@ -25,6 +25,11 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { apiClient } from "lib/api";
 import { activityToStructuredForm, structuredFormContent } from "./activityForm";
+import DisplayCodeDialog from "./dialogs/DisplayCodeDialog";
+import EarlyUnlockDialog from "./dialogs/EarlyUnlockDialog";
+import ExecutableCodeDialog from "./dialogs/ExecutableCodeDialog";
+import ResourceDialog from "./dialogs/ResourceDialog";
+import { executableSourceFromPayload } from "./dialogs/authoringUtils";
 
 const activityTypes = [
   "lesson",
@@ -204,11 +209,29 @@ function activityToManagerForm(activity) {
 function RichContentEditor({ value, onChange, onImageUpload }) {
   const editorRef = useRef(null);
   const imageInputRef = useRef(null);
+  const savedRangeRef = useRef(null);
   const [colorAnchor, setColorAnchor] = useState(null);
   const [orderedAnchor, setOrderedAnchor] = useState(null);
   const [unorderedAnchor, setUnorderedAnchor] = useState(null);
   const [tableAnchor, setTableAnchor] = useState(null);
   const [selectedObject, setSelectedObject] = useState(null);
+  const [editorError, setEditorError] = useState("");
+  const [resourceDialog, setResourceDialog] = useState({
+    open: false,
+    type: "link",
+    target: null,
+    values: null,
+  });
+  const [executableDialog, setExecutableDialog] = useState({
+    open: false,
+    target: null,
+    values: null,
+  });
+  const [displayCodeDialog, setDisplayCodeDialog] = useState({
+    open: false,
+    target: null,
+    values: null,
+  });
 
   const serializeEditor = () => {
     if (!editorRef.current) return "";
@@ -232,13 +255,49 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     onChange(serializeEditor());
   };
 
+  const rememberSelection = () => {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !editorRef.current) return;
+    const range = selection.getRangeAt(0);
+    const container =
+      range.commonAncestorContainer.nodeType === Node.TEXT_NODE
+        ? range.commonAncestorContainer.parentElement
+        : range.commonAncestorContainer;
+    if (container && editorRef.current.contains(container)) {
+      savedRangeRef.current = range.cloneRange();
+    }
+  };
+
+  const restoreSelection = () => {
+    if (!savedRangeRef.current) return;
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(savedRangeRef.current);
+  };
+
   const runCommand = (command, commandValue = null) => {
     editorRef.current?.focus();
+    restoreSelection();
     document.execCommand(command, false, commandValue);
+    rememberSelection();
     emitChange();
   };
 
   const insertHtml = (html) => runCommand("insertHTML", html);
+
+  const insertOrReplaceHtml = (html, target = null) => {
+    if (target?.isConnected) {
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      const replacement = container.firstElementChild;
+      if (!replacement) return;
+      target.replaceWith(replacement);
+      setSelectedObject(null);
+      emitChange();
+      return;
+    }
+    insertHtml(html);
+  };
 
   const insertTable = () => {
     runCommand(
@@ -313,14 +372,16 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     emitChange();
   };
 
-  const insertLink = () => {
-    const url = window.prompt("Paste the link URL");
-    if (url) runCommand("createLink", url);
-  };
-
-  const insertImageLink = () => {
-    const url = window.prompt("Paste the image URL");
-    if (url) insertHtml(`<img src="${url}" alt="" style="max-width:70%;height:auto" />`);
+  const openResourceDialog = (type, target = null) => {
+    rememberSelection();
+    const values = target
+      ? {
+          url: target.getAttribute(type === "image" ? "src" : "href") || "",
+          label: target.textContent || "",
+          alt: target.getAttribute("alt") || "",
+        }
+      : null;
+    setResourceDialog({ open: true, type, target, values });
   };
 
   const uploadImage = async (event) => {
@@ -328,17 +389,24 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     event.target.value = "";
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      window.alert("Image uploads are capped at 2MB.");
+      setEditorError("Image uploads are capped at 2MB.");
       return;
     }
-    const url = await onImageUpload(file);
-    insertHtml(
-      `<img src="${url}" alt="${file.name}" style="max-width:70%;height:auto;cursor:pointer" />`
-    );
+    setEditorError("");
+    try {
+      const url = await onImageUpload(file);
+      insertHtml(
+        `<img src="${url}" alt="${file.name}" style="max-width:70%;height:auto;cursor:pointer" />`
+      );
+    } catch (error) {
+      setEditorError(error.message || "Could not upload the image.");
+    }
   };
 
   const selectEditorObject = (event) => {
-    const object = event.target.closest?.("img,table,td,th,pre,a,[data-executable-code]");
+    const object =
+      event.target.closest?.("[data-executable-code]") ||
+      event.target.closest?.("img,table,td,th,pre,a");
     if (selectedObject && selectedObject !== object) {
       selectedObject.style.outline = "";
       selectedObject.style.outlineOffset = "";
@@ -383,25 +451,33 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     emitChange();
   };
 
-  const insertEmbed = () => {
-    const url = window.prompt("Paste a video or resource URL");
-    if (!url) return;
-    insertHtml(
-      `<p><a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;text-decoration:none">Open video/resource</a></p>`
-    );
+  const openExecutableDialog = (target = null) => {
+    rememberSelection();
+    setExecutableDialog({
+      open: true,
+      target,
+      values: target
+        ? {
+            title: target.dataset.codeTitle || target.querySelector("strong")?.textContent || "",
+            source: executableSourceFromPayload(target.dataset.executableCode),
+          }
+        : null,
+    });
   };
 
-  const insertExecutableCode = () => {
-    const html = window.prompt("HTML to run", "<h2>Hello learner</h2>") || "";
-    const css = window.prompt("Optional CSS", "h2 { color: teal; }") || "";
-    const js = window.prompt("Optional JavaScript", "") || "";
-    const payload = encodeURIComponent(JSON.stringify({ html, css, js }));
-    insertHtml(
-      `<div data-executable-code="${payload}" contenteditable="false" style="border:1px solid #cbd5e1;padding:12px;border-radius:8px;background:#f8fafc"><strong>Executable HTML/CSS/JavaScript</strong><pre style="background:#111827;color:#e5e7eb;padding:10px;border-radius:6px;overflow:auto">${html.replace(
-        /</g,
-        "&lt;"
-      )}</pre><span style="color:#475569">Learners select Run to reveal the output.</span></div><p><br></p>`
-    );
+  const openDisplayCodeDialog = (target = null) => {
+    rememberSelection();
+    setDisplayCodeDialog({
+      open: true,
+      target,
+      values: target
+        ? {
+            title: target.dataset.codeTitle || "",
+            language: target.dataset.codeLanguage || "text",
+            code: target.querySelector("code")?.textContent || target.textContent || "",
+          }
+        : null,
+    });
   };
 
   return (
@@ -412,6 +488,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         flexWrap="wrap"
         mb={1}
         py={0.5}
+        onMouseDown={rememberSelection}
         sx={{ position: "sticky", top: 0, zIndex: 2, bgcolor: "#ffffff" }}
       >
         {[
@@ -485,13 +562,13 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         <IconButton onClick={(event) => setTableAnchor(event.currentTarget)}>
           <Icon>table_chart</Icon>
         </IconButton>
-        <IconButton onClick={insertLink}>
+        <IconButton title="Insert link" onClick={() => openResourceDialog("link")}>
           <Icon>link</Icon>
         </IconButton>
-        <IconButton onClick={insertImageLink}>
+        <IconButton title="Insert online image" onClick={() => openResourceDialog("image")}>
           <Icon>image</Icon>
         </IconButton>
-        <IconButton onClick={() => imageInputRef.current?.click()}>
+        <IconButton title="Upload image" onClick={() => imageInputRef.current?.click()}>
           <Icon>upload</Icon>
         </IconButton>
         <IconButton
@@ -503,19 +580,16 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         >
           <Icon>code</Icon>
         </IconButton>
-        <IconButton
-          onClick={() =>
-            insertHtml(
-              "<pre style='background:#111827;color:#e5e7eb;padding:12px;border-radius:8px;overflow:auto'><code>Code block</code></pre>"
-            )
-          }
-        >
+        <IconButton title="Insert code example" onClick={() => openDisplayCodeDialog()}>
           <Icon>data_object</Icon>
         </IconButton>
-        <IconButton title="Insert executable code" onClick={insertExecutableCode}>
+        <IconButton title="Insert executable code" onClick={() => openExecutableDialog()}>
           <Icon>play_circle</Icon>
         </IconButton>
-        <IconButton onClick={insertEmbed}>
+        <IconButton
+          title="Insert video or external resource"
+          onClick={() => openResourceDialog("resource")}
+        >
           <Icon>smart_display</Icon>
         </IconButton>
       </MDBox>
@@ -639,10 +713,51 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
               </MDButton>
             </>
           )}
+          {selectedObject.matches("[data-executable-code]") && (
+            <MDButton
+              size="small"
+              color="info"
+              onClick={() => openExecutableDialog(selectedObject)}
+            >
+              Edit Code
+            </MDButton>
+          )}
+          {selectedObject.matches("pre") && !selectedObject.matches("[data-executable-code]") && (
+            <MDButton
+              size="small"
+              color="info"
+              onClick={() => openDisplayCodeDialog(selectedObject)}
+            >
+              Edit Code
+            </MDButton>
+          )}
+          {selectedObject.matches("a") && (
+            <MDButton
+              size="small"
+              color="info"
+              onClick={() => openResourceDialog("link", selectedObject)}
+            >
+              Edit Link
+            </MDButton>
+          )}
+          {selectedObject.matches("img") && (
+            <MDButton
+              size="small"
+              color="info"
+              onClick={() => openResourceDialog("image", selectedObject)}
+            >
+              Edit Image
+            </MDButton>
+          )}
           <MDButton color="error" size="small" onClick={() => updateSelectedObject("delete")}>
             <Icon>delete</Icon>&nbsp; Delete
           </MDButton>
         </MDBox>
+      )}
+      {editorError && (
+        <MDTypography color="error" variant="caption" display="block" mb={1}>
+          {editorError}
+        </MDTypography>
       )}
       <input
         ref={imageInputRef}
@@ -673,6 +788,25 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
           "& img": { maxWidth: "100%", borderRadius: "8px" },
           "& table": { maxWidth: "100%" },
         }}
+      />
+      <ResourceDialog
+        open={resourceDialog.open}
+        initialType={resourceDialog.type}
+        initialValues={resourceDialog.values}
+        onClose={() => setResourceDialog({ open: false, type: "link", target: null, values: null })}
+        onSave={(html) => insertOrReplaceHtml(html, resourceDialog.target)}
+      />
+      <ExecutableCodeDialog
+        open={executableDialog.open}
+        initialValues={executableDialog.values}
+        onClose={() => setExecutableDialog({ open: false, target: null, values: null })}
+        onSave={(html) => insertOrReplaceHtml(html, executableDialog.target)}
+      />
+      <DisplayCodeDialog
+        open={displayCodeDialog.open}
+        initialValues={displayCodeDialog.values}
+        onClose={() => setDisplayCodeDialog({ open: false, target: null, values: null })}
+        onSave={(html) => insertOrReplaceHtml(html, displayCodeDialog.target)}
       />
     </MDBox>
   );
@@ -1819,6 +1953,7 @@ function CourseBuilder() {
   const [actionTarget, setActionTarget] = useState(null);
   const [activityManagerOpen, setActivityManagerOpen] = useState(false);
   const [activityReviewOpen, setActivityReviewOpen] = useState(false);
+  const [earlyUnlockTarget, setEarlyUnlockTarget] = useState(null);
   const [activityReview, setActivityReview] = useState(null);
   const [activityReviewLoading, setActivityReviewLoading] = useState(false);
   const [activityReviewSaving, setActivityReviewSaving] = useState(false);
@@ -2080,59 +2215,16 @@ function CourseBuilder() {
     }
   };
 
-  const createEarlyUnlock = async ({ module, activity = null }) => {
+  const createEarlyUnlock = ({ module, activity = null }) => {
     if (isTemplate) return;
-    const scope = window.prompt("Unlock scope: learner, learners, or class", "learner");
-    if (!scope) return;
-    const reason = window.prompt("Reason for early unlock");
-    if (!reason) return;
-    const payload = {
-      scope_type: scope,
-      module_id: module?.id,
-      activity_id: activity?.id || null,
-      reason,
-    };
-    if (scope === "learner") {
-      payload.learner_id = window.prompt("Learner ID");
-    } else if (scope === "learners") {
-      payload.learner_ids = String(window.prompt("Learner IDs separated by commas") || "")
-        .split(",")
-        .map((value) => Number(value.trim()))
-        .filter(Boolean);
-    } else {
-      payload.grade = window.prompt("Grade, leave blank for all") || "";
-      payload.stream = window.prompt("Stream, leave blank for all") || "";
-    }
-    setSaving(true);
-    try {
-      await apiClient.post(`/courses/${entityId}/availability-overrides`, payload);
-      setMessage("Early unlock saved.");
-    } catch (err) {
-      setError(err.message || "Failed to save early unlock.");
-    } finally {
-      setSaving(false);
-      closeMenus();
-    }
+    setEarlyUnlockTarget({ module, activity });
+    closeMenus();
   };
 
-  const viewModuleFeedback = async (courseModule) => {
+  const viewModuleFeedback = () => {
     if (isTemplate) return;
-    try {
-      const summary = await apiClient.get(`/courses/modules/${courseModule.id}/feedback-summary`);
-      const comments = (summary.comments || [])
-        .slice(0, 10)
-        .map((item) => `${item.rating}/5: ${item.comment}`)
-        .join("\n");
-      window.alert(
-        `${courseModule.title}\nAverage: ${summary.average_rating || 0}/5\nResponses: ${
-          summary.response_count || 0
-        }${comments ? `\n\nAnonymous comments:\n${comments}` : ""}`
-      );
-    } catch (err) {
-      setError(err.message || "Failed to load module feedback.");
-    } finally {
-      closeMenus();
-    }
+    closeMenus();
+    navigate(`/school-admin/courses/${entityId}/reviews`);
   };
 
   const updateModulePublished = async (courseModule, isPublished) => {
@@ -3127,6 +3219,14 @@ function CourseBuilder() {
           onClose={() => setActivityManagerOpen(false)}
           onImageUpload={uploadActivityImage}
           onSave={saveManagedActivity}
+        />
+        <EarlyUnlockDialog
+          open={Boolean(earlyUnlockTarget)}
+          courseId={entityId}
+          courseModule={earlyUnlockTarget?.module}
+          activity={earlyUnlockTarget?.activity}
+          onClose={() => setEarlyUnlockTarget(null)}
+          onSaved={() => setMessage("Early unlock saved.")}
         />
         <ActivityReviewDialog
           gradeForms={gradeForms}

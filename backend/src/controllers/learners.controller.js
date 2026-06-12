@@ -3,6 +3,7 @@ const learnersService = require("../services/learners.service");
 const notificationsService = require("../services/notifications.service");
 const env = require("../config/env");
 const authService = require("../services/auth.service");
+const { resolveLearnerSchoolScope } = require("../services/learnerScope");
 const { generateRandomPassword, hashPassword } = require("../utils/password");
 
 function canManageLearner(user, learner) {
@@ -30,18 +31,15 @@ async function getAllLearners(req, res) {
     `;
     const params = [];
     let paramIndex = 1;
+    const scopedSchoolId = resolveLearnerSchoolScope(req.user, school_id);
 
-    if (req.user.role === "school_admin") {
+    if (scopedSchoolId) {
       queryText += ` AND l.school_id = $${paramIndex}`;
-      params.push(req.user.schoolId);
+      params.push(scopedSchoolId);
       paramIndex++;
     } else if (req.user.role === "learner") {
       queryText += ` AND l.user_id = $${paramIndex}`;
       params.push(req.user.userId);
-      paramIndex++;
-    } else if (school_id) {
-      queryText += ` AND l.school_id = $${paramIndex}`;
-      params.push(school_id);
       paramIndex++;
     }
 
