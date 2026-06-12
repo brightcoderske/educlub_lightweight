@@ -31,5 +31,6 @@ uploads/school-logos/*
 !uploads/school-logos/.gitkeep
 .aider*
 .cursor
+.worktrees/
 backend\.env
 .env.example
