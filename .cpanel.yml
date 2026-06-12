@@ -1,4 +1,5 @@
 ---
 deployment:
   tasks:
+    - /usr/bin/git --git-dir=/home/codecham/domains/learn.educlub.co.ke/educlub-lightweight.git --work-tree=/home/codecham/domains/learn.educlub.co.ke/educlub-source checkout -f main
     - /bin/bash scripts/deploy-cpanel-git.sh
