@@ -67,6 +67,14 @@ function createAuthToken(user) {
 
 async function buildAuthResponse(user, extra = {}) {
   const consentRequired = !(await privacyService.hasCurrentConsent(user.id));
+  const school = user.school_id
+    ? (
+        await query(
+          "SELECT name, logo_url FROM schools WHERE id = $1 AND is_active = true",
+          [user.school_id],
+        )
+      ).rows[0]
+    : null;
 
   return {
     token: createAuthToken(user),
@@ -77,6 +85,8 @@ async function buildAuthResponse(user, extra = {}) {
       fullName: user.full_name,
       schoolId: user.school_id,
       username: user.username,
+      schoolName: school?.name || null,
+      schoolLogoUrl: school?.logo_url || null,
       forcePasswordReset: user.force_password_reset,
       consentRequired,
     },
@@ -398,7 +408,12 @@ async function verify2FA(
 
 async function getCurrentUser(userId) {
   const result = await query(
-    "SELECT id, email, role, full_name, school_id, username, force_password_reset FROM users WHERE id = $1",
+    `SELECT u.id, u.email, u.role, u.full_name, u.school_id, u.username,
+            u.force_password_reset, s.name AS school_name,
+            s.logo_url AS school_logo_url
+     FROM users u
+     LEFT JOIN schools s ON s.id = u.school_id
+     WHERE u.id = $1`,
     [userId]
   );
   const user = result.rows[0];

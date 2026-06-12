@@ -186,8 +186,10 @@ export const AuthProvider = ({ children }) => {
         navigate("/system-admin");
         break;
       case "school_admin":
-      case "teacher":
         navigate("/school-admin");
+        break;
+      case "teacher":
+        navigate("/teacher");
         break;
       case "learner":
         navigate("/learner");
@@ -237,6 +239,7 @@ export const AuthProvider = ({ children }) => {
 
   const isSystemAdmin = () => user?.role === "system_admin";
   const isSchoolAdmin = () => user?.role === "school_admin" || user?.role === "teacher";
+  const isTeacher = () => user?.role === "teacher";
   const isLearner = () => user?.role === "learner";
 
   const value = {
@@ -250,6 +253,7 @@ export const AuthProvider = ({ children }) => {
     hasPermission,
     isSystemAdmin,
     isSchoolAdmin,
+    isTeacher,
     isLearner,
   };
 

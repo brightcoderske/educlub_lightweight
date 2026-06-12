@@ -3,10 +3,13 @@ const env = require("../config/env");
 const authService = require("../services/auth.service");
 const { generateRandomPassword, hashPassword } = require("../utils/password");
 const { sendWelcomeEmail } = require("../utils/email");
+const {
+  resolveStaffAccountInput,
+} = require("../services/staffAccounts.service");
 
 async function getUsers(req, res) {
   try {
-    const { role, school_id } = req.query;
+    const { role } = req.query;
     let queryText = `
       SELECT u.id, u.email, u.full_name, u.role, u.school_id, u.username,
              u.force_password_reset, u.is_active, s.name as school_name
@@ -23,10 +26,16 @@ async function getUsers(req, res) {
       paramIndex++;
     }
 
-    if (school_id) {
+    const requestedSchoolId =
+      req.user.role === "school_admin" ? req.user.schoolId : req.query.school_id;
+    if (requestedSchoolId) {
       queryText += ` AND u.school_id = $${paramIndex}`;
-      params.push(school_id);
+      params.push(requestedSchoolId);
       paramIndex++;
+    }
+
+    if (req.user.role === "school_admin") {
+      queryText += " AND u.role = 'teacher'";
     }
 
     queryText += " ORDER BY u.full_name";
@@ -40,14 +49,14 @@ async function getUsers(req, res) {
 }
 
 async function createSchoolAdmin(req, res) {
-  try {
-    const { school_id, full_name, email, phone, is_primary } = req.body;
+  req.body.role = "school_admin";
+  return createStaffAccount(req, res);
+}
 
-    if (!school_id || !full_name || !email) {
-      return res
-        .status(400)
-        .json({ error: "School, full name, and email are required" });
-    }
+async function createStaffAccount(req, res) {
+  try {
+    const staff = resolveStaffAccountInput(req.user, req.body);
+    const { phone, is_primary } = req.body;
 
     const password = env.defaultSchoolAdminPassword;
     const hashedPassword = await hashPassword(password);
@@ -63,31 +72,48 @@ async function createSchoolAdmin(req, res) {
          force_password_reset,
          is_active
        )
-       VALUES ($1, $2, $3, 'school_admin', $4, $5, true, true)
+       VALUES ($1, $2, $3, $4, $5, $6, true, true)
        RETURNING id, email, full_name, role, school_id, username, force_password_reset, is_active`,
-      [email, hashedPassword, full_name, school_id, email.toLowerCase()],
+      [
+        staff.email,
+        hashedPassword,
+        staff.fullName,
+        staff.role,
+        staff.schoolId,
+        staff.username,
+      ],
     );
 
     const user = userResult.rows[0];
 
-    await query(
-      `INSERT INTO school_admins (user_id, school_id, is_primary)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, school_id) DO UPDATE SET is_primary = EXCLUDED.is_primary`,
-      [user.id, school_id, Boolean(is_primary)],
-    );
+    if (staff.role === "school_admin") {
+      await query(
+        `INSERT INTO school_admins (user_id, school_id, is_primary)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, school_id) DO UPDATE SET is_primary = EXCLUDED.is_primary`,
+        [user.id, staff.schoolId, Boolean(is_primary)],
+      );
+    }
 
-    await sendWelcomeEmail(email, full_name, email, password);
+    await sendWelcomeEmail(
+      staff.email,
+      staff.fullName,
+      staff.username,
+      password,
+    );
 
     res.status(201).json({ ...user, phone });
   } catch (error) {
-    console.error("Create school admin error:", error);
+    console.error("Create staff account error:", error);
     if (error.code === "23505") {
       return res
         .status(409)
         .json({ error: "A user with this email already exists" });
     }
-    res.status(500).json({ error: "Failed to create school admin" });
+    const status = /required|teachers only|cannot create/i.test(error.message)
+      ? 400
+      : 500;
+    res.status(status).json({ error: error.message || "Failed to create staff account" });
   }
 }
 
@@ -175,8 +201,12 @@ async function updateUser(req, res) {
       return res.status(404).json({ error: "User not found" });
     }
 
+    const schoolAdminCanEdit =
+      req.user.role === "school_admin" &&
+      existing.role === "teacher" &&
+      Number(existing.school_id) === Number(req.user.schoolId);
     if (
-      req.user.role !== "system_admin" ||
+      (req.user.role !== "system_admin" && !schoolAdminCanEdit) ||
       !["school_admin", "teacher", "learner"].includes(existing.role)
     ) {
       return res.status(403).json({ error: "Insufficient permissions" });
@@ -196,7 +226,9 @@ async function updateUser(req, res) {
         full_name ?? existing.full_name,
         email ?? existing.email,
         username ?? existing.username,
-        school_id ?? existing.school_id,
+        schoolAdminCanEdit
+          ? existing.school_id
+          : school_id ?? existing.school_id,
         is_active ?? existing.is_active,
         req.params.id,
       ],
@@ -208,6 +240,21 @@ async function updateUser(req, res) {
          VALUES ($1, $2, true)
          ON CONFLICT (user_id, school_id) DO UPDATE SET is_primary = EXCLUDED.is_primary`,
         [req.params.id, school_id ?? existing.school_id],
+      );
+    }
+    if (
+      existing.role === "teacher" &&
+      req.user.role === "system_admin" &&
+      school_id &&
+      Number(school_id) !== Number(existing.school_id)
+    ) {
+      await query(
+        `UPDATE course_teacher_assignments
+         SET is_active = false,
+             deallocated_at = COALESCE(deallocated_at, CURRENT_TIMESTAMP),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE teacher_user_id = $1 AND is_active = true`,
+        [existing.id],
       );
     }
 
@@ -249,6 +296,7 @@ async function deleteUser(req, res) {
 module.exports = {
   getUsers,
   createSchoolAdmin,
+  createStaffAccount,
   resetUserPasswordByEmail,
   updateUser,
   deleteUser,

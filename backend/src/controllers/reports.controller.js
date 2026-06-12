@@ -2,6 +2,7 @@ const { query } = require("../config");
 const reportsService = require("../services/reports.service");
 const academicService = require("../services/academic.service");
 const path = require("path");
+const teacherAssignmentsService = require("../services/teacherAssignments.service");
 
 async function ensureLearnerAccess(req, learnerId) {
   if (req.user.role === "system_admin") {
@@ -18,8 +19,20 @@ async function ensureLearnerAccess(req, learnerId) {
     return false;
   }
 
-  if (req.user.role === "school_admin" || req.user.role === "teacher") {
+  if (req.user.role === "school_admin") {
     return learner.school_id === req.user.schoolId;
+  }
+  if (req.user.role === "teacher") {
+    if (Number(learner.school_id) !== Number(req.user.schoolId)) return false;
+    try {
+      await teacherAssignmentsService.assertTeacherLearnerAccess(
+        req.user,
+        learnerId,
+      );
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   return learner.user_id === req.user.userId;
@@ -33,6 +46,14 @@ async function getAllReports(req, res) {
        JOIN learners l ON r.learner_id = l.id
        WHERE $1 = 'system_admin'
           OR ($1 = 'school_admin' AND l.school_id = $2)
+          OR ($1 = 'teacher' AND l.school_id = $2 AND EXISTS (
+            SELECT 1
+            FROM course_allocations ca
+            JOIN course_teacher_assignments cta ON cta.course_id = ca.course_id
+            WHERE ca.learner_id = l.id
+              AND cta.teacher_user_id = $3
+              AND cta.is_active = true
+          ))
           OR ($1 = 'learner' AND l.user_id = $3)
        ORDER BY r.created_at DESC`,
       [req.user.role, req.user.schoolId, req.user.userId]
@@ -95,6 +116,12 @@ async function getSchoolReports(req, res) {
 
 async function getCourseReports(req, res) {
   try {
+    if (req.user.role === "teacher") {
+      await teacherAssignmentsService.assertTeacherCourseAccess(
+        req.user,
+        req.params.courseId,
+      );
+    }
     const result = await query(
       `SELECT r.*, l.full_name as learner_name, c.name as course_name
        FROM reports r

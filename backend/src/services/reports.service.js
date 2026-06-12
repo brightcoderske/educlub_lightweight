@@ -853,11 +853,11 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
 
   if (reportFeedback?.comment_text) {
     const feedbackHeight = Math.max(
-      68,
+      82,
       doc.heightOfString(reportFeedback.comment_text, {
         width: 455,
         align: "left",
-      }) + 36
+      }) + 50
     );
     if (moduleY + feedbackHeight + 24 > 760) {
       drawReportFooter(doc);
@@ -879,6 +879,16 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
         width: 455,
         align: "left",
       });
+    if (reportFeedback.updated_by_name) {
+      doc
+        .fillColor("#31557d")
+        .font("Helvetica-Oblique")
+        .fontSize(7.5)
+        .text(`Feedback by ${reportFeedback.updated_by_name}`, 65, moduleY + feedbackHeight - 2, {
+          width: 455,
+          align: "right",
+        });
+    }
   }
   drawReportFooter(doc);
 

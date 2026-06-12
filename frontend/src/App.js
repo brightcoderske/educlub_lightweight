@@ -65,7 +65,8 @@ function AppContent() {
 
   const dashboardForRole = (role) => {
     if (role === "system_admin") return "/system-admin";
-    if (role === "school_admin" || role === "teacher") return "/school-admin";
+    if (role === "school_admin") return "/school-admin";
+    if (role === "teacher") return "/teacher";
     if (role === "learner") return "/learner";
     return "/authentication/sign-in";
   };
@@ -129,7 +130,12 @@ function AppContent() {
   return (
     <>
       {showSidenav && (
-        <Sidenav color="info" brand={eduClubLogo} brandName="eduClub LMS" routes={sidenavRoutes} />
+        <Sidenav
+          color="info"
+          brand={user?.schoolLogoUrl || eduClubLogo}
+          brandName={user?.schoolName || "eduClub LMS"}
+          routes={sidenavRoutes}
+        />
       )}
       <IdleTimeoutGuard active={Boolean(user)} onTimeout={logout} />
       <Routes>

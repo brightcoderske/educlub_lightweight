@@ -164,7 +164,20 @@ function adminSchoolFilter(user, params) {
   }
 
   params.push(user.schoolId || null);
-  return `WHERE ft.school_id = $${params.length}`;
+  const schoolParam = params.length;
+  if (user.role === "teacher") {
+    params.push(user.userId);
+    return `WHERE ft.school_id = $${schoolParam}
+      AND EXISTS (
+        SELECT 1
+        FROM course_allocations ca
+        JOIN course_teacher_assignments cta ON cta.course_id = ca.course_id
+        WHERE ca.learner_id = ft.learner_id
+          AND cta.teacher_user_id = $${params.length}
+          AND cta.is_active = true
+      )`;
+  }
+  return `WHERE ft.school_id = $${schoolParam}`;
 }
 
 async function listThreads(user) {
@@ -206,8 +219,22 @@ async function listThreads(user) {
 
 async function getThreadForAdmin(user, threadId) {
   const params = [threadId];
-  const schoolFilter =
-    user.role === "system_admin" ? "" : `AND ft.school_id = $${params.push(user.schoolId || null)}`;
+  let schoolFilter = "";
+  if (user.role !== "system_admin") {
+    params.push(user.schoolId || null);
+    schoolFilter = `AND ft.school_id = $${params.length}`;
+    if (user.role === "teacher") {
+      params.push(user.userId);
+      schoolFilter += ` AND EXISTS (
+        SELECT 1
+        FROM course_allocations ca
+        JOIN course_teacher_assignments cta ON cta.course_id = ca.course_id
+        WHERE ca.learner_id = ft.learner_id
+          AND cta.teacher_user_id = $${params.length}
+          AND cta.is_active = true
+      )`;
+    }
+  }
   const threadResult = await query(
     `SELECT ft.*,
             l.full_name AS learner_name,

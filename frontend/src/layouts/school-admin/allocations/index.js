@@ -51,7 +51,11 @@ function SchoolAdminAllocations() {
     setError("");
     try {
       const [learnersRes, coursesRes, allocationsRes] = await Promise.all([
-        apiClient.get(`/learners?school_id=${user?.schoolId}`),
+        apiClient.get(
+          `/learners?school_id=${user?.schoolId}${
+            user?.role === "teacher" ? "&scope=allocation_picker" : ""
+          }`
+        ),
         apiClient.get("/courses?category=general"),
         apiClient.get(`/allocations?school_id=${user?.schoolId}`),
       ]);

@@ -7,7 +7,18 @@ const {
   requireRole,
 } = require("../middleware");
 
-router.get("/", authenticateToken, isSystemAdmin, usersController.getUsers);
+router.get(
+  "/",
+  authenticateToken,
+  requireRole("system_admin", "school_admin"),
+  usersController.getUsers,
+);
+router.post(
+  "/staff",
+  authenticateToken,
+  requireRole("system_admin", "school_admin"),
+  usersController.createStaffAccount,
+);
 router.post(
   "/school-admins",
   authenticateToken,
@@ -20,7 +31,12 @@ router.put(
   requireRole("system_admin", "school_admin"),
   usersController.resetUserPasswordByEmail
 );
-router.put("/:id", authenticateToken, isSystemAdmin, usersController.updateUser);
+router.put(
+  "/:id",
+  authenticateToken,
+  requireRole("system_admin", "school_admin"),
+  usersController.updateUser,
+);
 router.delete("/:id", authenticateToken, isSystemAdmin, usersController.deleteUser);
 
 module.exports = router;

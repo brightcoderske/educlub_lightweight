@@ -66,7 +66,7 @@ async function createCourse(req, res) {
 
 async function getCourseById(req, res) {
   try {
-    const course = await coursesService.getCourseById(req.params.id);
+    const course = await coursesService.getCourseById(req.params.id, req.user);
     if (!course) {
       return res.status(404).json({ error: "Course not found" });
     }

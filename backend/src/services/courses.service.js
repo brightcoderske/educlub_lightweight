@@ -15,6 +15,7 @@ const {
   evaluateSourceChecks,
 } = require("./codingChallenges.service");
 const moduleFeedbackService = require("./moduleFeedback.service");
+const teacherAssignmentsService = require("./teacherAssignments.service");
 
 function normalizeCourseCategory(category) {
   if (["general", "weekly_typing", "weekly_quiz"].includes(category)) {
@@ -37,12 +38,19 @@ async function getAllCourses(filters = {}) {
   }
 
   let scopeSql = "";
-  if (
-    filters.user?.role === "school_admin" ||
-    filters.user?.role === "teacher"
-  ) {
+  if (filters.user?.role === "school_admin") {
     params.push(filters.user.schoolId);
     scopeSql = ` AND c.school_id = $${params.length}`;
+  } else if (filters.user?.role === "teacher") {
+    params.push(filters.user.schoolId, filters.user.userId);
+    scopeSql = ` AND c.school_id = $${params.length - 1}
+      AND EXISTS (
+        SELECT 1
+        FROM course_teacher_assignments cta
+        WHERE cta.course_id = c.id
+          AND cta.teacher_user_id = $${params.length}
+          AND cta.is_active = true
+      )`;
   } else if (filters.user?.role === "learner") {
     params.push(filters.user.userId);
     scopeSql = ` AND EXISTS (
@@ -117,15 +125,9 @@ async function createCourse(courseData) {
   return result.rows[0];
 }
 
-async function getCourseById(id) {
-  const result = await query(
-    `SELECT c.*
-     FROM courses c
-     WHERE c.id = $1
-       `,
-    [id],
-  );
-  return result.rows[0];
+async function getCourseById(id, user = {}) {
+  const access = await assertCourseAccess(id, user);
+  return access.course || null;
 }
 
 async function updateCourse(id, courseData) {
@@ -209,7 +211,15 @@ async function assertCourseManageAccess(courseId, user = {}) {
     "SELECT id FROM courses WHERE id = $1 AND school_id = $2",
     [courseId, user.schoolId],
   );
-  return Boolean(result.rows[0]);
+  if (!result.rows[0]) return false;
+  if (user.role === "teacher") {
+    return teacherAssignmentsService.isTeacherAssignedToCourse(
+      user.userId,
+      courseId,
+      user.schoolId,
+    );
+  }
+  return true;
 }
 
 async function bumpSchoolCourseVersion(courseId) {
@@ -365,7 +375,7 @@ function moduleSummary(module) {
 }
 
 async function assertCourseAccess(courseId, user = {}) {
-  if (isStaff(user)) {
+  if (user.role === "system_admin") {
     const result = await query(
       `SELECT c.*,
               t.version AS current_template_version,
@@ -377,6 +387,24 @@ async function assertCourseAccess(courseId, user = {}) {
        LEFT JOIN course_templates t ON t.id = c.template_id
        WHERE c.id = $1`,
       [courseId],
+    );
+    return { course: result.rows[0], learner: null };
+  }
+  if (isSchoolStaff(user)) {
+    if (user.role === "teacher") {
+      await teacherAssignmentsService.assertTeacherCourseAccess(user, courseId);
+    }
+    const result = await query(
+      `SELECT c.*,
+              t.version AS current_template_version,
+              (
+                c.template_id IS NOT NULL
+                AND COALESCE(c.template_version, 0) < COALESCE(t.version, 1)
+              ) AS update_available
+       FROM courses c
+       LEFT JOIN course_templates t ON t.id = c.template_id
+       WHERE c.id = $1 AND c.school_id = $2`,
+      [courseId, user.schoolId],
     );
     return { course: result.rows[0], learner: null };
   }
@@ -608,9 +636,18 @@ async function assertActivityAccess(activityId, user = {}) {
   if (!activity) return { activity: null, learner: null, staffView: false };
 
   if (isStaff(user)) {
+    const schoolAllowed =
+      isSchoolStaff(user) &&
+      Number(activity.school_id) === Number(user.schoolId);
+    const teacherAllowed =
+      user.role !== "teacher" ||
+      (await teacherAssignmentsService.isTeacherAssignedToCourse(
+        user.userId,
+        activity.course_id,
+        user.schoolId,
+      ));
     const allowed =
-      user.role === "system_admin" ||
-      (isSchoolStaff(user) && Number(activity.school_id) === Number(user.schoolId));
+      user.role === "system_admin" || (schoolAllowed && teacherAllowed);
     return { activity: allowed ? activity : null, learner: null, staffView: true };
   }
 
@@ -1598,6 +1635,15 @@ async function submitModuleFeedback(moduleId, user = {}, data = {}) {
 
 async function getModuleFeedbackSummary(moduleId, user = {}) {
   if (!isStaff(user)) throw new Error("Staff access is required.");
+  const moduleResult = await query(
+    "SELECT course_id FROM course_modules WHERE id = $1",
+    [moduleId],
+  );
+  const allowed = await assertCourseManageAccess(
+    moduleResult.rows[0]?.course_id,
+    user,
+  );
+  if (!allowed) throw new Error("You cannot view feedback for this module.");
   return moduleFeedbackService.getModuleFeedbackSummary(moduleId, user);
 }
 
@@ -1607,6 +1653,8 @@ async function getTemplateFeedbackReport(templateId, user = {}, filters = {}) {
 
 async function getCourseFeedbackReport(courseId, user = {}, filters = {}) {
   if (!isStaff(user)) throw new Error("Staff access is required.");
+  const allowed = await assertCourseManageAccess(courseId, user);
+  if (!allowed) throw new Error("You cannot view feedback for this course.");
   return moduleFeedbackService.getCourseFeedbackReport(courseId, user, filters);
 }
 

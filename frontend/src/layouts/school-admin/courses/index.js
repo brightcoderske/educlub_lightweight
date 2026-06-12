@@ -13,6 +13,14 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Chip from "@mui/material/Chip";
 import Icon from "@mui/material/Icon";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -27,6 +35,10 @@ function Courses() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [teachers, setTeachers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [assignmentCourse, setAssignmentCourse] = useState(null);
+  const [teacherUserId, setTeacherUserId] = useState("");
 
   useEffect(() => {
     fetchCourses();
@@ -37,9 +49,19 @@ function Courses() {
     setError("");
     try {
       const response = await apiClient.get("/courses");
-      const templateResponse = await apiClient.get("/course-templates?category=general");
       setCourses(response);
-      setTemplates(templateResponse);
+      if (user?.role === "school_admin") {
+        const [templateResponse, teacherResponse, assignmentResponse] = await Promise.all([
+          apiClient.get("/course-templates?category=general"),
+          apiClient.get("/users?role=teacher"),
+          apiClient.get("/teacher-assignments"),
+        ]);
+        setTemplates(templateResponse);
+        setTeachers(teacherResponse);
+        setAssignments(assignmentResponse);
+      } else {
+        setTemplates([]);
+      }
     } catch (err) {
       setError("Failed to fetch courses");
       console.error(err);
@@ -70,6 +92,38 @@ function Courses() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const assignTeacher = async () => {
+    try {
+      await apiClient.post("/teacher-assignments", {
+        course_id: assignmentCourse.id,
+        teacher_user_id: teacherUserId,
+      });
+      setAssignmentCourse(null);
+      setTeacherUserId("");
+      await fetchCourses();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const deallocateTeacher = async (assignmentId) => {
+    try {
+      await apiClient.delete(`/teacher-assignments/${assignmentId}`);
+      await fetchCourses();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const requestUpdate = async (courseId) => {
+    try {
+      await apiClient.post(`/teacher-assignments/courses/${courseId}/update-requests`, {});
+      setError("");
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -327,6 +381,26 @@ function Courses() {
                                 >
                                   Reviews
                                 </MDButton>
+                                {user?.role === "school_admin" && (
+                                  <MDButton
+                                    variant="outlined"
+                                    color="warning"
+                                    size="small"
+                                    onClick={() => setAssignmentCourse(course)}
+                                  >
+                                    Teachers
+                                  </MDButton>
+                                )}
+                                {user?.role === "teacher" && course.update_available && (
+                                  <MDButton
+                                    variant="outlined"
+                                    color="warning"
+                                    size="small"
+                                    onClick={() => requestUpdate(course.id)}
+                                  >
+                                    Request Update
+                                  </MDButton>
+                                )}
                               </MDBox>
                             </TableCell>
                           </TableRow>
@@ -338,96 +412,162 @@ function Courses() {
               </MDBox>
             </Card>
           </Grid>
-          <Grid item xs={12}>
-            <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h6" fontWeight="bold" mb={2}>
-                  Available Templates
-                </MDTypography>
-                {templates.length === 0 ? (
-                  <MDTypography variant="body2" color="text">
-                    No templates are available yet.
+          {user?.role === "school_admin" && (
+            <Grid item xs={12}>
+              <Card>
+                <MDBox p={3}>
+                  <MDTypography variant="h6" fontWeight="bold" mb={2}>
+                    Available Templates
                   </MDTypography>
-                ) : (
-                  <TableContainer>
-                    <Table>
-                      <TableHead sx={{ display: "table-header-group" }}>
-                        <TableRow>
-                          <TableCell>Template</TableCell>
-                          <TableCell>Level</TableCell>
-                          <TableCell>Weeks</TableCell>
-                          <TableCell>Version</TableCell>
-                          <TableCell align="center">Action</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {templates.map((template) => {
-                          const adopted =
-                            template.is_adopted || adoptedTemplateIds.has(Number(template.id));
-                          const adoptedCourse = courses.find(
-                            (course) => Number(course.template_id) === Number(template.id)
-                          );
-                          return (
-                            <TableRow key={template.id} hover>
-                              <TableCell>
-                                <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
-                                  <MDTypography variant="body2" fontWeight="medium">
-                                    {template.name}
+                  {templates.length === 0 ? (
+                    <MDTypography variant="body2" color="text">
+                      No templates are available yet.
+                    </MDTypography>
+                  ) : (
+                    <TableContainer>
+                      <Table>
+                        <TableHead sx={{ display: "table-header-group" }}>
+                          <TableRow>
+                            <TableCell>Template</TableCell>
+                            <TableCell>Level</TableCell>
+                            <TableCell>Weeks</TableCell>
+                            <TableCell>Version</TableCell>
+                            <TableCell align="center">Action</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {templates.map((template) => {
+                            const adopted =
+                              template.is_adopted || adoptedTemplateIds.has(Number(template.id));
+                            const adoptedCourse = courses.find(
+                              (course) => Number(course.template_id) === Number(template.id)
+                            );
+                            return (
+                              <TableRow key={template.id} hover>
+                                <TableCell>
+                                  <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                                    <MDTypography variant="body2" fontWeight="medium">
+                                      {template.name}
+                                    </MDTypography>
+                                    {template.update_available && (
+                                      <Chip label="Update available" color="warning" size="small" />
+                                    )}
+                                    {adopted && !template.update_available && (
+                                      <Chip label="Adopted" color="success" size="small" />
+                                    )}
+                                  </MDBox>
+                                  <MDTypography variant="caption" color="text">
+                                    {template.description || "No description"}
                                   </MDTypography>
-                                  {template.update_available && (
-                                    <Chip label="Update available" color="warning" size="small" />
-                                  )}
-                                  {adopted && !template.update_available && (
-                                    <Chip label="Adopted" color="success" size="small" />
-                                  )}
-                                </MDBox>
-                                <MDTypography variant="caption" color="text">
-                                  {template.description || "No description"}
-                                </MDTypography>
-                              </TableCell>
-                              <TableCell>{template.target_level || "All levels"}</TableCell>
-                              <TableCell>{template.estimated_weeks || "-"}</TableCell>
-                              <TableCell>{template.version || 1}</TableCell>
-                              <TableCell align="center">
-                                <MDButton
-                                  variant={adopted ? "outlined" : "gradient"}
-                                  color={adopted ? "dark" : "success"}
-                                  size="small"
-                                  disabled={loading}
-                                  onClick={() => {
-                                    if (adoptedCourse) {
-                                      navigate(`/school-admin/courses/${adoptedCourse.id}/builder`);
-                                      return;
-                                    }
-                                    if (template.adopted_course_id) {
-                                      navigate(
-                                        `/school-admin/courses/${template.adopted_course_id}/builder`
-                                      );
-                                      return;
-                                    }
-                                    adoptTemplate(template);
-                                  }}
-                                >
-                                  {template.update_available
-                                    ? "Review"
-                                    : adopted
-                                    ? "Open"
-                                    : "Adopt"}
-                                </MDButton>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
-              </MDBox>
-            </Card>
-          </Grid>
+                                </TableCell>
+                                <TableCell>{template.target_level || "All levels"}</TableCell>
+                                <TableCell>{template.estimated_weeks || "-"}</TableCell>
+                                <TableCell>{template.version || 1}</TableCell>
+                                <TableCell align="center">
+                                  <MDButton
+                                    variant={adopted ? "outlined" : "gradient"}
+                                    color={adopted ? "dark" : "success"}
+                                    size="small"
+                                    disabled={loading}
+                                    onClick={() => {
+                                      if (adoptedCourse) {
+                                        navigate(
+                                          `/school-admin/courses/${adoptedCourse.id}/builder`
+                                        );
+                                        return;
+                                      }
+                                      if (template.adopted_course_id) {
+                                        navigate(
+                                          `/school-admin/courses/${template.adopted_course_id}/builder`
+                                        );
+                                        return;
+                                      }
+                                      adoptTemplate(template);
+                                    }}
+                                  >
+                                    {template.update_available
+                                      ? "Review"
+                                      : adopted
+                                      ? "Open"
+                                      : "Adopt"}
+                                  </MDButton>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </MDBox>
+              </Card>
+            </Grid>
+          )}
         </Grid>
       </MDBox>
       <Footer />
+      <Dialog
+        open={Boolean(assignmentCourse)}
+        onClose={() => setAssignmentCourse(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Teachers for {assignmentCourse?.name}</DialogTitle>
+        <DialogContent>
+          <FormControl fullWidth sx={{ mt: 1, mb: 2 }}>
+            <InputLabel id="course-teacher-label">Teacher</InputLabel>
+            <Select
+              labelId="course-teacher-label"
+              label="Teacher"
+              value={teacherUserId}
+              onChange={(event) => setTeacherUserId(event.target.value)}
+            >
+              {teachers
+                .filter((teacher) => teacher.is_active)
+                .map((teacher) => (
+                  <MenuItem key={teacher.id} value={teacher.id}>
+                    {teacher.full_name} ({teacher.email})
+                  </MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+          {assignments
+            .filter(
+              (assignment) =>
+                Number(assignment.course_id) === Number(assignmentCourse?.id) &&
+                assignment.is_active
+            )
+            .map((assignment) => (
+              <MDBox
+                key={assignment.id}
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+                py={1}
+              >
+                <MDTypography variant="body2">
+                  {assignment.teacher_name} ({assignment.teacher_email})
+                </MDTypography>
+                <MDButton
+                  size="small"
+                  color="warning"
+                  variant="text"
+                  onClick={() => deallocateTeacher(assignment.id)}
+                >
+                  Deallocate
+                </MDButton>
+              </MDBox>
+            ))}
+        </DialogContent>
+        <DialogActions>
+          <MDButton color="dark" variant="text" onClick={() => setAssignmentCourse(null)}>
+            Close
+          </MDButton>
+          <MDButton color="info" disabled={!teacherUserId} onClick={assignTeacher}>
+            Assign Teacher
+          </MDButton>
+        </DialogActions>
+      </Dialog>
     </DashboardLayout>
   );
 }

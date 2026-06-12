@@ -91,6 +91,7 @@ function LearnerDashboard() {
   const [featuredCompetition, setFeaturedCompetition] = useState(null);
   const [showFeaturedCompetition, setShowFeaturedCompetition] = useState(false);
   const [badges, setBadges] = useState([]);
+  const [dueItems, setDueItems] = useState([]);
 
   useEffect(() => {
     if (!isLearner()) {
@@ -119,6 +120,7 @@ function LearnerDashboard() {
     setPastTerms(data.pastTerms);
     setFeaturedCompetition(data.featuredCompetition);
     setBadges(data.badges || []);
+    setDueItems(data.dueItems || []);
     if (showFeatured) {
       setShowFeaturedCompetition(Boolean(data.featuredCompetition));
     }
@@ -157,6 +159,7 @@ function LearnerDashboard() {
           pastTerms: nextPastTerms,
           featuredCompetition: featured,
           badges: badgesRes,
+          dueItems: [],
         };
         learnerDashboardCache = {
           userId: user?.id,
@@ -168,6 +171,37 @@ function LearnerDashboard() {
       }
 
       const response = await apiClient.get("/allocations");
+      const today = new Date();
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+      monday.setHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 7);
+      const overviews = await Promise.all(
+        response
+          .filter((allocation) => allocation.status === "active")
+          .map((allocation) =>
+            apiClient
+              .get(`/courses/${allocation.course_id}/learning-overview`)
+              .then((overview) => ({ allocation, overview }))
+              .catch(() => null)
+          )
+      );
+      const nextDueItems = overviews.filter(Boolean).flatMap(({ allocation, overview }) =>
+        (overview.modules || [])
+          .filter((module) => {
+            const opensAt = module.opens_at ? new Date(module.opens_at) : null;
+            return opensAt && opensAt >= monday && opensAt < sunday;
+          })
+          .map((module) => ({
+            courseId: allocation.course_id,
+            courseName: allocation.course_name,
+            moduleId: module.id,
+            moduleTitle: module.title,
+            completed: module.completed_activities,
+            total: module.total_activities,
+          }))
+      );
       const nextStats = {
         total: response.length || 0,
         active: response.filter((a) => a.status === "active").length || 0,
@@ -182,6 +216,7 @@ function LearnerDashboard() {
         pastTerms: nextPastTerms,
         featuredCompetition: featured,
         badges: badgesRes,
+        dueItems: nextDueItems,
       };
 
       learnerDashboardCache = {
@@ -354,6 +389,53 @@ function LearnerDashboard() {
                 }}
               />
             </MDBox>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Card>
+              <MDBox p={{ xs: 1.5, sm: 3 }}>
+                <MDTypography variant="h6" fontWeight="bold" mb={2}>
+                  Due This Week
+                </MDTypography>
+                {dueItems.length === 0 ? (
+                  <MDTypography variant="body2" color="text">
+                    No new course modules are scheduled for this week.
+                  </MDTypography>
+                ) : (
+                  <Grid container spacing={1.5}>
+                    {dueItems.map((item) => (
+                      <Grid item xs={12} md={6} key={`${item.courseId}-${item.moduleId}`}>
+                        <MDBox
+                          p={1.5}
+                          border="1px solid #dbeafe"
+                          borderRadius="md"
+                          sx={{ bgcolor: "#eff6ff" }}
+                        >
+                          <MDTypography variant="button" fontWeight="bold">
+                            {item.moduleTitle}
+                          </MDTypography>
+                          <MDTypography variant="caption" color="text" display="block">
+                            {item.courseName} · {item.completed}/{item.total} activities done
+                          </MDTypography>
+                          <MDButton
+                            size="small"
+                            color="info"
+                            variant="text"
+                            onClick={() =>
+                              navigate(
+                                `/learner/courses/${item.courseId}/modules/${item.moduleId}/learn`
+                              )
+                            }
+                          >
+                            Continue
+                          </MDButton>
+                        </MDBox>
+                      </Grid>
+                    ))}
+                  </Grid>
+                )}
+              </MDBox>
+            </Card>
           </Grid>
 
           <Grid item xs={12}>

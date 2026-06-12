@@ -21,6 +21,7 @@ import { apiClient } from "lib/api";
 
 const emptyForm = {
   school: null,
+  role: "school_admin",
   full_name: "",
   email: "",
   phone: "",
@@ -41,12 +42,15 @@ function SystemAdminSchoolAdmins() {
     setLoading(true);
     setError("");
     try {
-      const [schoolsRes, adminsRes] = await Promise.all([
+      const [schoolsRes, adminsRes, teachersRes] = await Promise.all([
         apiClient.get("/schools"),
         apiClient.get("/users?role=school_admin"),
+        apiClient.get("/users?role=teacher"),
       ]);
       setSchools(schoolsRes);
-      setAdmins(adminsRes);
+      setAdmins(
+        [...adminsRes, ...teachersRes].sort((a, b) => a.full_name.localeCompare(b.full_name))
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -63,13 +67,18 @@ function SystemAdminSchoolAdmins() {
     setError("");
     setMessage("");
     try {
-      await apiClient.post("/users/school-admins", {
+      await apiClient.post("/users/staff", {
         school_id: form.school?.id,
+        role: form.role,
         full_name: form.full_name,
         email: form.email,
         phone: form.phone,
       });
-      setMessage("School Admin created. Login details have been emailed.");
+      setMessage(
+        `${
+          form.role === "teacher" ? "Teacher" : "School Admin"
+        } created. Login details have been emailed.`
+      );
       setForm(emptyForm);
       setEditingId(null);
       await loadData();
@@ -84,6 +93,7 @@ function SystemAdminSchoolAdmins() {
     setEditingId(admin.id);
     setForm({
       school: schools.find((school) => school.id === admin.school_id) || null,
+      role: admin.role,
       full_name: admin.full_name || "",
       email: admin.email || "",
       phone: admin.phone || "",
@@ -148,16 +158,16 @@ function SystemAdminSchoolAdmins() {
       <DashboardNavbar />
       <MDBox py={3}>
         <MDBox mb={3}>
-          <MDTypography variant="h3">School Admins</MDTypography>
+          <MDTypography variant="h3">School Staff</MDTypography>
           <MDTypography variant="body2" color="text">
-            Add school administrators and send first-login credentials automatically.
+            Create school administrators or teachers and send first-login credentials.
           </MDTypography>
         </MDBox>
 
         <Card>
           <MDBox p={3}>
             <MDTypography variant="h5" mb={2}>
-              Register School Admin
+              Register Staff Account
             </MDTypography>
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
@@ -167,6 +177,29 @@ function SystemAdminSchoolAdmins() {
                   value={form.school}
                   onChange={(_, value) => setForm((current) => ({ ...current, school: value }))}
                   renderInput={(params) => <MDInput {...params} label="School" />}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Autocomplete
+                  options={[
+                    { value: "school_admin", label: "School Admin" },
+                    { value: "teacher", label: "Teacher" },
+                  ]}
+                  getOptionLabel={(option) => option.label}
+                  value={
+                    [
+                      { value: "school_admin", label: "School Admin" },
+                      { value: "teacher", label: "Teacher" },
+                    ].find((option) => option.value === form.role) || null
+                  }
+                  disabled={Boolean(editingId)}
+                  onChange={(_, value) =>
+                    setForm((current) => ({
+                      ...current,
+                      role: value?.value || "school_admin",
+                    }))
+                  }
+                  renderInput={(params) => <MDInput {...params} label="Role" />}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -212,7 +245,7 @@ function SystemAdminSchoolAdmins() {
                 onClick={editingId ? handleSave : handleCreate}
                 disabled={saving || !form.school || !form.full_name || !form.email}
               >
-                {saving ? "Saving..." : editingId ? "Save School Admin" : "Create School Admin"}
+                {saving ? "Saving..." : editingId ? "Save Staff Account" : "Create Staff Account"}
               </MDButton>
               {editingId ? (
                 <MDButton
@@ -234,7 +267,7 @@ function SystemAdminSchoolAdmins() {
         <Card sx={{ mt: 3 }}>
           <MDBox p={3}>
             <MDTypography variant="h5" mb={2}>
-              Admin Accounts
+              Staff Accounts
             </MDTypography>
             {loading ? (
               <MDTypography variant="body2">Loading...</MDTypography>
@@ -246,6 +279,7 @@ function SystemAdminSchoolAdmins() {
                       <TableCell>Name</TableCell>
                       <TableCell>Email</TableCell>
                       <TableCell>School</TableCell>
+                      <TableCell>Role</TableCell>
                       <TableCell>First Login Reset</TableCell>
                       <TableCell align="center">Password</TableCell>
                       <TableCell align="center">Manage</TableCell>
@@ -257,6 +291,9 @@ function SystemAdminSchoolAdmins() {
                         <TableCell>{admin.full_name}</TableCell>
                         <TableCell>{admin.email}</TableCell>
                         <TableCell>{admin.school_name || "-"}</TableCell>
+                        <TableCell>
+                          {admin.role === "teacher" ? "Teacher" : "School Admin"}
+                        </TableCell>
                         <TableCell>{admin.force_password_reset ? "Yes" : "No"}</TableCell>
                         <TableCell align="center">
                           <MDButton

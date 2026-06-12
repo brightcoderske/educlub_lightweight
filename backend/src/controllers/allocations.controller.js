@@ -1,8 +1,13 @@
 const { query } = require("../config");
 const notificationsService = require("../services/notifications.service");
+const teacherAssignmentsService = require("../services/teacherAssignments.service");
 
 function isSchoolScopedStaff(user = {}) {
   return user.role === "school_admin" || user.role === "teacher";
+}
+
+function allocationErrorStatus(error) {
+  return /not assigned|cannot|outside/i.test(error.message || "") ? 403 : 500;
 }
 
 async function getAllAllocations(req, res) {
@@ -30,6 +35,16 @@ async function getAllAllocations(req, res) {
       queryText += ` AND l.school_id = $${paramIndex}`;
       params.push(req.user.schoolId);
       paramIndex++;
+      if (req.user.role === "teacher") {
+        queryText += ` AND EXISTS (
+          SELECT 1 FROM course_teacher_assignments cta
+          WHERE cta.course_id = a.course_id
+            AND cta.teacher_user_id = $${paramIndex}
+            AND cta.is_active = true
+        )`;
+        params.push(req.user.userId);
+        paramIndex++;
+      }
     } else if (req.user.role === "learner") {
       queryText += ` AND l.user_id = $${paramIndex}`;
       params.push(req.user.userId);
@@ -89,6 +104,12 @@ async function createAllocation(req, res) {
     const { learner_id, course_id, term, academic_year } = req.body;
 
     if (isSchoolScopedStaff(req.user)) {
+      if (req.user.role === "teacher") {
+        await teacherAssignmentsService.assertTeacherCourseAccess(
+          req.user,
+          course_id,
+        );
+      }
       const learnerResult = await query(
         "SELECT school_id FROM learners WHERE id = $1",
         [learner_id]
@@ -152,14 +173,19 @@ async function createAllocation(req, res) {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Create allocation error:", error);
-    res.status(500).json({ error: "Failed to create allocation" });
+    res
+      .status(allocationErrorStatus(error))
+      .json({ error: error.message || "Failed to create allocation" });
   }
 }
 
 async function getAllocationById(req, res) {
   try {
     const result = await query(
-      "SELECT * FROM course_allocations WHERE id = $1",
+      `SELECT a.*, l.school_id, l.user_id AS learner_user_id
+       FROM course_allocations a
+       JOIN learners l ON l.id = a.learner_id
+       WHERE a.id = $1`,
       [req.params.id]
     );
     const allocation = result.rows[0];
@@ -167,11 +193,31 @@ async function getAllocationById(req, res) {
     if (!allocation) {
       return res.status(404).json({ error: "Allocation not found" });
     }
+    if (
+      req.user.role === "learner" &&
+      Number(allocation.learner_user_id) !== Number(req.user.userId)
+    ) {
+      return res.status(403).json({ error: "Allocation is outside your access" });
+    }
+    if (
+      isSchoolScopedStaff(req.user) &&
+      Number(allocation.school_id) !== Number(req.user.schoolId)
+    ) {
+      return res.status(403).json({ error: "Allocation is outside your school" });
+    }
+    if (req.user.role === "teacher") {
+      await teacherAssignmentsService.assertTeacherCourseAccess(
+        req.user,
+        allocation.course_id,
+      );
+    }
 
     res.json(allocation);
   } catch (error) {
     console.error("Get allocation error:", error);
-    res.status(500).json({ error: "Failed to get allocation" });
+    res
+      .status(allocationErrorStatus(error))
+      .json({ error: error.message || "Failed to get allocation" });
   }
 }
 
@@ -197,6 +243,12 @@ async function updateAllocation(req, res) {
     }
 
     if (isSchoolScopedStaff(req.user)) {
+      if (req.user.role === "teacher") {
+        await teacherAssignmentsService.assertTeacherCourseAccess(
+          req.user,
+          course_id,
+        );
+      }
       const learnerResult = await query(
         "SELECT school_id FROM learners WHERE id = $1",
         [learner_id]
@@ -233,7 +285,9 @@ async function updateAllocation(req, res) {
     res.json(updated);
   } catch (error) {
     console.error("Update allocation error:", error);
-    res.status(500).json({ error: "Failed to update allocation" });
+    res
+      .status(allocationErrorStatus(error))
+      .json({ error: error.message || "Failed to update allocation" });
   }
 }
 
@@ -241,7 +295,7 @@ async function deleteAllocation(req, res) {
   try {
     if (isSchoolScopedStaff(req.user)) {
       const allocationResult = await query(
-        `SELECT l.school_id
+        `SELECT l.school_id, a.course_id
          FROM course_allocations a
          JOIN learners l ON a.learner_id = l.id
          WHERE a.id = $1`,
@@ -253,6 +307,12 @@ async function deleteAllocation(req, res) {
         return res
           .status(403)
           .json({ error: "Allocation is outside your school" });
+      }
+      if (req.user.role === "teacher") {
+        await teacherAssignmentsService.assertTeacherCourseAccess(
+          req.user,
+          allocation.course_id,
+        );
       }
     }
 
@@ -268,7 +328,9 @@ async function deleteAllocation(req, res) {
     res.json({ message: "Allocation deleted successfully" });
   } catch (error) {
     console.error("Delete allocation error:", error);
-    res.status(500).json({ error: "Failed to delete allocation" });
+    res
+      .status(allocationErrorStatus(error))
+      .json({ error: error.message || "Failed to delete allocation" });
   }
 }
 
@@ -292,6 +354,12 @@ async function bulkAllocate(req, res) {
       return res
         .status(403)
         .json({ error: "Bulk allocation must use your school's adopted course version." });
+    }
+    if (req.user.role === "teacher") {
+      await teacherAssignmentsService.assertTeacherCourseAccess(
+        req.user,
+        course_id,
+      );
     }
 
     const gradeMatchSql = `
@@ -362,7 +430,9 @@ async function bulkAllocate(req, res) {
     });
   } catch (error) {
     console.error("Bulk allocate error:", error);
-    res.status(500).json({ error: "Failed to bulk allocate" });
+    res
+      .status(allocationErrorStatus(error))
+      .json({ error: error.message || "Failed to bulk allocate" });
   }
 }
 

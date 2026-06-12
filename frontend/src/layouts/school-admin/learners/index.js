@@ -8,6 +8,10 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Icon from "@mui/material/Icon";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import readXlsxFile from "read-excel-file";
 
 import DashboardIdentity from "components/DashboardIdentity";
@@ -54,6 +58,7 @@ function SchoolAdminLearners() {
   const [gradeFilter, setGradeFilter] = useState("");
   const [streamFilter, setStreamFilter] = useState("");
   const [selectedLearnerId, setSelectedLearnerId] = useState(null);
+  const [graduationCandidate, setGraduationCandidate] = useState(null);
 
   const loadLearners = async () => {
     setLoading(true);
@@ -69,6 +74,21 @@ function SchoolAdminLearners() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const graduateLearner = async () => {
+    if (!graduationCandidate) return;
+    setSaving(true);
+    setError("");
+    try {
+      await apiClient.put(`/learners/${graduationCandidate.id}/graduate`, {});
+      setGraduationCandidate(null);
+      await loadLearners();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -563,6 +583,7 @@ function SchoolAdminLearners() {
                           <TableCell>Grade</TableCell>
                           <TableCell>Class</TableCell>
                           <TableCell>Term</TableCell>
+                          <TableCell>Status</TableCell>
                           <TableCell align="center">Account</TableCell>
                         </TableRow>
                       </TableHead>
@@ -584,6 +605,9 @@ function SchoolAdminLearners() {
                             <TableCell>{learner.grade || "-"}</TableCell>
                             <TableCell>{learner.stream || "-"}</TableCell>
                             <TableCell>{learner.term || "-"}</TableCell>
+                            <TableCell>
+                              {learner.graduation_status === "graduated" ? "Graduated" : "Active"}
+                            </TableCell>
                             <TableCell align="center">
                               <MDButton
                                 variant="outlined"
@@ -593,6 +617,16 @@ function SchoolAdminLearners() {
                               >
                                 Manage
                               </MDButton>
+                              {learner.graduation_status !== "graduated" && (
+                                <MDButton
+                                  variant="text"
+                                  color="success"
+                                  size="small"
+                                  onClick={() => setGraduationCandidate(learner)}
+                                >
+                                  Graduate
+                                </MDButton>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -611,6 +645,28 @@ function SchoolAdminLearners() {
         onClose={() => setSelectedLearnerId(null)}
         onResetPassword={resetLearnerPassword}
       />
+      <Dialog
+        open={Boolean(graduationCandidate)}
+        onClose={() => setGraduationCandidate(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Graduate learner</DialogTitle>
+        <DialogContent>
+          <MDTypography variant="body2">
+            Mark {graduationCandidate?.full_name} as graduated? Their learning history and reports
+            will remain available.
+          </MDTypography>
+        </DialogContent>
+        <DialogActions>
+          <MDButton color="dark" variant="text" onClick={() => setGraduationCandidate(null)}>
+            Cancel
+          </MDButton>
+          <MDButton color="success" disabled={saving} onClick={graduateLearner}>
+            Graduate
+          </MDButton>
+        </DialogActions>
+      </Dialog>
       <Footer />
     </DashboardLayout>
   );

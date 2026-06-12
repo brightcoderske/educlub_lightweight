@@ -192,7 +192,13 @@ function DashboardNavbar({ absolute, light, isMini }) {
               mr={{ xs: 0.5, sm: 1.5 }}
               minWidth={0}
             >
-              <MDAvatar bgColor="info" size="sm" shadow="sm">
+              <MDAvatar
+                src={user?.schoolLogoUrl || undefined}
+                alt={user?.schoolName || getUserDisplayName(user)}
+                bgColor="info"
+                size="sm"
+                shadow="sm"
+              >
                 {getUserInitials(user)}
               </MDAvatar>
               <MDBox lineHeight={1} minWidth={0}>
@@ -215,7 +221,7 @@ function DashboardNavbar({ absolute, light, isMini }) {
                   color={light ? "white" : "text"}
                   display={{ xs: "none", sm: "block" }}
                 >
-                  {getRoleLabel(user?.role)}
+                  {[user?.schoolName, getRoleLabel(user?.role)].filter(Boolean).join(" · ")}
                 </MDTypography>
               </MDBox>
             </MDBox>

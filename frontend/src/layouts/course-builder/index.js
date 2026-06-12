@@ -24,6 +24,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { apiClient } from "lib/api";
+import { useAuth } from "context/AuthContext";
 import { activityToStructuredForm, structuredFormContent } from "./activityForm";
 import DisplayCodeDialog from "./dialogs/DisplayCodeDialog";
 import EarlyUnlockDialog from "./dialogs/EarlyUnlockDialog";
@@ -1936,6 +1937,7 @@ ActivityReviewDialog.defaultProps = {
 };
 
 function CourseBuilder() {
+  const { user } = useAuth();
   const { templateId, courseId } = useParams();
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -2399,6 +2401,19 @@ function CourseBuilder() {
     }
   };
 
+  const requestTemplateUpdate = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await apiClient.post(`/teacher-assignments/courses/${entityId}/update-requests`, {});
+      setMessage("The school admin has been notified to review this update.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -2435,22 +2450,37 @@ function CourseBuilder() {
                 >
                   {reviewMode ? "Exit Review" : "Review Learner Work"}
                 </MDButton>
-                <MDButton
-                  variant="outlined"
-                  color="info"
-                  disabled={saving}
-                  onClick={() => syncCourse("sync")}
-                >
-                  Sync Template
-                </MDButton>
-                <MDButton
-                  variant="outlined"
-                  color="warning"
-                  disabled={saving}
-                  onClick={() => syncCourse("rollback")}
-                >
-                  Roll Back
-                </MDButton>
+                {user?.role === "school_admin" ? (
+                  <>
+                    <MDButton
+                      variant="outlined"
+                      color="info"
+                      disabled={saving}
+                      onClick={() => syncCourse("sync")}
+                    >
+                      Sync Template
+                    </MDButton>
+                    <MDButton
+                      variant="outlined"
+                      color="warning"
+                      disabled={saving}
+                      onClick={() => syncCourse("rollback")}
+                    >
+                      Roll Back
+                    </MDButton>
+                  </>
+                ) : (
+                  course?.update_available && (
+                    <MDButton
+                      variant="outlined"
+                      color="warning"
+                      disabled={saving}
+                      onClick={requestTemplateUpdate}
+                    >
+                      Ask Admin to Update
+                    </MDButton>
+                  )
+                )}
               </>
             )}
             <MDButton

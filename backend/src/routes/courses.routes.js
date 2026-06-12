@@ -135,13 +135,13 @@ router.delete(
 router.post(
   "/:id/sync-template",
   authenticateToken,
-  canManageCourse,
+  requireRole("system_admin", "school_admin"),
   coursesController.syncSchoolCourse,
 );
 router.post(
   "/:id/rollback-template",
   authenticateToken,
-  canManageCourse,
+  requireRole("system_admin", "school_admin"),
   coursesController.rollbackSchoolCourse,
 );
 router.put(

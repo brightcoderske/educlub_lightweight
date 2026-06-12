@@ -50,7 +50,7 @@ router.post(
 router.post(
   "/pdf/school",
   authenticateToken,
-  requireRole("system_admin", "school_admin", "teacher"),
+  requireRole("system_admin", "school_admin"),
   reportsController.generateSchoolReportsPDF
 );
 

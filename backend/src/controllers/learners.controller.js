@@ -5,6 +5,7 @@ const env = require("../config/env");
 const authService = require("../services/auth.service");
 const { resolveLearnerSchoolScope } = require("../services/learnerScope");
 const { generateRandomPassword, hashPassword } = require("../utils/password");
+const teacherAssignmentsService = require("../services/teacherAssignments.service");
 
 function canManageLearner(user, learner) {
   if (user.role === "system_admin") {
@@ -37,6 +38,21 @@ async function getAllLearners(req, res) {
       queryText += ` AND l.school_id = $${paramIndex}`;
       params.push(scopedSchoolId);
       paramIndex++;
+      if (
+        req.user.role === "teacher" &&
+        req.query.scope !== "allocation_picker"
+      ) {
+        queryText += ` AND EXISTS (
+          SELECT 1
+          FROM course_allocations ca
+          JOIN course_teacher_assignments cta ON cta.course_id = ca.course_id
+          WHERE ca.learner_id = l.id
+            AND cta.teacher_user_id = $${paramIndex}
+            AND cta.is_active = true
+        )`;
+        params.push(req.user.userId);
+        paramIndex++;
+      }
     } else if (req.user.role === "learner") {
       queryText += ` AND l.user_id = $${paramIndex}`;
       params.push(req.user.userId);
@@ -222,7 +238,13 @@ async function getLearnerById(req, res) {
     }
 
     if (!canManageLearner(req.user, learner)) {
-      return res.status(403).json({ error: "Learner is outside your access" });
+      if (req.user.role !== "teacher") {
+        return res.status(403).json({ error: "Learner is outside your access" });
+      }
+      await teacherAssignmentsService.assertTeacherLearnerAccess(
+        req.user,
+        learner.id,
+      );
     }
 
     res.json(learner);
@@ -384,6 +406,46 @@ async function promoteLearners(req, res) {
   }
 }
 
+async function graduateLearner(req, res) {
+  try {
+    const learnerResult = await query(
+      "SELECT id, school_id, full_name FROM learners WHERE id = $1",
+      [req.params.id],
+    );
+    const learner = learnerResult.rows[0];
+    if (!learner) {
+      return res.status(404).json({ error: "Learner not found" });
+    }
+    if (
+      req.user.role !== "system_admin" &&
+      Number(learner.school_id) !== Number(req.user.schoolId)
+    ) {
+      return res.status(403).json({ error: "Learner is outside your school" });
+    }
+    if (req.user.role === "teacher") {
+      await teacherAssignmentsService.assertTeacherLearnerAccess(
+        req.user,
+        learner.id,
+      );
+    }
+    const graduated = await query(
+      `UPDATE learners
+       SET graduation_status = 'graduated',
+           graduated_at = CURRENT_TIMESTAMP,
+           graduated_by_user_id = $2,
+           graduation_note = NULLIF($3, ''),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING *`,
+      [learner.id, req.user.userId, req.body.note || ""],
+    );
+    res.json(graduated.rows[0]);
+  } catch (error) {
+    console.error("Graduate learner error:", error);
+    res.status(400).json({ error: error.message || "Failed to graduate learner" });
+  }
+}
+
 async function deleteLearner(req, res) {
   try {
     const result = await query(
@@ -522,4 +584,5 @@ module.exports = {
   resetLearnerPassword,
   downloadCredentialCards,
   deleteLearner,
+  graduateLearner,
 };

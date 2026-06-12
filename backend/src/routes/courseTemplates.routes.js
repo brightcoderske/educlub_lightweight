@@ -4,7 +4,7 @@ const controller = require("../controllers/courseTemplates.controller");
 const {
   authenticateToken,
   isSystemAdmin,
-  isSchoolAdmin,
+  requireRole,
 } = require("../middleware");
 
 router.get("/", authenticateToken, controller.listTemplates);
@@ -59,7 +59,7 @@ router.delete(
 router.post(
   "/:templateId/adopt",
   authenticateToken,
-  isSchoolAdmin,
+  requireRole("school_admin"),
   controller.adoptTemplate,
 );
 

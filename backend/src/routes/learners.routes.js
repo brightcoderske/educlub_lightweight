@@ -38,6 +38,12 @@ router.put(
   requireRole("system_admin", "school_admin"),
   learnersController.resetLearnerPassword,
 );
+router.put(
+  "/:id/graduate",
+  authenticateToken,
+  requireRole("system_admin", "school_admin", "teacher"),
+  learnersController.graduateLearner,
+);
 router.get("/:id", authenticateToken, learnersController.getLearnerById);
 router.put("/:id", authenticateToken, learnersController.updateLearner);
 router.delete(

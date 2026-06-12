@@ -42,6 +42,8 @@ import RegistrationLanding from "layouts/landing";
 import Reports from "layouts/school-admin/reports";
 import Leaderboard from "layouts/school-admin/leaderboard";
 import Courses from "layouts/school-admin/courses";
+import TeacherDashboard from "layouts/teacher";
+import Teachers from "layouts/school-admin/teachers";
 
 // @mui icons
 import Icon from "@mui/material/Icon";
@@ -184,7 +186,7 @@ const routes = [
   },
   {
     type: "collapse",
-    name: "School Admins",
+    name: "School Staff",
     key: "system-admin-school-admins",
     icon: <Icon fontSize="small">manage_accounts</Icon>,
     route: "/system-admin/school-admins",
@@ -263,7 +265,25 @@ const routes = [
     icon: <Icon fontSize="small">school</Icon>,
     route: "/school-admin",
     component: <SchoolAdminDashboard />,
-    roles: ["school_admin", "teacher"],
+    roles: ["school_admin"],
+  },
+  {
+    type: "collapse",
+    name: "Teacher Dashboard",
+    key: "teacher-dashboard",
+    icon: <Icon fontSize="small">space_dashboard</Icon>,
+    route: "/teacher",
+    component: <TeacherDashboard />,
+    roles: ["teacher"],
+  },
+  {
+    type: "collapse",
+    name: "Teachers",
+    key: "school-admin-teachers",
+    icon: <Icon fontSize="small">co_present</Icon>,
+    route: "/school-admin/teachers",
+    component: <Teachers />,
+    roles: ["school_admin"],
   },
   {
     type: "collapse",
@@ -492,7 +512,7 @@ const routes = [
     icon: <Icon fontSize="small">tune</Icon>,
     route: "/school-admin/settings",
     component: <SchoolSettings />,
-    roles: ["school_admin", "teacher"],
+    roles: ["school_admin"],
   },
 ];
 

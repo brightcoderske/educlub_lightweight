@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS learners (
 );
 
 ALTER TABLE learners ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS graduation_status VARCHAR(20) NOT NULL DEFAULT 'active';
+ALTER TABLE learners DROP CONSTRAINT IF EXISTS learners_graduation_status_check;
+ALTER TABLE learners ADD CONSTRAINT learners_graduation_status_check
+  CHECK (graduation_status IN ('active', 'graduated'));
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS graduated_at TIMESTAMP;
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS graduated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS graduation_note TEXT;
 
 -- Academic Years table
 CREATE TABLE IF NOT EXISTS academic_years (
@@ -219,6 +226,39 @@ ALTER TABLE courses ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES cour
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS template_version INTEGER;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS school_version INTEGER DEFAULT 1;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS last_template_sync_at TIMESTAMP;
+
+CREATE TABLE IF NOT EXISTS course_teacher_assignments (
+  id SERIAL PRIMARY KEY,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  teacher_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  assigned_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deallocated_at TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(course_id, teacher_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS course_update_requests (
+  id SERIAL PRIMARY KEY,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  teacher_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  template_version INTEGER NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'reviewed', 'dismissed')),
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at TIMESTAMP,
+  reviewed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE(course_id, teacher_user_id, template_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_teacher_assignments_teacher_active
+  ON course_teacher_assignments(teacher_user_id, is_active, course_id);
+CREATE INDEX IF NOT EXISTS idx_course_teacher_assignments_course_active
+  ON course_teacher_assignments(course_id, is_active, teacher_user_id);
+CREATE INDEX IF NOT EXISTS idx_course_update_requests_course_status
+  ON course_update_requests(course_id, status, template_version);
 
 -- Native LMS course builder tables
 CREATE TABLE IF NOT EXISTS course_modules (
@@ -1159,6 +1199,8 @@ $$;
 ALTER TABLE schools ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE school_admins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE course_teacher_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE course_update_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE learners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE academic_years ENABLE ROW LEVEL SECURITY;
 ALTER TABLE terms ENABLE ROW LEVEL SECURITY;
@@ -1285,6 +1327,109 @@ CREATE POLICY school_admins_system_admin_update ON school_admins
 CREATE POLICY school_admins_system_admin_delete ON school_admins
   FOR DELETE
   USING ((SELECT public.educlub_role()) = 'system_admin');
+
+DROP POLICY IF EXISTS course_teacher_assignments_role_access ON course_teacher_assignments;
+CREATE POLICY course_teacher_assignments_role_access ON course_teacher_assignments
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR teacher_user_id = (SELECT public.educlub_user_id())
+    OR (
+      (SELECT public.educlub_role()) = 'school_admin'
+      AND EXISTS (
+        SELECT 1 FROM courses c
+        WHERE c.id = course_id
+          AND c.school_id = (SELECT public.educlub_school_id())
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS course_teacher_assignments_admin_insert ON course_teacher_assignments;
+DROP POLICY IF EXISTS course_teacher_assignments_admin_update ON course_teacher_assignments;
+DROP POLICY IF EXISTS course_teacher_assignments_admin_delete ON course_teacher_assignments;
+CREATE POLICY course_teacher_assignments_admin_insert ON course_teacher_assignments
+  FOR INSERT
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) = 'school_admin'
+      AND EXISTS (
+        SELECT 1 FROM courses c
+        WHERE c.id = course_id
+          AND c.school_id = (SELECT public.educlub_school_id())
+      )
+    )
+  );
+CREATE POLICY course_teacher_assignments_admin_update ON course_teacher_assignments
+  FOR UPDATE
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) = 'school_admin'
+      AND EXISTS (
+        SELECT 1 FROM courses c
+        WHERE c.id = course_id
+          AND c.school_id = (SELECT public.educlub_school_id())
+      )
+    )
+  )
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) = 'school_admin'
+      AND EXISTS (
+        SELECT 1 FROM courses c
+        WHERE c.id = course_id
+          AND c.school_id = (SELECT public.educlub_school_id())
+      )
+    )
+  );
+CREATE POLICY course_teacher_assignments_admin_delete ON course_teacher_assignments
+  FOR DELETE
+  USING ((SELECT public.educlub_role()) = 'system_admin');
+
+DROP POLICY IF EXISTS course_update_requests_role_access ON course_update_requests;
+CREATE POLICY course_update_requests_role_access ON course_update_requests
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR teacher_user_id = (SELECT public.educlub_user_id())
+    OR (
+      (SELECT public.educlub_role()) = 'school_admin'
+      AND EXISTS (
+        SELECT 1 FROM courses c
+        WHERE c.id = course_id
+          AND c.school_id = (SELECT public.educlub_school_id())
+      )
+    )
+  );
+DROP POLICY IF EXISTS course_update_requests_teacher_insert ON course_update_requests;
+CREATE POLICY course_update_requests_teacher_insert ON course_update_requests
+  FOR INSERT
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'teacher'
+    AND teacher_user_id = (SELECT public.educlub_user_id())
+    AND EXISTS (
+      SELECT 1 FROM course_teacher_assignments cta
+      WHERE cta.course_id = course_id
+        AND cta.teacher_user_id = (SELECT public.educlub_user_id())
+        AND cta.is_active = true
+    )
+  );
+DROP POLICY IF EXISTS course_update_requests_admin_update ON course_update_requests;
+CREATE POLICY course_update_requests_admin_update ON course_update_requests
+  FOR UPDATE
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) = 'school_admin'
+      AND EXISTS (
+        SELECT 1 FROM courses c
+        WHERE c.id = course_id
+          AND c.school_id = (SELECT public.educlub_school_id())
+      )
+    )
+  );
 
 DROP POLICY IF EXISTS learners_role_access ON learners;
 CREATE POLICY learners_role_access ON learners
