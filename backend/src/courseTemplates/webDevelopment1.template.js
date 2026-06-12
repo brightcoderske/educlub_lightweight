@@ -157,6 +157,7 @@ function activitiesFor(mission, week) {
 module.exports = {
   name: "Welcome to Web Development 1",
   code: "WEB-DEV-1",
+  validation_profile: "web_development_1",
   description: "Discover how websites work and build, test, publish, and download your first website.",
   target_level: "Ages 9-14",
   image_url: "",
