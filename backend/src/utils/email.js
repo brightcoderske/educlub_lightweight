@@ -1,16 +1,12 @@
 const nodemailer = require("nodemailer");
 const env = require("../config/env");
+const {
+  buildMailDefaults,
+  buildTransportOptions,
+} = require("./emailConfig");
 
-// Create email transporter
-const transporter = nodemailer.createTransport({
-  host: env.emailHost,
-  port: env.emailPort,
-  secure: env.emailPort === 465,
-  auth: {
-    user: env.emailUser,
-    pass: env.emailPassword,
-  },
-});
+const transporter = nodemailer.createTransport(buildTransportOptions(env));
+const mailDefaults = buildMailDefaults(env);
 
 function emailShell(title, body) {
   return `
@@ -33,7 +29,7 @@ function emailShell(title, body) {
 
 async function sendMFACode(email, code, fullName) {
   const mailOptions = {
-    from: env.emailFrom || env.emailUser,
+    ...mailDefaults,
     to: email,
     subject: "eduClub - Your MFA Verification Code",
     html: emailShell(
@@ -59,7 +55,7 @@ async function sendMFACode(email, code, fullName) {
 
 async function sendWelcomeEmail(email, fullName, username, password) {
   const mailOptions = {
-    from: env.emailFrom || env.emailUser,
+    ...mailDefaults,
     to: email,
     subject: "Welcome to eduClub - Your Account Details",
     html: emailShell(
@@ -87,7 +83,7 @@ async function sendWelcomeEmail(email, fullName, username, password) {
 
 async function sendPasswordResetEmail(email, fullName, username, password) {
   const mailOptions = {
-    from: env.emailFrom || env.emailUser,
+    ...mailDefaults,
     to: email,
     subject: "eduClub - Password Reset",
     html: emailShell(
@@ -120,7 +116,7 @@ async function sendPasswordResetLinkEmail(
   expiresMinutes = 30,
 ) {
   const mailOptions = {
-    from: env.emailFrom || env.emailUser,
+    ...mailDefaults,
     to: email,
     subject: "eduClub - Reset your password",
     html: emailShell(
@@ -149,7 +145,7 @@ async function sendLearnerRegistrationWelcomeEmail({
   parentName,
 }) {
   const mailOptions = {
-    from: env.emailFrom || env.emailUser,
+    ...mailDefaults,
     to: email,
     subject: "Welcome to eduClub - Your learner account is ready",
     html: emailShell(
@@ -183,7 +179,7 @@ async function sendLearnerRegistrationAdminEmail({
   parentPhone,
 }) {
   const mailOptions = {
-    from: env.emailFrom || env.emailUser,
+    ...mailDefaults,
     to,
     subject: "eduClub - New learner self-registration",
     html: emailShell(

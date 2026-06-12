@@ -65,11 +65,23 @@ PUBLIC_BASE_URL=https://learn.educlub.co.ke
 FRONTEND_URL=https://educlub.co.ke
 CORS_ORIGINS=https://educlub.co.ke,https://www.educlub.co.ke
 DB_POOL_MAX=4
+EMAIL_HOST=mail.educlub.co.ke
+EMAIL_PORT=465
+EMAIL_SECURE=true
+EMAIL_USER=noreply@educlub.co.ke
+EMAIL_PASSWORD=REPLACE_WITH_EMAIL_PASSWORD
+EMAIL_FROM=eduClub <noreply@educlub.co.ke>
+EMAIL_REPLY_TO=support@educlub.co.ke
 ```
 
 Use Supabase's pooled connection string when available. Never place
 `DATABASE_URL`, `JWT_SECRET`, email credentials, or Flutterwave secrets in
 Vercel because the React frontend would not use them and must not receive them.
+
+Keep the HostAfrica mailbox password only in the Node.js application
+environment. After saving the variables and restarting the application, run
+`npm run email:verify` from the backend directory. It verifies the SMTP
+connection and authentication without sending a message.
 
 Restart the Node.js application, then verify:
 
