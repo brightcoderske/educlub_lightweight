@@ -8,6 +8,7 @@ export function activityToStructuredForm(activity = {}) {
     points: activity.points || 0,
     position: activity.position || 1,
     is_required: activity.is_required !== false,
+    availability_mode: activity.availability_mode || "required",
     completion_rule: activity.completion_rule || "manual",
     pass_score: activity.pass_score || "",
     is_published: activity.is_published !== false,
@@ -18,7 +19,10 @@ export function activityToStructuredForm(activity = {}) {
     starter_code: content.starter_code || content.code || "",
     starter_html: content.starter_html || "",
     starter_css: content.starter_css || "",
+    starter_js: content.starter_js || "",
     language: content.language || "html_css",
+    challenge_mode: content.challenge_mode || "build",
+    validation_checks_text: JSON.stringify(content.validation_checks || [], null, 2),
     submission_instructions: content.submission_instructions || "",
     reflection_prompt: content.reflection_prompt || "",
     project_brief: content.project_brief || "",
@@ -47,7 +51,17 @@ export function structuredFormContent(form, questions) {
     starter_code: form.starter_code || "",
     starter_html: form.starter_html || "",
     starter_css: form.starter_css || "",
+    starter_js: form.starter_js || "",
     language: form.language || "html_css",
+    challenge_mode: form.challenge_mode || "build",
+    validation_checks: (() => {
+      try {
+        const checks = JSON.parse(form.validation_checks_text || "[]");
+        return Array.isArray(checks) ? checks : [];
+      } catch {
+        return [];
+      }
+    })(),
     submission_instructions: form.submission_instructions || "",
     reflection_prompt: form.reflection_prompt || "",
     project_brief: form.project_brief || "",
@@ -59,7 +73,10 @@ export function structuredFormContent(form, questions) {
       video_title: form.video_title || "",
       transcript: form.transcript || "",
     },
-    friendly_hints: String(form.friendly_hints_text || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+    friendly_hints: String(form.friendly_hints_text || "")
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean),
     level_up: form.level_up || "",
     teacher_notes: form.teacher_notes || "",
     module_badge: {

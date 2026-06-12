@@ -90,6 +90,7 @@ function LearnerDashboard() {
   const [pastTerms, setPastTerms] = useState(0);
   const [featuredCompetition, setFeaturedCompetition] = useState(null);
   const [showFeaturedCompetition, setShowFeaturedCompetition] = useState(false);
+  const [badges, setBadges] = useState([]);
 
   useEffect(() => {
     if (!isLearner()) {
@@ -117,6 +118,7 @@ function LearnerDashboard() {
     setCurrentTerm(data.currentTerm);
     setPastTerms(data.pastTerms);
     setFeaturedCompetition(data.featuredCompetition);
+    setBadges(data.badges || []);
     if (showFeatured) {
       setShowFeaturedCompetition(Boolean(data.featuredCompetition));
     }
@@ -133,7 +135,10 @@ function LearnerDashboard() {
         apiClient.get("/academic/terms").catch(() => []),
         apiClient.get("/academic/terms/current").catch(() => null),
       ]);
-      const competitionsRes = await apiClient.get("/competitions").catch(() => []);
+      const [competitionsRes, badgesRes] = await Promise.all([
+        apiClient.get("/competitions").catch(() => []),
+        apiClient.get("/courses/learner/badges").catch(() => []),
+      ]);
       const featured =
         competitionsRes.find(
           (competition) => competition.is_featured && competition.enrollment_status !== "enrolled"
@@ -151,6 +156,7 @@ function LearnerDashboard() {
           currentTerm: currentTermRes,
           pastTerms: nextPastTerms,
           featuredCompetition: featured,
+          badges: badgesRes,
         };
         learnerDashboardCache = {
           userId: user?.id,
@@ -175,6 +181,7 @@ function LearnerDashboard() {
         currentTerm: currentTermRes,
         pastTerms: nextPastTerms,
         featuredCompetition: featured,
+        badges: badgesRes,
       };
 
       learnerDashboardCache = {
@@ -347,6 +354,44 @@ function LearnerDashboard() {
                 }}
               />
             </MDBox>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Card>
+              <MDBox p={{ xs: 1.5, sm: 2.5 }}>
+                <MDBox display="flex" justifyContent="space-between" alignItems="center" gap={1}>
+                  <MDBox>
+                    <MDTypography variant="h6" fontWeight="bold">
+                      My Module Badges
+                    </MDTypography>
+                    <MDTypography variant="caption" color="text">
+                      {badges.length} earned across your learning history
+                    </MDTypography>
+                  </MDBox>
+                  <Icon color="warning">workspace_premium</Icon>
+                </MDBox>
+                <MDBox mt={1.5} display="flex" gap={1} overflow="auto" pb={0.5}>
+                  {badges.length ? (
+                    badges.slice(0, 8).map((badge) => (
+                      <Chip
+                        key={badge.id}
+                        label={`${badge.badge_name || badge.module_title} | ${badge.label}`}
+                        sx={{
+                          bgcolor: badge.color,
+                          color: "#ffffff",
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <MDTypography variant="body2" color="text">
+                      Complete a module to earn your first badge.
+                    </MDTypography>
+                  )}
+                </MDBox>
+              </MDBox>
+            </Card>
           </Grid>
 
           <Grid item xs={12}>

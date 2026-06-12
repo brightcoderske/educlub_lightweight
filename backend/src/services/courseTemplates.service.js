@@ -214,6 +214,7 @@ async function getTemplateBuilder(templateId) {
        ta.points,
        ta.position AS activity_position,
        ta.is_required,
+       COALESCE(ta.availability_mode, 'required') AS availability_mode,
        ta.completion_rule,
        ta.pass_score,
        ta.is_published AS activity_published
@@ -248,6 +249,7 @@ async function getTemplateBuilder(templateId) {
         points: Number(row.points || 0),
         position: row.activity_position,
         is_required: row.is_required,
+        availability_mode: row.availability_mode,
         completion_rule: row.completion_rule,
         pass_score: row.pass_score,
         is_published: row.activity_published,
@@ -314,12 +316,12 @@ async function createTemplateActivity(moduleId, data = {}) {
   const result = await query(
     `INSERT INTO course_template_activities (
        template_module_id, title, activity_type, content, points, position,
-       is_required, completion_rule, pass_score, is_published
+       is_required, availability_mode, completion_rule, pass_score, is_published
      )
      VALUES (
        $1, $2, $3, $4, $5,
        COALESCE($6, (SELECT COALESCE(MAX(position), 0) + 1 FROM course_template_activities WHERE template_module_id = $1)),
-       $7, $8, $9, $10
+       $7, $8, $9, $10, $11
      )
      RETURNING *`,
     [
@@ -330,6 +332,7 @@ async function createTemplateActivity(moduleId, data = {}) {
       data.points || 0,
       data.position || null,
       data.is_required !== false,
+      data.availability_mode === "try_more" ? "try_more" : "required",
       data.completion_rule || "manual",
       data.pass_score || null,
       data.is_published !== false,
@@ -350,11 +353,12 @@ async function updateTemplateActivity(activityId, data = {}) {
          points = $4,
          position = $5,
          is_required = $6,
-         completion_rule = $7,
-         pass_score = $8,
-         is_published = $9,
+         availability_mode = $7,
+         completion_rule = $8,
+         pass_score = $9,
+         is_published = $10,
          updated_at = CURRENT_TIMESTAMP
-     WHERE id = $10
+     WHERE id = $11
      RETURNING *`,
     [
       data.title,
@@ -363,6 +367,7 @@ async function updateTemplateActivity(activityId, data = {}) {
       data.points || 0,
       data.position || 1,
       data.is_required !== false,
+      data.availability_mode === "try_more" ? "try_more" : "required",
       data.completion_rule || "manual",
       data.pass_score || null,
       data.is_published !== false,
@@ -400,9 +405,9 @@ async function copyActivities(templateModuleId, schoolModuleId) {
     await query(
       `INSERT INTO learning_activities (
          module_id, template_activity_id, title, activity_type, content, points,
-         position, is_required, completion_rule, pass_score, is_published
+         position, is_required, availability_mode, completion_rule, pass_score, is_published
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (module_id, position) DO NOTHING`,
       [
         schoolModuleId,
@@ -413,6 +418,7 @@ async function copyActivities(templateModuleId, schoolModuleId) {
         activity.points || 0,
         activity.position,
         activity.is_required,
+        activity.availability_mode || "required",
         activity.completion_rule,
         activity.pass_score,
         activity.is_published,
@@ -632,12 +638,13 @@ async function syncSchoolCourse(courseId, user = {}) {
              content = $3,
              points = $4,
              is_required = $5,
-             completion_rule = $6,
-             pass_score = $7,
-             is_published = $8,
+             availability_mode = $6,
+             completion_rule = $7,
+             pass_score = $8,
+             is_published = $9,
              updated_at = CURRENT_TIMESTAMP
-         WHERE module_id = $9
-           AND template_activity_id = $10
+         WHERE module_id = $10
+           AND template_activity_id = $11
          RETURNING *`,
         [
           templateActivity.title,
@@ -645,6 +652,7 @@ async function syncSchoolCourse(courseId, user = {}) {
           JSON.stringify(templateActivity.content || {}),
           templateActivity.points,
           templateActivity.is_required,
+          templateActivity.availability_mode || "required",
           templateActivity.completion_rule,
           templateActivity.pass_score,
           templateActivity.is_published,
@@ -657,7 +665,7 @@ async function syncSchoolCourse(courseId, user = {}) {
         await query(
           `INSERT INTO learning_activities (
              module_id, template_activity_id, title, activity_type, content, points,
-             position, is_required, completion_rule, pass_score, is_published
+             position, is_required, availability_mode, completion_rule, pass_score, is_published
            )
            VALUES (
              $1, $2, $3, $4, $5, $6,
@@ -666,7 +674,7 @@ async function syncSchoolCourse(courseId, user = {}) {
                THEN (SELECT COALESCE(MAX(position), 0) + 1 FROM learning_activities WHERE module_id = $1)
                ELSE $7
              END,
-             $8, $9, $10, $11
+             $8, $9, $10, $11, $12
            )`,
           [
             schoolModule.rows[0].id,
@@ -677,6 +685,7 @@ async function syncSchoolCourse(courseId, user = {}) {
             templateActivity.points,
             templateActivity.position,
             templateActivity.is_required,
+            templateActivity.availability_mode || "required",
             templateActivity.completion_rule,
             templateActivity.pass_score,
             templateActivity.is_published,

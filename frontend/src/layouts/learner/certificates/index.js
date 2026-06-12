@@ -20,6 +20,7 @@ import { apiClient } from "lib/api";
 function LearnerCertificates() {
   const { user, isLearner } = useAuth();
   const [certificates, setCertificates] = useState([]);
+  const [badges, setBadges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -34,8 +35,12 @@ function LearnerCertificates() {
           setCertificates([]);
           return;
         }
-        const response = await apiClient.get(`/certificates?learner_id=${learner.id}`);
+        const [response, badgeResponse] = await Promise.all([
+          apiClient.get(`/certificates?learner_id=${learner.id}`),
+          apiClient.get("/courses/learner/badges").catch(() => []),
+        ]);
         setCertificates(response);
+        setBadges(badgeResponse);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -59,11 +64,35 @@ function LearnerCertificates() {
         <MDBox mb={3}>
           <DashboardIdentity
             user={user}
-            title="My Certificates"
-            subtitle="Certificates approved by your school will appear here."
+            title="Certificates & Badges"
+            subtitle="Your approved certificates and module achievements."
           />
         </MDBox>
         <Card>
+          <MDBox p={3}>
+            <MDTypography variant="h6" fontWeight="bold">
+              Module Badges
+            </MDTypography>
+            <MDBox mt={1.5} display="flex" gap={1} flexWrap="wrap">
+              {badges.length ? (
+                badges.map((badge) => (
+                  <Chip
+                    key={badge.id}
+                    label={`${badge.course_name} | ${badge.badge_name || badge.module_title} | ${
+                      badge.label
+                    }`}
+                    sx={{ bgcolor: badge.color, color: "#ffffff", fontWeight: 700 }}
+                  />
+                ))
+              ) : (
+                <MDTypography variant="body2" color="text">
+                  Complete a module to earn your first badge.
+                </MDTypography>
+              )}
+            </MDBox>
+          </MDBox>
+        </Card>
+        <Card sx={{ mt: 2 }}>
           <MDBox p={3}>
             {error && (
               <MDTypography variant="caption" color="error" display="block" mb={2}>

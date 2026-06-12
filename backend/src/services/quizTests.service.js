@@ -114,6 +114,9 @@ function normalizeAnswer(value, preserveOrder = false) {
 }
 
 function answersMatch(expected, actual, questionType = "") {
+  if (questionType === "true_false") {
+    return normalizeBoolean(expected) === normalizeBoolean(actual);
+  }
   const preserveOrder = questionType === "ordering";
   return (
     JSON.stringify(normalizeAnswer(expected, preserveOrder)) ===

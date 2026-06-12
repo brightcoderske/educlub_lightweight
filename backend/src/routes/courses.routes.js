@@ -10,6 +10,11 @@ const {
 const canManageCourse = requireRole("system_admin", "school_admin", "teacher");
 
 router.get("/", authenticateToken, coursesController.getAllCourses);
+router.get(
+  "/learner/badges",
+  authenticateToken,
+  coursesController.getLearnerBadges,
+);
 router.post(
   "/",
   authenticateToken,
@@ -25,6 +30,23 @@ router.get(
   "/:courseId/modules/:moduleId/learn",
   authenticateToken,
   coursesController.getModuleLearning,
+);
+router.post(
+  "/modules/:moduleId/feedback",
+  authenticateToken,
+  coursesController.submitModuleFeedback,
+);
+router.get(
+  "/modules/:moduleId/feedback-summary",
+  authenticateToken,
+  canManageCourse,
+  coursesController.getModuleFeedbackSummary,
+);
+router.post(
+  "/feedback/:feedbackId/reveal",
+  authenticateToken,
+  isSystemAdmin,
+  coursesController.revealModuleFeedbackIdentity,
 );
 router.post(
   "/activities/:activityId/progress",
@@ -79,6 +101,24 @@ router.post(
   authenticateToken,
   canManageCourse,
   coursesController.createModule,
+);
+router.get(
+  "/:id/availability-overrides",
+  authenticateToken,
+  canManageCourse,
+  coursesController.listAvailabilityOverrides,
+);
+router.post(
+  "/:id/availability-overrides",
+  authenticateToken,
+  canManageCourse,
+  coursesController.createAvailabilityOverride,
+);
+router.delete(
+  "/availability-overrides/:overrideId",
+  authenticateToken,
+  canManageCourse,
+  coursesController.revokeAvailabilityOverride,
 );
 router.post(
   "/:id/sync-template",

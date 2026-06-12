@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
@@ -75,6 +75,61 @@ function discussionCardColor(index, depth = 0) {
   return colors[(index + depth) % colors.length];
 }
 
+function ExecutableRichContent({ html }) {
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return undefined;
+    const cleanups = [];
+    root.querySelectorAll("[data-executable-code]").forEach((block) => {
+      if (block.querySelector("[data-run-executable]")) return;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.runExecutable = "true";
+      button.textContent = "Run";
+      button.style.cssText =
+        "margin-top:10px;padding:8px 14px;border:0;border-radius:6px;background:#2563eb;color:white;cursor:pointer";
+      const frame = document.createElement("iframe");
+      frame.title = "Executable lesson output";
+      frame.sandbox = "allow-scripts";
+      frame.style.cssText =
+        "display:none;width:100%;height:260px;margin-top:10px;border:1px solid #d1d5db;border-radius:6px;background:white";
+      const run = () => {
+        try {
+          const source = JSON.parse(decodeURIComponent(block.dataset.executableCode || ""));
+          frame.srcdoc = webPreview(source.html, source.css, source.js, true);
+          frame.style.display = "block";
+        } catch {
+          frame.srcdoc = "<p>This code block could not be opened.</p>";
+          frame.style.display = "block";
+        }
+      };
+      button.addEventListener("click", run);
+      block.append(button, frame);
+      cleanups.push(() => button.removeEventListener("click", run));
+    });
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, [html]);
+
+  return (
+    <MDBox
+      ref={contentRef}
+      mt={1}
+      sx={{
+        color: "#344767",
+        "& img": { maxWidth: "100%", borderRadius: "8px" },
+        "& iframe": { maxWidth: "100%" },
+        "& table": { width: "100%", borderCollapse: "collapse" },
+        "& td, & th": { border: "1px solid #d1d5db", padding: "6px" },
+      }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
+ExecutableRichContent.propTypes = { html: PropTypes.string.isRequired };
+
 function DiscussionReplyCard({ reply, index, depth, onReply }) {
   return (
     <MDBox>
@@ -138,6 +193,7 @@ function ActivityBody({
   codeDraft,
   htmlDraft,
   cssDraft,
+  jsDraft,
   codeOutput,
   codePreviewHtml,
   quizResult,
@@ -147,6 +203,7 @@ function ActivityBody({
   onCodeChange,
   onHtmlChange,
   onCssChange,
+  onJsChange,
   onRunCode,
   onSetReplyTarget,
   onSubmissionFileChange,
@@ -207,17 +264,7 @@ function ActivityBody({
             </MDTypography>
           )}
           {richHtml ? (
-            <MDBox
-              mt={1}
-              sx={{
-                color: "#344767",
-                "& img": { maxWidth: "100%", borderRadius: "8px" },
-                "& iframe": { maxWidth: "100%" },
-                "& table": { width: "100%", borderCollapse: "collapse" },
-                "& td, & th": { border: "1px solid #d1d5db", padding: "6px" },
-              }}
-              dangerouslySetInnerHTML={{ __html: richHtml }}
-            />
+            <ExecutableRichContent html={richHtml} />
           ) : body ? (
             <MDTypography variant="body2" color="text" mt={1} sx={{ whiteSpace: "pre-wrap" }}>
               {asText(body)}
@@ -230,13 +277,34 @@ function ActivityBody({
         </MDBox>
       )}
 
-      {(learnerContent.media.image_url || learnerContent.media.video_url || learnerContent.media.transcript) && (
+      {(learnerContent.media.image_url ||
+        learnerContent.media.video_url ||
+        learnerContent.media.transcript) && (
         <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
           {learnerContent.media.image_url && (
-            <MDBox component="img" src={learnerContent.media.image_url} alt={learnerContent.media.image_alt || ""} sx={{ display: "block", maxWidth: "100%", maxHeight: 320, objectFit: "contain", borderRadius: "8px" }} />
+            <MDBox
+              component="img"
+              src={learnerContent.media.image_url}
+              alt={learnerContent.media.image_alt || ""}
+              sx={{
+                display: "block",
+                maxWidth: "100%",
+                maxHeight: 320,
+                objectFit: "contain",
+                borderRadius: "8px",
+              }}
+            />
           )}
           {learnerContent.media.video_url && (
-            <MDButton component="a" href={learnerContent.media.video_url} target="_blank" rel="noopener noreferrer" variant="outlined" color="info" sx={{ mt: 1 }}>
+            <MDButton
+              component="a"
+              href={learnerContent.media.video_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="outlined"
+              color="info"
+              sx={{ mt: 1 }}
+            >
               Watch {learnerContent.media.video_title || "video"}
             </MDButton>
           )}
@@ -249,10 +317,19 @@ function ActivityBody({
       )}
 
       {learnerContent.hints.length > 0 && (
-        <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#fff7ed", border: "1px solid #fed7aa" }}>
-          <MDTypography variant="button" fontWeight="bold">Need a hint?</MDTypography>
+        <MDBox
+          mt={2}
+          p={2}
+          borderRadius="md"
+          sx={{ bgcolor: "#fff7ed", border: "1px solid #fed7aa" }}
+        >
+          <MDTypography variant="button" fontWeight="bold">
+            Need a hint?
+          </MDTypography>
           {learnerContent.hints.map((hint) => (
-            <MDTypography key={hint} variant="body2" color="text">• {hint}</MDTypography>
+            <MDTypography key={hint} variant="body2" color="text">
+              • {hint}
+            </MDTypography>
           ))}
         </MDBox>
       )}
@@ -406,9 +483,20 @@ function ActivityBody({
                 )}
               </MDBox>
               {quizResult && learnerContent.questionFeedback[question.id] && (
-                <MDBox mt={1} p={1.25} borderRadius="md" sx={{ bgcolor: learnerContent.questionFeedback[question.id].correct ? "#ecfdf5" : "#fff7ed" }}>
+                <MDBox
+                  mt={1}
+                  p={1.25}
+                  borderRadius="md"
+                  sx={{
+                    bgcolor: learnerContent.questionFeedback[question.id].correct
+                      ? "#ecfdf5"
+                      : "#fff7ed",
+                  }}
+                >
                   <MDTypography variant="body2" color="text">
-                    {learnerContent.questionFeedback[question.id].correct ? "Correct. " : "Try again. "}
+                    {learnerContent.questionFeedback[question.id].correct
+                      ? "Correct. "
+                      : "Try again. "}
                     {learnerContent.questionFeedback[question.id].explanation}
                     {!learnerContent.questionFeedback[question.id].correct &&
                     learnerContent.questionFeedback[question.id].hint
@@ -536,30 +624,83 @@ function ActivityBody({
           {["html_css", "html_css_js"].includes((content.language || "").toLowerCase()) ? (
             <Grid container spacing={1.5} mt={0.25}>
               <Grid item xs={12} md={6}>
-                <MDInput label="HTML" multiline rows={12} fullWidth value={htmlDraft} onChange={(event) => onHtmlChange(event.target.value)} sx={{ "& textarea": { fontFamily: "monospace", bgcolor: "#0f172a", color: "#e2e8f0", borderRadius: "8px", p: 1.5 } }} />
+                <MDInput
+                  label="HTML"
+                  multiline
+                  rows={12}
+                  fullWidth
+                  value={htmlDraft}
+                  onChange={(event) => onHtmlChange(event.target.value)}
+                  sx={{
+                    "& textarea": {
+                      fontFamily: "monospace",
+                      bgcolor: "#0f172a",
+                      color: "#e2e8f0",
+                      borderRadius: "8px",
+                      p: 1.5,
+                    },
+                  }}
+                />
               </Grid>
               <Grid item xs={12} md={6}>
-                <MDInput label="CSS" multiline rows={12} fullWidth value={cssDraft} onChange={(event) => onCssChange(event.target.value)} sx={{ "& textarea": { fontFamily: "monospace", bgcolor: "#172554", color: "#e2e8f0", borderRadius: "8px", p: 1.5 } }} />
+                <MDInput
+                  label="CSS"
+                  multiline
+                  rows={12}
+                  fullWidth
+                  value={cssDraft}
+                  onChange={(event) => onCssChange(event.target.value)}
+                  sx={{
+                    "& textarea": {
+                      fontFamily: "monospace",
+                      bgcolor: "#172554",
+                      color: "#e2e8f0",
+                      borderRadius: "8px",
+                      p: 1.5,
+                    },
+                  }}
+                />
               </Grid>
+              {(content.language || "").toLowerCase() === "html_css_js" && (
+                <Grid item xs={12}>
+                  <MDInput
+                    label="JavaScript"
+                    multiline
+                    rows={10}
+                    fullWidth
+                    value={jsDraft}
+                    onChange={(event) => onJsChange(event.target.value)}
+                    sx={{
+                      "& textarea": {
+                        fontFamily: "monospace",
+                        bgcolor: "#111827",
+                        color: "#fde68a",
+                        borderRadius: "8px",
+                        p: 1.5,
+                      },
+                    }}
+                  />
+                </Grid>
+              )}
             </Grid>
           ) : (
-          <MDInput
-            multiline
-            rows={10}
-            fullWidth
-            value={codeDraft}
-            onChange={(event) => onCodeChange(event.target.value)}
-            sx={{
-              mt: 1,
-              "& textarea": {
-                fontFamily: "monospace",
-                bgcolor: "#0f172a",
-                color: "#e2e8f0",
-                borderRadius: "8px",
-                p: 1.5,
-              },
-            }}
-          />
+            <MDInput
+              multiline
+              rows={10}
+              fullWidth
+              value={codeDraft}
+              onChange={(event) => onCodeChange(event.target.value)}
+              sx={{
+                mt: 1,
+                "& textarea": {
+                  fontFamily: "monospace",
+                  bgcolor: "#0f172a",
+                  color: "#e2e8f0",
+                  borderRadius: "8px",
+                  p: 1.5,
+                },
+              }}
+            />
           )}
           <MDBox mt={1.5} display="flex" gap={1} flexWrap="wrap">
             <MDButton variant="gradient" color="info" disabled={saving} onClick={onRunCode}>
@@ -584,14 +725,16 @@ function ActivityBody({
               lineHeight: 1.6,
             }}
           >
-            {codeOutput || "Output will appear here."}
+            {codeOutput || "Select Run Code to reveal the output."}
           </MDBox>
           {codePreviewHtml && (
             <MDBox
               component="iframe"
               title="Code preview"
               srcDoc={codePreviewHtml}
-              sandbox={(content.language || "").toLowerCase() === "html_css_js" ? "allow-scripts" : ""}
+              sandbox={
+                (content.language || "").toLowerCase() === "html_css_js" ? "allow-scripts" : ""
+              }
               mt={1.5}
               width="100%"
               height="320"
@@ -619,9 +762,18 @@ function ActivityBody({
         </MDBox>
       )}
       {content.purpose === "level_up" && learnerContent.levelUp && (
-        <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#faf5ff", border: "1px solid #ddd6fe" }}>
-          <MDTypography variant="button" fontWeight="bold">Optional Level Up</MDTypography>
-          <MDTypography variant="body2" color="text">{learnerContent.levelUp}</MDTypography>
+        <MDBox
+          mt={2}
+          p={2}
+          borderRadius="md"
+          sx={{ bgcolor: "#faf5ff", border: "1px solid #ddd6fe" }}
+        >
+          <MDTypography variant="button" fontWeight="bold">
+            Optional Level Up
+          </MDTypography>
+          <MDTypography variant="body2" color="text">
+            {learnerContent.levelUp}
+          </MDTypography>
         </MDBox>
       )}
       <Dialog open={Boolean(previewImage)} onClose={() => setPreviewImage("")} maxWidth="md">
@@ -651,11 +803,13 @@ ActivityBody.propTypes = {
   codeDraft: PropTypes.string.isRequired,
   htmlDraft: PropTypes.string.isRequired,
   cssDraft: PropTypes.string.isRequired,
+  jsDraft: PropTypes.string.isRequired,
   codeOutput: PropTypes.string.isRequired,
   codePreviewHtml: PropTypes.string.isRequired,
   onCodeChange: PropTypes.func.isRequired,
   onHtmlChange: PropTypes.func.isRequired,
   onCssChange: PropTypes.func.isRequired,
+  onJsChange: PropTypes.func.isRequired,
   onAnswerChange: PropTypes.func.isRequired,
   onDiscussionReplyChange: PropTypes.func.isRequired,
   onRunCode: PropTypes.func.isRequired,
@@ -679,12 +833,29 @@ ActivityBody.defaultProps = {
   submissionFile: null,
 };
 
-function CompletionCelebration({ data, onNext, onClose }) {
+function CompletionCelebration({
+  data,
+  feedbackComment,
+  feedbackRating,
+  feedbackSaving,
+  onNext,
+  onClose,
+  onFeedbackCommentChange,
+  onFeedbackRatingChange,
+  onSubmitFeedback,
+}) {
   const moduleDone = data?.module?.is_done;
   const courseDone = data?.course_summary?.is_done;
-  const badgeName = data?.module?.activities
-    ?.map((activity) => activity.content?.module_badge?.name)
-    .find(Boolean);
+  const badgeName =
+    data?.badge?.badge_name ||
+    data?.module?.activities?.map((activity) => activity.content?.module_badge?.name).find(Boolean);
+  const badgeTier = data?.badge?.tier || "completion";
+  const badgeColors = {
+    completion: "#111827",
+    bronze: "#b87333",
+    silver: "#a7adb7",
+    gold: "#d4af37",
+  };
 
   if (!moduleDone) return null;
 
@@ -720,7 +891,52 @@ function CompletionCelebration({ data, onNext, onClose }) {
           Performance: {data.module.score_percent}% marks, {data.module.completed_activities} of{" "}
           {data.module.total_activities} activities done.
         </MDTypography>
-        {badgeName && <Chip label={`Badge earned: ${badgeName}`} color="warning" sx={{ mt: 1.5 }} />}
+        <Chip
+          label={`${badgeName || data.module.title} | ${
+            badgeTier.charAt(0).toUpperCase() + badgeTier.slice(1)
+          } badge`}
+          sx={{
+            mt: 1.5,
+            bgcolor: badgeColors[badgeTier],
+            color: "#ffffff",
+            fontWeight: 700,
+          }}
+        />
+        <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "rgba(255,255,255,0.94)" }}>
+          <MDTypography variant="button" fontWeight="bold">
+            Rate this module
+          </MDTypography>
+          <MDBox display="flex" gap={0.25} my={0.75}>
+            {[1, 2, 3, 4, 5].map((rating) => (
+              <IconButton
+                key={rating}
+                aria-label={`Rate ${rating} stars`}
+                onClick={() => onFeedbackRatingChange(rating)}
+                size="small"
+              >
+                <Icon sx={{ color: rating <= feedbackRating ? "#f59e0b" : "#cbd5e1" }}>star</Icon>
+              </IconButton>
+            ))}
+          </MDBox>
+          <MDInput
+            label="Optional comment"
+            multiline
+            rows={2}
+            fullWidth
+            value={feedbackComment}
+            onChange={(event) => onFeedbackCommentChange(event.target.value)}
+          />
+          <MDButton
+            variant="gradient"
+            color="info"
+            size="small"
+            sx={{ mt: 1 }}
+            disabled={!feedbackRating || feedbackSaving}
+            onClick={onSubmitFeedback}
+          >
+            Save Feedback
+          </MDButton>
+        </MDBox>
         <MDBox display="flex" gap={1.5} flexWrap="wrap" mt={2}>
           {data.next_module?.is_open && (
             <MDButton variant="contained" color="white" onClick={onNext}>
@@ -754,6 +970,12 @@ CompletionCelebration.propTypes = {
   }).isRequired,
   onClose: PropTypes.func.isRequired,
   onNext: PropTypes.func.isRequired,
+  feedbackComment: PropTypes.string.isRequired,
+  feedbackRating: PropTypes.number.isRequired,
+  feedbackSaving: PropTypes.bool.isRequired,
+  onFeedbackCommentChange: PropTypes.func.isRequired,
+  onFeedbackRatingChange: PropTypes.func.isRequired,
+  onSubmitFeedback: PropTypes.func.isRequired,
 };
 
 function ModuleLearn() {
@@ -770,12 +992,16 @@ function ModuleLearn() {
   const [codeDraft, setCodeDraft] = useState("");
   const [htmlDraft, setHtmlDraft] = useState("");
   const [cssDraft, setCssDraft] = useState("");
+  const [jsDraft, setJsDraft] = useState("");
   const [codeOutput, setCodeOutput] = useState("");
   const [codePreviewHtml, setCodePreviewHtml] = useState("");
   const [quizResult, setQuizResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
 
   const activeActivity = useMemo(
     () => data?.module?.activities?.find((activity) => activity.id === activeActivityId) || null,
@@ -788,7 +1014,14 @@ function ModuleLearn() {
     try {
       const response = await apiClient.get(`/courses/${courseId}/modules/${moduleId}/learn`);
       setData(response);
-      setActiveActivityId((current) => current || response.module.activities?.[0]?.id || null);
+      setFeedbackRating(Number(response.feedback?.rating || 0));
+      setFeedbackComment(response.feedback?.comment || "");
+      setActiveActivityId(
+        (current) =>
+          current ||
+          response.module.activities?.find((activity) => activity.is_unlocked)?.id ||
+          null
+      );
     } catch (err) {
       setError(err.message || "Failed to load module");
     } finally {
@@ -799,7 +1032,7 @@ function ModuleLearn() {
   const patchActivityProgress = (activityId, progress = {}) => {
     setData((current) => {
       if (!current?.module?.activities) return current;
-      const activities = current.module.activities.map((activity) =>
+      let activities = current.module.activities.map((activity) =>
         activity.id === activityId
           ? {
               ...activity,
@@ -808,8 +1041,26 @@ function ModuleLearn() {
             }
           : activity
       );
-      const completedActivities = activities.filter((activity) => done(activity.status)).length;
-      const totalActivities = activities.length;
+      if (done(progress.status)) {
+        let previousRequiredComplete = true;
+        activities = activities.map((activity) => {
+          if (activity.availability_mode === "try_more") return activity;
+          const unlocked = previousRequiredComplete;
+          previousRequiredComplete = done(activity.status);
+          return {
+            ...activity,
+            is_unlocked: unlocked,
+            lock_reason: unlocked ? null : activity.lock_reason,
+          };
+        });
+      }
+      const requiredActivities = activities.filter(
+        (activity) => activity.availability_mode !== "try_more"
+      );
+      const completedActivities = requiredActivities.filter((activity) =>
+        done(activity.status)
+      ).length;
+      const totalActivities = requiredActivities.length;
       const moduleWasDone = Boolean(current.module.is_done);
       const moduleIsDone = totalActivities > 0 && completedActivities === totalActivities;
       const courseSummary = { ...(current.course_summary || {}) };
@@ -825,6 +1076,7 @@ function ModuleLearn() {
       }
       return {
         ...current,
+        badge: progress.badge || current.badge,
         course_summary: courseSummary,
         module: {
           ...current.module,
@@ -863,6 +1115,7 @@ function ModuleLearn() {
     const parts = starterParts(activeActivity?.content || {});
     setHtmlDraft(parts.html);
     setCssDraft(parts.css);
+    setJsDraft(parts.js || "");
     setCodeOutput("");
     setCodePreviewHtml("");
 
@@ -884,16 +1137,6 @@ function ModuleLearn() {
     };
   }, [activeActivity?.id]);
 
-  useEffect(() => {
-    if (!activeActivity) return;
-    const language = (activeActivity.content?.language || "").toLowerCase();
-    if (!["html_css", "html_css_js"].includes(language)) return;
-    const preview = webPreview(htmlDraft, cssDraft, language === "html_css_js");
-    setCodeDraft(preview);
-    setCodePreviewHtml(preview);
-    setCodeOutput("Live preview updates as you type.");
-  }, [activeActivity?.id, htmlDraft, cssDraft]);
-
   const updateProgress = async (activity, status) => {
     if (!activity) return;
     setSaving(true);
@@ -912,6 +1155,10 @@ function ModuleLearn() {
   };
 
   const selectActivity = async (activity) => {
+    if (!activity?.is_unlocked) {
+      setError(activity?.lock_reason || "Complete the previous required activity first.");
+      return;
+    }
     setActiveActivityId(activity.id);
     if (activity.status === "not_started") {
       await updateProgress(activity, "in_progress");
@@ -975,16 +1222,24 @@ function ModuleLearn() {
           type: submissionFile.type,
         };
       }
-      await apiClient.post(`/courses/activities/${activeActivity.id}/submissions`, {
-        submission_type:
-          activeActivity.activity_type === "coding" ? "code" : fileContent ? "file" : "text",
-        content: {
-          text: activeActivity.activity_type === "coding" ? codeDraft : submissionText,
-          file: fileContent,
-          output: activeActivity.activity_type === "coding" ? codeOutput : null,
-        },
+      const submission = await apiClient.post(
+        `/courses/activities/${activeActivity.id}/submissions`,
+        {
+          submission_type:
+            activeActivity.activity_type === "coding" ? "code" : fileContent ? "file" : "text",
+          content: {
+            text: activeActivity.activity_type === "coding" ? codeDraft : submissionText,
+            html: activeActivity.activity_type === "coding" ? htmlDraft : null,
+            css: activeActivity.activity_type === "coding" ? cssDraft : null,
+            js: activeActivity.activity_type === "coding" ? jsDraft : null,
+            file: fileContent,
+            output: activeActivity.activity_type === "coding" ? codeOutput : null,
+          },
+        }
+      );
+      patchActivityProgress(activeActivity.id, {
+        status: submission.automatic_result ? "graded" : "submitted",
       });
-      patchActivityProgress(activeActivity.id, { status: "submitted" });
     } catch (err) {
       setError(err.message || "Failed to submit work");
     } finally {
@@ -997,24 +1252,18 @@ function ModuleLearn() {
     const language = activeActivity.content?.language || "javascript";
     setCodePreviewHtml("");
     if (["html_css", "html_css_js", "html", "web"].includes(language.toLowerCase())) {
-      setCodePreviewHtml(codeDraft);
+      const preview = webPreview(
+        htmlDraft || codeDraft,
+        cssDraft,
+        jsDraft,
+        language.toLowerCase() === "html_css_js"
+      );
+      setCodeDraft(preview);
+      setCodePreviewHtml(preview);
       setCodeOutput("Rendered browser preview below.");
       return;
     }
-    if (!["javascript", "js"].includes(language.toLowerCase())) {
-      setCodeOutput(`Running ${language} code will be supported in the server runner later.`);
-      return;
-    }
-    const logs = [];
-    try {
-      const runner = new Function("console", `${codeDraft}\n//# sourceURL=educlub-activity.js`);
-      runner({
-        log: (...items) => logs.push(items.map((item) => asText(item)).join(" ")),
-      });
-      setCodeOutput(logs.join("\n") || "Code ran successfully.");
-    } catch (err) {
-      setCodeOutput(err.message || "Code failed to run.");
-    }
+    setCodeOutput(`${language} remains teacher-reviewed in this release.`);
   };
 
   const submitDiscussionReply = async () => {
@@ -1042,8 +1291,23 @@ function ModuleLearn() {
     const activities = data?.module?.activities || [];
     const index = activities.findIndex((activity) => activity.id === activeActivityId);
     const next = activities[index + 1];
-    if (next) {
+    if (next?.is_unlocked) {
       selectActivity(next);
+    }
+  };
+
+  const submitFeedback = async () => {
+    setFeedbackSaving(true);
+    try {
+      const feedback = await apiClient.post(`/courses/modules/${moduleId}/feedback`, {
+        rating: feedbackRating,
+        comment: feedbackComment,
+      });
+      setData((current) => ({ ...current, feedback }));
+    } catch (err) {
+      setError(err.message || "Failed to save feedback");
+    } finally {
+      setFeedbackSaving(false);
     }
   };
 
@@ -1119,6 +1383,8 @@ function ModuleLearn() {
                       color={
                         done(activity.status)
                           ? "success"
+                          : activity.availability_mode === "try_more"
+                          ? "warning"
                           : activity.id === activeActivityId
                           ? "info"
                           : "dark"
@@ -1128,10 +1394,13 @@ function ModuleLearn() {
                       startIcon={
                         <Icon fontSize="small">{activityIcon(activity.activity_type)}</Icon>
                       }
+                      disabled={!activity.is_unlocked}
+                      title={activity.lock_reason || ""}
                       onClick={() => selectActivity(activity)}
                       sx={{ justifyContent: "flex-start", minHeight: 40 }}
                     >
                       {activity.title}
+                      {activity.availability_mode === "try_more" ? " | Try More" : ""}
                     </MDButton>
                   ))}
                 </MDBox>
@@ -1166,6 +1435,7 @@ function ModuleLearn() {
                       codeDraft={codeDraft}
                       htmlDraft={htmlDraft}
                       cssDraft={cssDraft}
+                      jsDraft={jsDraft}
                       codeOutput={codeOutput}
                       codePreviewHtml={codePreviewHtml}
                       replyTarget={replyTarget}
@@ -1173,6 +1443,7 @@ function ModuleLearn() {
                       onCodeChange={setCodeDraft}
                       onHtmlChange={setHtmlDraft}
                       onCssChange={setCssDraft}
+                      onJsChange={setJsDraft}
                       onDiscussionReplyChange={setDiscussionReply}
                       onRunCode={runCode}
                       onSetReplyTarget={setReplyTarget}
@@ -1189,7 +1460,18 @@ function ModuleLearn() {
                       gap={1.5}
                       mt={3}
                     >
-                      <MDButton variant="outlined" color="dark" onClick={goNextActivity}>
+                      <MDButton
+                        variant="outlined"
+                        color="dark"
+                        disabled={
+                          !(data?.module?.activities || [])[
+                            (data?.module?.activities || []).findIndex(
+                              (activity) => activity.id === activeActivityId
+                            ) + 1
+                          ]?.is_unlocked
+                        }
+                        onClick={goNextActivity}
+                      >
                         Next Activity
                       </MDButton>
                       <MDButton
@@ -1220,6 +1502,12 @@ function ModuleLearn() {
 
             <CompletionCelebration
               data={data}
+              feedbackComment={feedbackComment}
+              feedbackRating={feedbackRating}
+              feedbackSaving={feedbackSaving}
+              onFeedbackCommentChange={setFeedbackComment}
+              onFeedbackRatingChange={setFeedbackRating}
+              onSubmitFeedback={submitFeedback}
               onNext={() =>
                 navigate(`/learner/courses/${courseId}/modules/${data.next_module.id}/learn`)
               }

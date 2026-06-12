@@ -64,6 +64,8 @@ function emptyModule(position) {
     description: "",
     position,
     is_published: true,
+    schedule_term_id: "",
+    schedule_week_number: "",
   };
 }
 
@@ -95,6 +97,8 @@ function moduleToForm(courseModule) {
     is_published: courseModule?.is_published !== false,
     learning_outcomes: courseModule?.learning_outcomes || [],
     unlock_at: courseModule?.unlock_at ? String(courseModule.unlock_at).slice(0, 16) : "",
+    schedule_term_id: courseModule?.schedule?.term_id || "",
+    schedule_week_number: courseModule?.schedule?.week_number || "",
   };
 }
 
@@ -191,7 +195,10 @@ function readFileAsDataUrl(file) {
 
 function activityToManagerForm(activity) {
   const form = activityToStructuredForm(activity || {});
-  return { ...form, questions: form.questions.map((question, index) => normalizeQuestionForm(question, index)) };
+  return {
+    ...form,
+    questions: form.questions.map((question, index) => normalizeQuestionForm(question, index)),
+  };
 }
 
 function RichContentEditor({ value, onChange, onImageUpload }) {
@@ -331,7 +338,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
   };
 
   const selectEditorObject = (event) => {
-    const object = event.target.closest?.("img,table,td,th,pre,a");
+    const object = event.target.closest?.("img,table,td,th,pre,a,[data-executable-code]");
     if (selectedObject && selectedObject !== object) {
       selectedObject.style.outline = "";
       selectedObject.style.outlineOffset = "";
@@ -381,6 +388,19 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     if (!url) return;
     insertHtml(
       `<p><a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;text-decoration:none">Open video/resource</a></p>`
+    );
+  };
+
+  const insertExecutableCode = () => {
+    const html = window.prompt("HTML to run", "<h2>Hello learner</h2>") || "";
+    const css = window.prompt("Optional CSS", "h2 { color: teal; }") || "";
+    const js = window.prompt("Optional JavaScript", "") || "";
+    const payload = encodeURIComponent(JSON.stringify({ html, css, js }));
+    insertHtml(
+      `<div data-executable-code="${payload}" contenteditable="false" style="border:1px solid #cbd5e1;padding:12px;border-radius:8px;background:#f8fafc"><strong>Executable HTML/CSS/JavaScript</strong><pre style="background:#111827;color:#e5e7eb;padding:10px;border-radius:6px;overflow:auto">${html.replace(
+        /</g,
+        "&lt;"
+      )}</pre><span style="color:#475569">Learners select Run to reveal the output.</span></div><p><br></p>`
     );
   };
 
@@ -491,6 +511,9 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
           }
         >
           <Icon>data_object</Icon>
+        </IconButton>
+        <IconButton title="Insert executable code" onClick={insertExecutableCode}>
+          <Icon>play_circle</Icon>
         </IconButton>
         <IconButton onClick={insertEmbed}>
           <Icon>smart_display</Icon>
@@ -751,17 +774,33 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
       );
       return;
     }
+    if (form.activity_type === "coding") {
+      try {
+        const checks = JSON.parse(form.validation_checks_text || "[]");
+        const checkMarks = (Array.isArray(checks) ? checks : []).reduce(
+          (sum, check) => sum + Number(check.points || 0),
+          0
+        );
+        if (checkMarks > Number(form.points || 0)) {
+          setValidationError("Automatic check marks cannot exceed the activity total.");
+          return;
+        }
+      } catch {
+        setValidationError("Automatic checks must be valid JSON.");
+        return;
+      }
+    }
     const normalizedQuestions = form.questions.map((question, index) => ({
-        ...question,
-        options: Array.isArray(question.options)
-          ? question.options
-          : String(question.options || "")
-              .split("|")
-              .map((option) => option.trim())
-              .filter(Boolean),
-        points: Number(question.points ?? 1),
-        position: index + 1,
-      }));
+      ...question,
+      options: Array.isArray(question.options)
+        ? question.options
+        : String(question.options || "")
+            .split("|")
+            .map((option) => option.trim())
+            .filter(Boolean),
+      points: Number(question.points ?? 1),
+      position: index + 1,
+    }));
     const content = structuredFormContent(form, normalizedQuestions);
 
     onSave({
@@ -771,6 +810,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
       points: Number(form.points || 0),
       position: Number(form.position || 1),
       is_required: form.is_required,
+      availability_mode: form.availability_mode || "required",
       completion_rule: form.completion_rule,
       pass_score: form.pass_score || null,
       is_published: form.is_published,
@@ -858,37 +898,113 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
             </MDInput>
           </Grid>
           <Grid item xs={12} md={4}>
-            <MDInput label="Activity purpose" fullWidth value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} />
+            <MDInput
+              select
+              label="Learning path"
+              fullWidth
+              value={form.availability_mode || "required"}
+              onChange={(event) => setForm({ ...form, availability_mode: event.target.value })}
+              SelectProps={{ native: true }}
+            >
+              <option value="required">Required progressive activity</option>
+              <option value="try_more">Try More optional practice</option>
+            </MDInput>
           </Grid>
           <Grid item xs={12} md={4}>
-            <MDInput label="Badge name" fullWidth value={form.badge_name} onChange={(event) => setForm({ ...form, badge_name: event.target.value })} />
+            <MDInput
+              label="Activity purpose"
+              fullWidth
+              value={form.purpose}
+              onChange={(event) => setForm({ ...form, purpose: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12} md={4}>
-            <MDInput label="Milestone key" fullWidth value={form.milestone_key} onChange={(event) => setForm({ ...form, milestone_key: event.target.value })} />
+            <MDInput
+              label="Badge name"
+              fullWidth
+              value={form.badge_name}
+              onChange={(event) => setForm({ ...form, badge_name: event.target.value })}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <MDInput
+              label="Milestone key"
+              fullWidth
+              value={form.milestone_key}
+              onChange={(event) => setForm({ ...form, milestone_key: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12} md={6}>
-            <MDInput label="Image URL" fullWidth value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} />
+            <MDInput
+              label="Image URL"
+              fullWidth
+              value={form.image_url}
+              onChange={(event) => setForm({ ...form, image_url: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12} md={6}>
-            <MDInput label="Image alternative text" fullWidth value={form.image_alt} onChange={(event) => setForm({ ...form, image_alt: event.target.value })} />
+            <MDInput
+              label="Image alternative text"
+              fullWidth
+              value={form.image_alt}
+              onChange={(event) => setForm({ ...form, image_alt: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12} md={6}>
-            <MDInput label="Teacher-approved external video URL" fullWidth value={form.video_url} onChange={(event) => setForm({ ...form, video_url: event.target.value })} />
+            <MDInput
+              label="Teacher-approved external video URL"
+              fullWidth
+              value={form.video_url}
+              onChange={(event) => setForm({ ...form, video_url: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12} md={6}>
-            <MDInput label="Video title" fullWidth value={form.video_title} onChange={(event) => setForm({ ...form, video_title: event.target.value })} />
+            <MDInput
+              label="Video title"
+              fullWidth
+              value={form.video_title}
+              onChange={(event) => setForm({ ...form, video_title: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12}>
-            <MDInput label="Video transcript or text alternative" multiline rows={3} fullWidth value={form.transcript} onChange={(event) => setForm({ ...form, transcript: event.target.value })} />
+            <MDInput
+              label="Video transcript or text alternative"
+              multiline
+              rows={3}
+              fullWidth
+              value={form.transcript}
+              onChange={(event) => setForm({ ...form, transcript: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12} md={6}>
-            <MDInput label="Friendly hints (one per line)" multiline rows={3} fullWidth value={form.friendly_hints_text} onChange={(event) => setForm({ ...form, friendly_hints_text: event.target.value })} />
+            <MDInput
+              label="Friendly hints (one per line)"
+              multiline
+              rows={3}
+              fullWidth
+              value={form.friendly_hints_text}
+              onChange={(event) => setForm({ ...form, friendly_hints_text: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12} md={6}>
-            <MDInput label="Teacher notes (hidden from learners)" multiline rows={3} fullWidth value={form.teacher_notes} onChange={(event) => setForm({ ...form, teacher_notes: event.target.value })} />
+            <MDInput
+              label="Teacher notes (hidden from learners)"
+              multiline
+              rows={3}
+              fullWidth
+              value={form.teacher_notes}
+              onChange={(event) => setForm({ ...form, teacher_notes: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12}>
-            <MDInput label="Optional Level Up challenge" multiline rows={3} fullWidth value={form.level_up} onChange={(event) => setForm({ ...form, level_up: event.target.value })} />
+            <MDInput
+              label="Optional Level Up challenge"
+              multiline
+              rows={3}
+              fullWidth
+              value={form.level_up}
+              onChange={(event) => setForm({ ...form, level_up: event.target.value })}
+            />
           </Grid>
           <Grid item xs={12} md={4}>
             <MDInput
@@ -948,13 +1064,17 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                             updateQuestion(index, {
                               question_type: questionType,
                               options:
-                                questionType === "matching"
+                                questionType === "true_false"
+                                  ? ["True", "False"]
+                                  : questionType === "matching"
                                   ? [{ left: "", right: "" }]
                                   : question.options.some((option) => typeof option === "object")
                                   ? ["Option 1", "Option 2"]
                                   : question.options,
                               correct_answer:
-                                questionType === "multi_select"
+                                questionType === "true_false"
+                                  ? "True"
+                                  : questionType === "multi_select"
                                   ? []
                                   : questionType === "ordering"
                                   ? question.options
@@ -965,6 +1085,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                         >
                           <option value="multiple_choice">Choose one</option>
                           <option value="multi_select">Choose many</option>
+                          <option value="true_false">True or false</option>
                           <option value="short_answer">Short answer</option>
                           <option value="matching">Matching pairs</option>
                           <option value="ordering">Arrange in order</option>
@@ -1190,7 +1311,9 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                           label="Answer explanation"
                           fullWidth
                           value={question.explanation}
-                          onChange={(event) => updateQuestion(index, { explanation: event.target.value })}
+                          onChange={(event) =>
+                            updateQuestion(index, { explanation: event.target.value })
+                          }
                         />
                       </Grid>
                     </Grid>
@@ -1287,6 +1410,20 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
               <Grid item xs={12} md={3}>
                 <MDInput
                   select
+                  label="Challenge mode"
+                  fullWidth
+                  value={form.challenge_mode}
+                  onChange={(event) => setForm({ ...form, challenge_mode: event.target.value })}
+                  SelectProps={{ native: true }}
+                >
+                  <option value="build">Build a solution</option>
+                  <option value="complete">Complete the code</option>
+                  <option value="debug">Find and fix the bug</option>
+                </MDInput>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <MDInput
+                  select
                   label="Code type"
                   fullWidth
                   value={form.language}
@@ -1313,10 +1450,50 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                 />
               </Grid>
               <Grid item xs={12} md={6}>
-                <MDInput label="Starter HTML" multiline rows={7} fullWidth value={form.starter_html} onChange={(event) => setForm({ ...form, starter_html: event.target.value })} sx={{ "& textarea": { fontFamily: "monospace" } }} />
+                <MDInput
+                  label="Starter HTML"
+                  multiline
+                  rows={7}
+                  fullWidth
+                  value={form.starter_html}
+                  onChange={(event) => setForm({ ...form, starter_html: event.target.value })}
+                  sx={{ "& textarea": { fontFamily: "monospace" } }}
+                />
               </Grid>
               <Grid item xs={12} md={6}>
-                <MDInput label="Starter CSS" multiline rows={7} fullWidth value={form.starter_css} onChange={(event) => setForm({ ...form, starter_css: event.target.value })} sx={{ "& textarea": { fontFamily: "monospace" } }} />
+                <MDInput
+                  label="Starter CSS"
+                  multiline
+                  rows={7}
+                  fullWidth
+                  value={form.starter_css}
+                  onChange={(event) => setForm({ ...form, starter_css: event.target.value })}
+                  sx={{ "& textarea": { fontFamily: "monospace" } }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <MDInput
+                  label="Starter JavaScript"
+                  multiline
+                  rows={7}
+                  fullWidth
+                  value={form.starter_js}
+                  onChange={(event) => setForm({ ...form, starter_js: event.target.value })}
+                  sx={{ "& textarea": { fontFamily: "monospace" } }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <MDInput
+                  label='Automatic checks JSON, for example [{"type":"html_contains","value":"<main","points":2}]'
+                  multiline
+                  rows={5}
+                  fullWidth
+                  value={form.validation_checks_text}
+                  onChange={(event) =>
+                    setForm({ ...form, validation_checks_text: event.target.value })
+                  }
+                  sx={{ "& textarea": { fontFamily: "monospace" } }}
+                />
               </Grid>
             </>
           )}
@@ -1655,6 +1832,8 @@ function CourseBuilder() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [currentTerm, setCurrentTerm] = useState(null);
+  const [termWeeks, setTermWeeks] = useState([]);
 
   const modules = data?.modules || [];
   const selectedModule = useMemo(
@@ -1718,6 +1897,22 @@ function CourseBuilder() {
     setExpandedModules({});
     loadBuilder();
   }, [entityId, isTemplate]);
+
+  useEffect(() => {
+    if (isTemplate) return;
+    async function loadScheduleOptions() {
+      try {
+        const term = await apiClient.get("/academic/terms/current");
+        setCurrentTerm(term);
+        const weeks = term?.id ? await apiClient.get(`/academic/terms/${term.id}/weeks`) : [];
+        setTermWeeks(weeks || []);
+      } catch {
+        setCurrentTerm(null);
+        setTermWeeks([]);
+      }
+    }
+    loadScheduleOptions();
+  }, [isTemplate]);
 
   useEffect(() => {
     if (!reviewMode || modules.length === 0) return;
@@ -1882,6 +2077,61 @@ function CourseBuilder() {
       setError(err.message || "Failed to save grade.");
     } finally {
       setActivityReviewSaving(false);
+    }
+  };
+
+  const createEarlyUnlock = async ({ module, activity = null }) => {
+    if (isTemplate) return;
+    const scope = window.prompt("Unlock scope: learner, learners, or class", "learner");
+    if (!scope) return;
+    const reason = window.prompt("Reason for early unlock");
+    if (!reason) return;
+    const payload = {
+      scope_type: scope,
+      module_id: module?.id,
+      activity_id: activity?.id || null,
+      reason,
+    };
+    if (scope === "learner") {
+      payload.learner_id = window.prompt("Learner ID");
+    } else if (scope === "learners") {
+      payload.learner_ids = String(window.prompt("Learner IDs separated by commas") || "")
+        .split(",")
+        .map((value) => Number(value.trim()))
+        .filter(Boolean);
+    } else {
+      payload.grade = window.prompt("Grade, leave blank for all") || "";
+      payload.stream = window.prompt("Stream, leave blank for all") || "";
+    }
+    setSaving(true);
+    try {
+      await apiClient.post(`/courses/${entityId}/availability-overrides`, payload);
+      setMessage("Early unlock saved.");
+    } catch (err) {
+      setError(err.message || "Failed to save early unlock.");
+    } finally {
+      setSaving(false);
+      closeMenus();
+    }
+  };
+
+  const viewModuleFeedback = async (courseModule) => {
+    if (isTemplate) return;
+    try {
+      const summary = await apiClient.get(`/courses/modules/${courseModule.id}/feedback-summary`);
+      const comments = (summary.comments || [])
+        .slice(0, 10)
+        .map((item) => `${item.rating}/5: ${item.comment}`)
+        .join("\n");
+      window.alert(
+        `${courseModule.title}\nAverage: ${summary.average_rating || 0}/5\nResponses: ${
+          summary.response_count || 0
+        }${comments ? `\n\nAnonymous comments:\n${comments}` : ""}`
+      );
+    } catch (err) {
+      setError(err.message || "Failed to load module feedback.");
+    } finally {
+      closeMenus();
     }
   };
 
@@ -2377,6 +2627,28 @@ function CourseBuilder() {
                           setModuleForm({ ...moduleForm, description: event.target.value })
                         }
                       />
+                      {!isTemplate && currentTerm && (
+                        <MDInput
+                          select
+                          label={`Opening week in ${currentTerm.name}`}
+                          value={moduleForm.schedule_week_number}
+                          onChange={(event) =>
+                            setModuleForm({
+                              ...moduleForm,
+                              schedule_term_id: currentTerm.id,
+                              schedule_week_number: event.target.value,
+                            })
+                          }
+                          SelectProps={{ native: true }}
+                        >
+                          <option value="">Available immediately</option>
+                          {termWeeks.map((week) => (
+                            <option key={week.id} value={week.week_number}>
+                              Week {week.week_number} | {String(week.start_date).slice(0, 10)}
+                            </option>
+                          ))}
+                        </MDInput>
+                      )}
                       <MDButton
                         variant="gradient"
                         color="success"
@@ -2484,20 +2756,29 @@ function CourseBuilder() {
                               }
                             />
                           </Grid>
-                          {!isTemplate && (
+                          {!isTemplate && currentTerm && (
                             <Grid item xs={12} md={5}>
                               <MDInput
-                                label="Unlock date"
-                                type="datetime-local"
+                                select
+                                label={`Opening week in ${currentTerm.name}`}
                                 fullWidth
-                                value={moduleEditForm.unlock_at}
+                                value={moduleEditForm.schedule_week_number}
                                 onChange={(event) =>
                                   setModuleEditForm({
                                     ...moduleEditForm,
-                                    unlock_at: event.target.value,
+                                    schedule_term_id: currentTerm.id,
+                                    schedule_week_number: event.target.value,
                                   })
                                 }
-                              />
+                                SelectProps={{ native: true }}
+                              >
+                                <option value="">Available immediately</option>
+                                {termWeeks.map((week) => (
+                                  <option key={week.id} value={week.week_number}>
+                                    Week {week.week_number} | {String(week.start_date).slice(0, 10)}
+                                  </option>
+                                ))}
+                              </MDInput>
                             </Grid>
                           )}
                         </Grid>
@@ -2765,6 +3046,14 @@ function CourseBuilder() {
         )}
         <Menu anchorEl={moduleActionAnchor} open={Boolean(moduleActionAnchor)} onClose={closeMenus}>
           <MenuItem onClick={() => selectModuleForEdit(actionTarget)}>Edit</MenuItem>
+          {!isTemplate && (
+            <MenuItem onClick={() => createEarlyUnlock({ module: actionTarget })}>
+              Unlock Early
+            </MenuItem>
+          )}
+          {!isTemplate && (
+            <MenuItem onClick={() => viewModuleFeedback(actionTarget)}>View Feedback</MenuItem>
+          )}
           <MenuItem
             onClick={() => {
               updateModulePublished(actionTarget, !actionTarget?.is_published);
@@ -2797,6 +3086,18 @@ function CourseBuilder() {
               onClick={() => openActivityReview(actionTarget?.module, actionTarget?.activity)}
             >
               Review Learners
+            </MenuItem>
+          )}
+          {!isTemplate && (
+            <MenuItem
+              onClick={() =>
+                createEarlyUnlock({
+                  module: actionTarget?.module,
+                  activity: actionTarget?.activity,
+                })
+              }
+            >
+              Unlock Early
             </MenuItem>
           )}
           <MenuItem

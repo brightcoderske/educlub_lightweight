@@ -89,6 +89,7 @@ async function buildNativeCourseProgress(learnerId, course) {
        la.title AS activity_title,
        la.activity_type,
        la.position AS activity_position,
+       COALESCE(la.availability_mode, 'required') AS availability_mode,
        COALESCE(ap.status, 'not_started') AS progress_status,
        ap.score
      FROM course_modules cm
@@ -119,6 +120,7 @@ async function buildNativeCourseProgress(learnerId, course) {
         id: row.activity_id,
         name: row.activity_title,
         type: row.activity_type,
+        availability_mode: row.availability_mode,
         completed: ["completed", "graded"].includes(row.progress_status),
         score_percent: row.score === null ? null : clampPercent(row.score),
       });
@@ -126,9 +128,19 @@ async function buildNativeCourseProgress(learnerId, course) {
   });
 
   const modules = [...moduleMap.values()].map((module) => {
-    const totalActivities = module.activities.length;
-    const completedActivities = module.activities.filter((activity) => activity.completed).length;
-    const scoredActivities = module.activities.filter((activity) => activity.score_percent !== null);
+    const requiredActivities = module.activities.filter(
+      (activity) => activity.availability_mode !== "try_more"
+    );
+    const optionalActivities = module.activities.filter(
+      (activity) => activity.availability_mode === "try_more"
+    );
+    const totalActivities = requiredActivities.length;
+    const completedActivities = requiredActivities.filter(
+      (activity) => activity.completed
+    ).length;
+    const scoredActivities = requiredActivities.filter(
+      (activity) => activity.score_percent !== null
+    );
     const score =
       scoredActivities.length > 0
         ? scoredActivities.reduce((sum, activity) => sum + activity.score_percent, 0) /
@@ -145,6 +157,8 @@ async function buildNativeCourseProgress(learnerId, course) {
         totalActivities > 0 ? clampPercent((completedActivities / totalActivities) * 100) : 0,
       score_percent: clampPercent(score),
       grade_label: gradeLabel(score),
+      try_more_total: optionalActivities.length,
+      try_more_completed: optionalActivities.filter((activity) => activity.completed).length,
     };
   });
 

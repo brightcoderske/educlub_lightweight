@@ -412,6 +412,81 @@ async function rollbackSchoolCourse(req, res) {
   }
 }
 
+async function createAvailabilityOverride(req, res) {
+  try {
+    const override = await coursesService.createAvailabilityOverride(
+      req.params.id,
+      req.user,
+      req.body,
+    );
+    res.status(201).json(override);
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to create unlock" });
+  }
+}
+
+async function listAvailabilityOverrides(req, res) {
+  try {
+    res.json(
+      await coursesService.listAvailabilityOverrides(req.params.id, req.user),
+    );
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to load unlocks" });
+  }
+}
+
+async function revokeAvailabilityOverride(req, res) {
+  try {
+    res.json(
+      await coursesService.revokeAvailabilityOverride(req.params.overrideId, req.user),
+    );
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to revoke unlock" });
+  }
+}
+
+async function getLearnerBadges(req, res) {
+  try {
+    res.json(await coursesService.getLearnerBadges(req.user));
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to load badges" });
+  }
+}
+
+async function submitModuleFeedback(req, res) {
+  try {
+    res.json(
+      await coursesService.submitModuleFeedback(req.params.moduleId, req.user, req.body),
+    );
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to save feedback" });
+  }
+}
+
+async function getModuleFeedbackSummary(req, res) {
+  try {
+    res.json(
+      await coursesService.getModuleFeedbackSummary(req.params.moduleId, req.user),
+    );
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to load feedback" });
+  }
+}
+
+async function revealModuleFeedbackIdentity(req, res) {
+  try {
+    res.json(
+      await coursesService.revealModuleFeedbackIdentity(
+        req.params.feedbackId,
+        req.user,
+        req.body,
+      ),
+    );
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to reveal identity" });
+  }
+}
+
 module.exports = {
   getAllCourses,
   createCourse,
@@ -437,4 +512,11 @@ module.exports = {
   deleteActivity,
   syncSchoolCourse,
   rollbackSchoolCourse,
+  createAvailabilityOverride,
+  listAvailabilityOverrides,
+  revokeAvailabilityOverride,
+  getLearnerBadges,
+  submitModuleFeedback,
+  getModuleFeedbackSummary,
+  revealModuleFeedbackIdentity,
 };

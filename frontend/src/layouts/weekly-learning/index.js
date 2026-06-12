@@ -1742,20 +1742,28 @@ function WeeklyLearning() {
                                     updateQuizQuestion(index, {
                                       question_type: questionType,
                                       options:
-                                        questionType === "matching"
+                                        questionType === "true_false"
+                                          ? ["True", "False"]
+                                          : questionType === "matching"
                                           ? [{ left: "", right: "" }]
                                           : question.options?.some(
                                               (option) => typeof option === "object"
                                             )
                                           ? ["", "", "", ""]
                                           : question.options,
-                                      correct_answer: questionType === "multiple_choice" ? [] : "",
+                                      correct_answer:
+                                        questionType === "true_false"
+                                          ? "True"
+                                          : questionType === "multiple_choice"
+                                          ? []
+                                          : "",
                                     });
                                   }}
                                   SelectProps={{ native: true }}
                                 >
                                   <option value="single_choice">Single choice</option>
                                   <option value="multiple_choice">Multiple choice</option>
+                                  <option value="true_false">True or false</option>
                                   <option value="short_answer">Short answer</option>
                                   <option value="matching">Matching pairs</option>
                                   <option value="ordering">Arrange in order</option>

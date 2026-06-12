@@ -13,7 +13,7 @@ export function selectActivityContent(content = {}, quizResult = {}) {
           explanation: feedback[question.id]?.explanation || "",
           correct: feedback[question.id]?.correct,
         },
-      ]),
+      ])
     ),
   };
 }
@@ -23,15 +23,19 @@ export function starterCode(content = {}) {
   return [
     content.starter_html || "",
     content.starter_css ? `<style>\n${content.starter_css}\n</style>` : "",
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function starterParts(content = {}) {
-  if (content.starter_html || content.starter_css) {
-    return {
+  if (content.starter_html || content.starter_css || content.starter_js) {
+    const parts = {
       html: content.starter_html || "",
       css: content.starter_css || "",
     };
+    if (content.starter_js !== undefined) parts.js = content.starter_js || "";
+    return parts;
   }
   return {
     html: content.starter_code || content.code || "",
@@ -39,9 +43,15 @@ export function starterParts(content = {}) {
   };
 }
 
-export function webPreview(html = "", css = "", allowJavaScript = false) {
-  const safeHtml = allowJavaScript
-    ? html
-    : html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
-  return `${safeHtml}${css ? `<style>${css}</style>` : ""}`;
+export function webPreview(html = "", css = "", js = "", allowJavaScript = false) {
+  if (typeof js === "boolean") {
+    allowJavaScript = js;
+    js = "";
+  }
+  const safeHtml = allowJavaScript ? html : html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+  const policy =
+    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:\">";
+  return `${policy}${safeHtml}${css ? `<style>${css}</style>` : ""}${
+    allowJavaScript && js ? `<script>${js}<\/script>` : ""
+  }`;
 }

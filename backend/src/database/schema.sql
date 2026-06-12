@@ -196,6 +196,8 @@ CREATE TABLE IF NOT EXISTS course_template_activities (
   points NUMERIC(8, 2) DEFAULT 0,
   position INTEGER NOT NULL DEFAULT 1,
   is_required BOOLEAN DEFAULT TRUE,
+  availability_mode VARCHAR(20) NOT NULL DEFAULT 'required'
+    CHECK (availability_mode IN ('required', 'try_more')),
   completion_rule VARCHAR(50) DEFAULT 'manual'
     CHECK (completion_rule IN ('manual', 'viewed', 'scrolled', 'submitted', 'graded', 'score_at_least')),
   pass_score NUMERIC(8, 2),
@@ -204,6 +206,14 @@ CREATE TABLE IF NOT EXISTS course_template_activities (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(template_module_id, position)
 );
+
+ALTER TABLE course_template_activities
+  ADD COLUMN IF NOT EXISTS availability_mode VARCHAR(20) NOT NULL DEFAULT 'required';
+ALTER TABLE course_template_activities
+  DROP CONSTRAINT IF EXISTS course_template_activities_availability_mode_check;
+ALTER TABLE course_template_activities
+  ADD CONSTRAINT course_template_activities_availability_mode_check
+  CHECK (availability_mode IN ('required', 'try_more'));
 
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES course_templates(id) ON DELETE SET NULL;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS template_version INTEGER;
@@ -249,6 +259,13 @@ CREATE TABLE IF NOT EXISTS learning_activities (
 );
 
 ALTER TABLE learning_activities ADD COLUMN IF NOT EXISTS template_activity_id INTEGER REFERENCES course_template_activities(id) ON DELETE SET NULL;
+ALTER TABLE learning_activities
+  ADD COLUMN IF NOT EXISTS availability_mode VARCHAR(20) NOT NULL DEFAULT 'required';
+ALTER TABLE learning_activities
+  DROP CONSTRAINT IF EXISTS learning_activities_availability_mode_check;
+ALTER TABLE learning_activities
+  ADD CONSTRAINT learning_activities_availability_mode_check
+  CHECK (availability_mode IN ('required', 'try_more'));
 
 INSERT INTO course_templates (
   name, code, description, target_level, image_url, estimated_weeks,
@@ -287,11 +304,12 @@ WHERE c.school_id IS NULL
 
 INSERT INTO course_template_activities (
   template_module_id, title, activity_type, content, points, position,
-  is_required, completion_rule, pass_score, is_published
+  is_required, availability_mode, completion_rule, pass_score, is_published
 )
 SELECT
   tm.id, la.title, la.activity_type, la.content, la.points, la.position,
-  la.is_required, la.completion_rule, la.pass_score, la.is_published
+  la.is_required, COALESCE(la.availability_mode, 'required'),
+  la.completion_rule, la.pass_score, la.is_published
 FROM learning_activities la
 JOIN course_modules cm ON cm.id = la.module_id
 JOIN courses c ON c.id = cm.course_id
@@ -349,6 +367,123 @@ CREATE TABLE IF NOT EXISTS activity_grades (
   graded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(learner_id, activity_id)
 );
+
+-- School-owned scheduling is intentionally separate from template modules.
+-- Existing modules without a row here retain their current availability.
+CREATE TABLE IF NOT EXISTS school_module_schedules (
+  id SERIAL PRIMARY KEY,
+  module_id INTEGER NOT NULL REFERENCES course_modules(id) ON DELETE CASCADE,
+  term_id INTEGER NOT NULL REFERENCES terms(id) ON DELETE CASCADE,
+  week_number INTEGER NOT NULL CHECK (week_number > 0),
+  opens_at TIMESTAMP NOT NULL,
+  created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(module_id)
+);
+
+CREATE TABLE IF NOT EXISTS learning_availability_overrides (
+  id SERIAL PRIMARY KEY,
+  school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  module_id INTEGER REFERENCES course_modules(id) ON DELETE CASCADE,
+  activity_id INTEGER REFERENCES learning_activities(id) ON DELETE CASCADE,
+  scope_type VARCHAR(20) NOT NULL
+    CHECK (scope_type IN ('class', 'learners', 'learner')),
+  target_learner_id INTEGER REFERENCES learners(id) ON DELETE CASCADE,
+  target_learner_ids JSONB DEFAULT '[]'::jsonb,
+  target_grade VARCHAR(50),
+  target_stream VARCHAR(50),
+  reason TEXT NOT NULL,
+  created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  revoked_at TIMESTAMP,
+  CHECK (module_id IS NOT NULL OR activity_id IS NOT NULL)
+);
+
+CREATE TABLE IF NOT EXISTS learner_module_badges (
+  id SERIAL PRIMARY KEY,
+  learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  module_id INTEGER NOT NULL REFERENCES course_modules(id) ON DELETE CASCADE,
+  tier VARCHAR(20) NOT NULL
+    CHECK (tier IN ('completion', 'bronze', 'silver', 'gold')),
+  score_percent NUMERIC(8, 4) NOT NULL CHECK (score_percent BETWEEN 0 AND 100),
+  badge_name VARCHAR(255),
+  awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(learner_id, module_id)
+);
+
+CREATE TABLE IF NOT EXISTS module_feedback (
+  id SERIAL PRIMARY KEY,
+  learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+  school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  module_id INTEGER NOT NULL REFERENCES course_modules(id) ON DELETE CASCADE,
+  module_version INTEGER NOT NULL DEFAULT 1,
+  rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(learner_id, module_id)
+);
+
+CREATE TABLE IF NOT EXISTS feedback_identity_audits (
+  id SERIAL PRIMARY KEY,
+  feedback_id INTEGER NOT NULL REFERENCES module_feedback(id) ON DELETE CASCADE,
+  accessed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reason TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO learner_module_badges (
+  learner_id, course_id, module_id, tier, score_percent, badge_name,
+  awarded_at, updated_at
+)
+SELECT
+  completed.learner_id,
+  completed.course_id,
+  completed.module_id,
+  CASE
+    WHEN completed.score_percent > 90 THEN 'gold'
+    WHEN completed.score_percent > 80 THEN 'silver'
+    WHEN completed.score_percent >= 71 THEN 'bronze'
+    ELSE 'completion'
+  END,
+  completed.score_percent,
+  completed.badge_name,
+  NOW(),
+  NOW()
+FROM (
+  SELECT
+    ap.learner_id,
+    cm.course_id,
+    cm.id AS module_id,
+    COALESCE(AVG(ap.score) FILTER (WHERE ap.score IS NOT NULL), 100)::numeric AS score_percent,
+    COALESCE(MAX(la.content->'module_badge'->>'name'), cm.title) AS badge_name,
+    COUNT(la.id) FILTER (
+      WHERE COALESCE(la.availability_mode, 'required') = 'required'
+        AND la.is_published = true
+    ) AS required_total,
+    COUNT(ap.id) FILTER (
+      WHERE COALESCE(la.availability_mode, 'required') = 'required'
+        AND la.is_published = true
+        AND ap.status IN ('completed', 'graded')
+    ) AS required_done
+  FROM course_modules cm
+  JOIN learning_activities la ON la.module_id = cm.id
+  JOIN activity_progress ap ON ap.activity_id = la.id
+  GROUP BY ap.learner_id, cm.course_id, cm.id
+) completed
+WHERE completed.required_total > 0
+  AND completed.required_done >= completed.required_total
+ON CONFLICT (learner_id, module_id)
+DO UPDATE SET
+  tier = EXCLUDED.tier,
+  score_percent = EXCLUDED.score_percent,
+  badge_name = EXCLUDED.badge_name,
+  updated_at = NOW();
 
 CREATE TABLE IF NOT EXISTS quiz_questions (
   id SERIAL PRIMARY KEY,
@@ -589,7 +724,7 @@ ALTER TABLE quiz_test_questions
   DROP CONSTRAINT IF EXISTS quiz_test_questions_question_type_check;
 ALTER TABLE quiz_test_questions
   ADD CONSTRAINT quiz_test_questions_question_type_check
-  CHECK (question_type IN ('single_choice', 'multiple_choice', 'short_answer', 'matching', 'ordering'));
+  CHECK (question_type IN ('single_choice', 'multiple_choice', 'true_false', 'short_answer', 'matching', 'ordering'));
 
 CREATE TABLE IF NOT EXISTS quiz_test_attempts (
   id SERIAL PRIMARY KEY,
@@ -900,6 +1035,12 @@ CREATE INDEX IF NOT EXISTS idx_activity_submissions_learner_activity ON activity
 CREATE INDEX IF NOT EXISTS idx_activity_submissions_activity_status ON activity_submissions(activity_id, status, submitted_at);
 CREATE INDEX IF NOT EXISTS idx_activity_grades_learner_activity ON activity_grades(learner_id, activity_id);
 CREATE INDEX IF NOT EXISTS idx_activity_grades_activity_learner ON activity_grades(activity_id, learner_id, graded_at);
+CREATE INDEX IF NOT EXISTS idx_school_module_schedules_term_week ON school_module_schedules(term_id, week_number);
+CREATE INDEX IF NOT EXISTS idx_availability_overrides_target ON learning_availability_overrides(course_id, module_id, activity_id, revoked_at);
+CREATE INDEX IF NOT EXISTS idx_availability_overrides_learner ON learning_availability_overrides(target_learner_id, revoked_at);
+CREATE INDEX IF NOT EXISTS idx_learner_module_badges_recent ON learner_module_badges(learner_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_module_feedback_school_module ON module_feedback(school_id, module_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_identity_audits_feedback ON feedback_identity_audits(feedback_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_quiz_questions_activity_position ON quiz_questions(activity_id, position);
 CREATE INDEX IF NOT EXISTS idx_quiz_attempts_learner_activity ON quiz_attempts(learner_id, activity_id);
 CREATE INDEX IF NOT EXISTS idx_quiz_attempts_activity_learner_attempt ON quiz_attempts(activity_id, learner_id, attempt_number DESC);
@@ -1031,6 +1172,11 @@ ALTER TABLE learning_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_grades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE school_module_schedules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE learning_availability_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE learner_module_badges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE module_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feedback_identity_audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quiz_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quiz_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discussions ENABLE ROW LEVEL SECURITY;
@@ -1436,6 +1582,103 @@ CREATE POLICY course_modules_staff_write ON course_modules
       )
     )
   );
+
+DROP POLICY IF EXISTS school_module_schedules_access ON school_module_schedules;
+CREATE POLICY school_module_schedules_access ON school_module_schedules
+  FOR ALL
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR EXISTS (
+      SELECT 1
+      FROM course_modules cm
+      JOIN courses c ON c.id = cm.course_id
+      WHERE cm.id = module_id
+        AND c.school_id = (SELECT public.educlub_school_id())
+    )
+  )
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR EXISTS (
+      SELECT 1
+      FROM course_modules cm
+      JOIN courses c ON c.id = cm.course_id
+      WHERE cm.id = module_id
+        AND c.school_id = (SELECT public.educlub_school_id())
+    )
+  );
+
+DROP POLICY IF EXISTS learning_availability_overrides_access ON learning_availability_overrides;
+CREATE POLICY learning_availability_overrides_access ON learning_availability_overrides
+  FOR ALL
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR school_id = (SELECT public.educlub_school_id())
+  )
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+      AND school_id = (SELECT public.educlub_school_id())
+    )
+  );
+
+DROP POLICY IF EXISTS learner_module_badges_access ON learner_module_badges;
+CREATE POLICY learner_module_badges_access ON learner_module_badges
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR EXISTS (
+      SELECT 1
+      FROM learners l
+      WHERE l.id = learner_id
+        AND (
+          l.school_id = (SELECT public.educlub_school_id())
+          OR l.user_id = (SELECT public.educlub_user_id())
+        )
+    )
+  );
+
+DROP POLICY IF EXISTS learner_module_badges_api_write ON learner_module_badges;
+CREATE POLICY learner_module_badges_api_write ON learner_module_badges
+  FOR ALL
+  USING ((SELECT public.educlub_role()) IN ('system_admin', 'school_admin', 'teacher'))
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR EXISTS (
+      SELECT 1
+      FROM learners l
+      WHERE l.id = learner_id
+        AND l.school_id = (SELECT public.educlub_school_id())
+    )
+  );
+
+DROP POLICY IF EXISTS module_feedback_access ON module_feedback;
+CREATE POLICY module_feedback_access ON module_feedback
+  FOR ALL
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR school_id = (SELECT public.educlub_school_id())
+    OR EXISTS (
+      SELECT 1 FROM learners l
+      WHERE l.id = learner_id
+        AND l.user_id = (SELECT public.educlub_user_id())
+    )
+  )
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR school_id = (SELECT public.educlub_school_id())
+    OR EXISTS (
+      SELECT 1 FROM learners l
+      WHERE l.id = learner_id
+        AND l.user_id = (SELECT public.educlub_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS feedback_identity_audits_system_admin ON feedback_identity_audits;
+CREATE POLICY feedback_identity_audits_system_admin ON feedback_identity_audits
+  FOR ALL
+  USING ((SELECT public.educlub_role()) = 'system_admin')
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
 
 DROP POLICY IF EXISTS learning_activities_read ON learning_activities;
 CREATE POLICY learning_activities_read ON learning_activities

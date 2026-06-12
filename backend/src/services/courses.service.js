@@ -1,6 +1,20 @@
 const { query } = require("../config");
 const { masteryUpdateSql } = require("./progressMastery");
 const courseTemplatesService = require("./courseTemplates.service");
+const {
+  resolveModuleAvailability,
+  annotateActivityAvailability,
+} = require("./activityAvailability.service");
+const {
+  recalculateModuleBadge,
+  listLearnerBadges,
+} = require("./moduleBadges.service");
+const {
+  normalizeBooleanAnswer,
+  validateCodingChallenge,
+  evaluateSourceChecks,
+} = require("./codingChallenges.service");
+const moduleFeedbackService = require("./moduleFeedback.service");
 
 function normalizeCourseCategory(category) {
   if (["general", "weekly_typing", "weekly_quiz"].includes(category)) {
@@ -286,6 +300,9 @@ function normalizeAnswer(value, preserveOrder = false) {
 }
 
 function answersMatch(expected, actual, questionType = "") {
+  if (questionType === "true_false") {
+    return normalizeBooleanAnswer(expected) === normalizeBooleanAnswer(actual);
+  }
   const preserveOrder = questionType === "ordering";
   const normalizedExpected = normalizeAnswer(expected, preserveOrder);
   const normalizedActual = normalizeAnswer(actual, preserveOrder);
@@ -319,11 +336,17 @@ function validateQuizAllocation(data = {}) {
 }
 
 function moduleSummary(module) {
-  const total = module.activities.length;
-  const completed = module.activities.filter((activity) =>
+  const required = module.activities.filter(
+    (activity) => (activity.availability_mode || "required") === "required",
+  );
+  const optional = module.activities.filter(
+    (activity) => activity.availability_mode === "try_more",
+  );
+  const total = required.length;
+  const completed = required.filter((activity) =>
     activityDone(activity.status),
   ).length;
-  const scores = module.activities
+  const scores = required
     .map((activity) => Number(activity.score))
     .filter((score) => Number.isFinite(score));
   const score = scores.length
@@ -336,6 +359,8 @@ function moduleSummary(module) {
     progress_percent: total ? Math.round((completed / total) * 100) : 0,
     score_percent: total ? score : 0,
     is_done: total > 0 && completed >= total,
+    try_more_total: optional.length,
+    try_more_completed: optional.filter((activity) => activityDone(activity.status)).length,
   };
 }
 
@@ -404,6 +429,9 @@ async function getCourseLearningOverview(courseId, user = {}) {
        cm.position AS module_position,
        cm.is_published AS module_published,
        cm.unlock_at,
+       sms.term_id AS schedule_term_id,
+       sms.week_number AS schedule_week_number,
+       sms.opens_at AS schedule_opens_at,
        la.id AS activity_id,
        la.template_activity_id,
        la.title AS activity_title,
@@ -412,6 +440,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
        la.points,
        la.position AS activity_position,
        la.is_required,
+       COALESCE(la.availability_mode, 'required') AS availability_mode,
        la.completion_rule,
        la.pass_score,
        la.is_published AS activity_published,
@@ -420,6 +449,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
        ap.completed_at,
        ap.updated_at AS progress_updated_at
      FROM course_modules cm
+     LEFT JOIN school_module_schedules sms ON sms.module_id = cm.id
      LEFT JOIN learning_activities la
        ON la.module_id = cm.id
       AND (la.is_published = true OR ${staffParam} = true)
@@ -444,6 +474,13 @@ async function getCourseLearningOverview(courseId, user = {}) {
         position: row.module_position,
         is_published: row.module_published,
         unlock_at: row.unlock_at,
+        schedule: row.schedule_term_id
+          ? {
+              term_id: row.schedule_term_id,
+              week_number: row.schedule_week_number,
+              opens_at: row.schedule_opens_at,
+            }
+          : null,
         activities: [],
       });
     }
@@ -458,6 +495,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
         points: Number(row.points || 0),
         position: row.activity_position,
         is_required: row.is_required,
+        availability_mode: row.availability_mode,
         completion_rule: row.completion_rule,
         pass_score: row.pass_score,
         is_published: row.activity_published,
@@ -469,10 +507,60 @@ async function getCourseLearningOverview(courseId, user = {}) {
     }
   });
 
-  const modules = [...moduleMap.values()].map((module) => ({
-    ...module,
-    ...moduleSummary(module),
-  }));
+  let overrideRows = [];
+  if (learner) {
+    const overrides = await query(
+      `SELECT o.*
+       FROM learning_availability_overrides o
+       WHERE o.course_id = $1::integer
+         AND o.revoked_at IS NULL
+         AND (
+           o.target_learner_id = $2::integer
+           OR COALESCE(o.target_learner_ids, '[]'::jsonb)
+              @> jsonb_build_array($2::integer)
+           OR (
+             o.scope_type = 'class'
+             AND (o.target_grade IS NULL OR o.target_grade = $3::varchar)
+             AND (o.target_stream IS NULL OR o.target_stream = $4::varchar)
+           )
+         )`,
+      [courseId, learner.id, learner.grade || null, learner.stream || null],
+    );
+    overrideRows = overrides.rows;
+  }
+
+  const modules = [...moduleMap.values()].map((module) => {
+    const moduleOverride = overrideRows.some(
+      (item) => Number(item.module_id) === Number(module.id) && !item.activity_id,
+    );
+    const availability = resolveModuleAvailability({
+      opens_at: module.schedule?.opens_at,
+      unlock_at: module.unlock_at,
+      has_override: moduleOverride,
+      staff_view: staffView,
+    });
+    const activities = annotateActivityAvailability(
+      module.activities.map((activity) => ({
+        ...activity,
+        has_override: overrideRows.some(
+          (item) => Number(item.activity_id) === Number(activity.id),
+        ),
+      })),
+      availability.is_open,
+    ).map((activity) =>
+      activity.has_override
+        ? { ...activity, is_unlocked: true, lock_reason: null }
+        : activity,
+    );
+    const decorated = {
+      ...module,
+      activities,
+      is_unlocked: availability.is_open,
+      lock_reason: availability.is_open ? null : "This module has not opened yet.",
+      opens_at: availability.opens_at || module.schedule?.opens_at || module.unlock_at,
+    };
+    return { ...decorated, ...moduleSummary(decorated) };
+  });
   const completedModules = modules.filter((module) => module.is_done).length;
   const totalActivities = modules.reduce(
     (sum, module) => sum + module.total_activities,
@@ -539,11 +627,18 @@ async function assertActivityAccess(activityId, user = {}) {
     [activity.course_id, learner.id],
   );
 
-  return {
-    activity: allocation.rows[0] ? activity : null,
-    learner,
-    staffView: false,
-  };
+  if (!allocation.rows[0]) return { activity: null, learner, staffView: false };
+  const moduleLearning = await getModuleLearning(activity.course_id, activity.module_id, user);
+  const learningActivity = moduleLearning?.module?.activities?.find(
+    (item) => Number(item.id) === Number(activityId),
+  );
+  if (!moduleLearning?.is_unlocked || !learningActivity?.is_unlocked) {
+    throw new Error(
+      learningActivity?.lock_reason || moduleLearning?.module?.lock_reason ||
+        "Complete the previous required activity first.",
+    );
+  }
+  return { activity, learner, staffView: false };
 }
 
 async function ensureDiscussion(activity, user = {}) {
@@ -706,7 +801,28 @@ async function submitActivityWork(activityId, user = {}, data = {}) {
   );
 
   await upsertActivityProgress(activityId, user, { status: "submitted" });
-  return result.rows[0];
+  let automatic_result = null;
+  if (activity.activity_type === "coding") {
+    const checks = Array.isArray(activity.content?.validation_checks)
+      ? activity.content.validation_checks
+      : [];
+    if (checks.length) {
+      automatic_result = evaluateSourceChecks(data.content || {}, checks);
+      const total = automatic_result.total_points;
+      const score = total
+        ? Math.round((automatic_result.earned_points / total) * 100)
+        : 0;
+      await upsertActivityProgress(
+        activityId,
+        user,
+        {
+          status: score >= Number(activity.pass_score || 0) ? "graded" : "submitted",
+          score,
+        },
+      );
+    }
+  }
+  return { ...result.rows[0], automatic_result };
 }
 
 async function submitQuiz(activityId, user = {}, data = {}) {
@@ -796,10 +912,27 @@ async function getModuleLearning(courseId, moduleId, user = {}) {
   const module = overview.modules[moduleIndex];
   const nextModule = overview.modules[moduleIndex + 1] || null;
   const previousModule = overview.modules[moduleIndex - 1] || null;
-  const isUnlocked =
-    !module.unlock_at ||
-    new Date(module.unlock_at).getTime() <= Date.now() ||
-    isStaff(user);
+  const isUnlocked = module.is_unlocked || isStaff(user);
+
+  let badge = null;
+  let feedback = null;
+  if (overview.learner) {
+    const badgeResult = await query(
+      `SELECT * FROM learner_module_badges
+       WHERE learner_id = $1::integer AND module_id = $2::integer
+       LIMIT 1`,
+      [overview.learner.id, moduleId],
+    );
+    badge = badgeResult.rows[0] || null;
+    const feedbackResult = await query(
+      `SELECT id, rating, comment, updated_at
+       FROM module_feedback
+       WHERE learner_id = $1::integer AND module_id = $2::integer
+       LIMIT 1`,
+      [overview.learner.id, moduleId],
+    );
+    feedback = feedbackResult.rows[0] || null;
+  }
 
   return {
     course: overview.course,
@@ -818,23 +951,24 @@ async function getModuleLearning(courseId, moduleId, user = {}) {
           title: nextModule.title,
           is_done: nextModule.is_done,
           is_open:
-            !nextModule.unlock_at ||
-            new Date(nextModule.unlock_at).getTime() <= Date.now() ||
-            isStaff(user),
+            nextModule.is_unlocked || isStaff(user),
         }
       : null,
     course_summary: overview.summary,
     is_unlocked: isUnlocked,
+    badge,
+    feedback,
   };
 }
 
 async function upsertActivityProgress(activityId, user = {}, data = {}, options = {}) {
-  const learner = await findLearnerForUser(user.userId);
+  const activityAccess = await assertActivityAccess(activityId, user);
+  const learner = activityAccess.learner;
   if (!learner)
     throw new Error("Learner profile is not linked to this account.");
 
   const access = await query(
-    `SELECT la.id, la.points, la.activity_type, la.completion_rule, la.pass_score
+    `SELECT la.id, la.module_id, la.points, la.activity_type, la.completion_rule, la.pass_score
      FROM learning_activities la
      JOIN course_modules cm ON cm.id = la.module_id
      JOIN course_allocations ca ON ca.course_id = cm.course_id
@@ -892,7 +1026,13 @@ async function upsertActivityProgress(activityId, user = {}, data = {}, options 
     [learner.id, activityId, status, score, data.opened_at || null, options.preserveMastery === true],
   );
 
-  return result.rows[0];
+  let badge = null;
+  try {
+    badge = await recalculateModuleBadge(learner.id, access.rows[0].module_id);
+  } catch (error) {
+    console.error("Module badge recalculation error:", error);
+  }
+  return { ...result.rows[0], badge };
 }
 
 function toPositiveInteger(value, fallback, maxValue = null) {
@@ -1129,7 +1269,47 @@ async function gradeActivityForLearner(activityId, learnerId, user = {}, data = 
     );
   }
 
+  try {
+    await recalculateModuleBadge(learnerId, activity.module_id);
+  } catch (error) {
+    console.error("Module badge recalculation error:", error);
+  }
+
   return grade.rows[0];
+}
+
+async function saveModuleSchedule(moduleId, user = {}, data = {}) {
+  if (!data.schedule_term_id || !data.schedule_week_number) {
+    await query("DELETE FROM school_module_schedules WHERE module_id = $1::integer", [moduleId]);
+    return null;
+  }
+  const week = await query(
+    `SELECT tw.start_date
+     FROM term_weeks tw
+     JOIN terms t ON t.id = tw.term_id
+     WHERE tw.term_id = $1::integer
+       AND tw.week_number = $2::integer
+       AND t.is_active = true
+     LIMIT 1`,
+    [data.schedule_term_id, data.schedule_week_number],
+  );
+  if (!week.rows[0]) throw new Error("Choose a valid week in the active term.");
+  const result = await query(
+    `INSERT INTO school_module_schedules (
+       module_id, term_id, week_number, opens_at, created_by_user_id
+     )
+     VALUES ($1::integer, $2::integer, $3::integer, $4::date, $5::integer)
+     ON CONFLICT (module_id)
+     DO UPDATE SET
+       term_id = EXCLUDED.term_id,
+       week_number = EXCLUDED.week_number,
+       opens_at = EXCLUDED.opens_at,
+       created_by_user_id = EXCLUDED.created_by_user_id,
+       updated_at = NOW()
+     RETURNING *`,
+    [moduleId, data.schedule_term_id, data.schedule_week_number, week.rows[0].start_date, user.userId],
+  );
+  return result.rows[0];
 }
 
 async function createModule(courseId, data = {}) {
@@ -1160,6 +1340,7 @@ async function createManagedModule(courseId, user = {}, data = {}) {
   const allowed = await assertCourseManageAccess(courseId, user);
   if (!allowed) throw new Error("You cannot edit this course.");
   const module = await createModule(courseId, data);
+  if (user.role !== "system_admin") await saveModuleSchedule(module.id, user, data);
   await bumpSchoolCourseVersion(courseId);
   return module;
 }
@@ -1197,6 +1378,7 @@ async function updateModule(moduleId, user = {}, data = {}) {
     ],
   );
   await bumpSchoolCourseVersion(courseId);
+  if (user.role !== "system_admin") await saveModuleSchedule(moduleId, user, data);
   return result.rows[0];
 }
 
@@ -1219,12 +1401,12 @@ async function createActivity(moduleId, data = {}) {
   const result = await query(
     `INSERT INTO learning_activities (
        module_id, title, activity_type, content, points, position,
-       is_required, completion_rule, pass_score, is_published
+       is_required, availability_mode, completion_rule, pass_score, is_published
      )
      VALUES (
        $1, $2, $3, $4, $5,
        COALESCE($6, (SELECT COALESCE(MAX(position), 0) + 1 FROM learning_activities WHERE module_id = $1)),
-       $7, $8, $9, $10
+       $7, $8, $9, $10, $11
      )
      RETURNING *`,
     [
@@ -1235,6 +1417,7 @@ async function createActivity(moduleId, data = {}) {
       data.points || 0,
       data.position || null,
       data.is_required !== false,
+      data.availability_mode === "try_more" ? "try_more" : "required",
       data.completion_rule || "manual",
       data.pass_score || null,
       data.is_published !== false,
@@ -1255,6 +1438,7 @@ async function createManagedActivity(moduleId, user = {}, data = {}) {
   if (!allowed) throw new Error("You cannot edit this module.");
 
   validateQuizAllocation(data);
+  validateCodingChallenge(data);
   const activity = await createActivity(moduleId, data);
   await syncDiscussionSetup(activity, user);
   await bumpSchoolCourseVersion(courseId);
@@ -1276,6 +1460,7 @@ async function updateActivity(activityId, user = {}, data = {}) {
   if (!allowed) throw new Error("You cannot edit this activity.");
 
   validateQuizAllocation(data);
+  validateCodingChallenge(data);
   const result = await query(
     `UPDATE learning_activities
      SET title = $1,
@@ -1284,11 +1469,12 @@ async function updateActivity(activityId, user = {}, data = {}) {
          points = $4,
          position = $5,
          is_required = $6,
-         completion_rule = $7,
-         pass_score = $8,
-         is_published = $9,
+         availability_mode = $7,
+         completion_rule = $8,
+         pass_score = $9,
+         is_published = $10,
          updated_at = CURRENT_TIMESTAMP
-     WHERE id = $10
+     WHERE id = $11
      RETURNING *`,
     [
       data.title,
@@ -1297,6 +1483,7 @@ async function updateActivity(activityId, user = {}, data = {}) {
       data.points || 0,
       data.position || 1,
       data.is_required !== false,
+      data.availability_mode === "try_more" ? "try_more" : "required",
       data.completion_rule || "manual",
       data.pass_score || null,
       data.is_published !== false,
@@ -1328,6 +1515,96 @@ async function deleteActivity(activityId, user = {}) {
   await bumpSchoolCourseVersion(courseId);
 }
 
+async function createAvailabilityOverride(courseId, user = {}, data = {}) {
+  const allowed = await assertCourseManageAccess(courseId, user);
+  if (!allowed || !isSchoolStaff(user)) {
+    throw new Error("Only school staff can unlock school course content.");
+  }
+  const reason = String(data.reason || "").trim();
+  if (!reason) throw new Error("Please record a reason for the early unlock.");
+  const scopeType = ["class", "learners", "learner"].includes(data.scope_type)
+    ? data.scope_type
+    : "learner";
+  const result = await query(
+    `INSERT INTO learning_availability_overrides (
+       school_id, course_id, module_id, activity_id, scope_type,
+       target_learner_id, target_learner_ids, target_grade, target_stream,
+       reason, created_by_user_id
+     )
+     VALUES (
+       $1::integer, $2::integer, NULLIF($3::text, '')::integer,
+       NULLIF($4::text, '')::integer, $5::varchar,
+       NULLIF($6::text, '')::integer, $7::jsonb, NULLIF($8::text, ''),
+       NULLIF($9::text, ''), $10::text, $11::integer
+     )
+     RETURNING *`,
+    [
+      user.schoolId,
+      courseId,
+      data.module_id ? String(data.module_id) : "",
+      data.activity_id ? String(data.activity_id) : "",
+      scopeType,
+      data.learner_id ? String(data.learner_id) : "",
+      JSON.stringify(data.learner_ids || []),
+      data.grade || "",
+      data.stream || "",
+      reason,
+      user.userId,
+    ],
+  );
+  return result.rows[0];
+}
+
+async function listAvailabilityOverrides(courseId, user = {}) {
+  const allowed = await assertCourseManageAccess(courseId, user);
+  if (!allowed) throw new Error("You cannot view these unlocks.");
+  const result = await query(
+    `SELECT o.*, u.full_name AS created_by_name
+     FROM learning_availability_overrides o
+     LEFT JOIN users u ON u.id = o.created_by_user_id
+     WHERE o.course_id = $1::integer
+       AND o.revoked_at IS NULL
+     ORDER BY o.created_at DESC`,
+    [courseId],
+  );
+  return result.rows;
+}
+
+async function revokeAvailabilityOverride(overrideId, user = {}) {
+  if (!isSchoolStaff(user)) throw new Error("Only school staff can revoke an unlock.");
+  const result = await query(
+    `UPDATE learning_availability_overrides
+     SET revoked_at = NOW()
+     WHERE id = $1::integer
+       AND school_id = $2::integer
+     RETURNING *`,
+    [overrideId, user.schoolId],
+  );
+  if (!result.rows[0]) throw new Error("Unlock override not found.");
+  return result.rows[0];
+}
+
+async function getLearnerBadges(user = {}) {
+  const learner = await findLearnerForUser(user.userId);
+  if (!learner) throw new Error("Learner profile is required.");
+  return listLearnerBadges(learner.id);
+}
+
+async function submitModuleFeedback(moduleId, user = {}, data = {}) {
+  const learner = await findLearnerForUser(user.userId);
+  if (!learner) throw new Error("Learner profile is required.");
+  return moduleFeedbackService.upsertModuleFeedback(moduleId, learner, data);
+}
+
+async function getModuleFeedbackSummary(moduleId, user = {}) {
+  if (!isStaff(user)) throw new Error("Staff access is required.");
+  return moduleFeedbackService.getModuleFeedbackSummary(moduleId, user);
+}
+
+async function revealModuleFeedbackIdentity(feedbackId, user = {}, data = {}) {
+  return moduleFeedbackService.revealFeedbackIdentity(feedbackId, user, data.reason);
+}
+
 module.exports = {
   getAllCourses,
   createCourse,
@@ -1352,6 +1629,13 @@ module.exports = {
   submitQuiz,
   getActivityReview,
   gradeActivityForLearner,
+  createAvailabilityOverride,
+  listAvailabilityOverrides,
+  revokeAvailabilityOverride,
+  getLearnerBadges,
+  submitModuleFeedback,
+  getModuleFeedbackSummary,
+  revealModuleFeedbackIdentity,
   syncSchoolCourse: courseTemplatesService.syncSchoolCourse,
   rollbackSchoolCourse: courseTemplatesService.rollbackSchoolCourse,
 };

@@ -45,19 +45,21 @@ async function importTemplateDefinition(input, query) {
         await query(
           `INSERT INTO course_template_activities (
              template_module_id, title, activity_type, content, points, position,
-             is_required, completion_rule, pass_score, is_published
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             is_required, availability_mode, completion_rule, pass_score, is_published
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            ON CONFLICT (template_module_id, position) DO UPDATE SET
              title = EXCLUDED.title, activity_type = EXCLUDED.activity_type,
              content = EXCLUDED.content, points = EXCLUDED.points,
              is_required = EXCLUDED.is_required,
+             availability_mode = EXCLUDED.availability_mode,
              completion_rule = EXCLUDED.completion_rule,
              pass_score = EXCLUDED.pass_score,
              is_published = EXCLUDED.is_published,
              updated_at = CURRENT_TIMESTAMP`,
           [moduleResult.rows[0].id, item.title, item.activity_type,
             JSON.stringify({ ...item.content, module_badge: module.badge, teacher_notes: module.teacher_notes, template_settings: definition.settings }),
-            item.points, item.position, item.is_required, item.completion_rule,
+            item.points, item.position, item.is_required,
+            item.availability_mode || "required", item.completion_rule,
             item.pass_score, item.is_published],
         );
         activityCount += 1;
