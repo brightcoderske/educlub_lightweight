@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="t d">
+<title id="t">Scratch Innovator course cover</title><desc id="d">Deep blue and violet visual representing algorithms, data, control systems, and responsible AI.</desc>
+<defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#111827"/><stop offset=".55" stop-color="#312e81"/><stop offset="1" stop-color="#6d28d9"/></linearGradient></defs><rect width="1200" height="675" fill="url(#g)"/>
+<circle cx="1040" cy="110" r="170" fill="#22d3ee" opacity=".18"/><circle cx="110" cy="620" r="210" fill="#a78bfa" opacity=".18"/>
+<text x="110" y="190" font-family="Arial" font-size="67" font-weight="700" fill="#f8fafc">SCRATCH INNOVATOR</text><text x="115" y="250" font-family="Arial" font-size="32" fill="#c4b5fd">Advanced Computing and Responsible AI</text>
+<g transform="translate(120 325)" fill="none" stroke="#67e8f9" stroke-width="10"><circle cx="80" cy="70" r="58"/><circle cx="330" cy="70" r="58"/><circle cx="580" cy="70" r="58"/><circle cx="830" cy="70" r="58"/><path d="M138 70h134M388 70h134M638 70h134"/></g>
+<g fill="#f8fafc" font-family="Arial" font-size="22" text-anchor="middle"><text x="200" y="405">ALGORITHM</text><text x="450" y="405">DATA</text><text x="700" y="405">MODEL</text><text x="950" y="405">IMPACT</text></g>
+<text x="120" y="540" font-family="Arial" font-size="28" fill="#ddd6fe">Research • Test • Verify • Safeguard • Innovate</text>
+</svg>

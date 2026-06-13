@@ -227,10 +227,128 @@ function validateScratchIntermediate(definition) {
   }
 }
 
+function validateScratchProgressive(definition) {
+  const requiredPurposes = [
+    "overview", "visual_learning", "algorithm", "discussion", "guided_practice",
+    "main_project", "challenge", "quiz", "reflection",
+  ];
+  const requiredTypes = [
+    "lesson", "lesson", "coding", "discussion", "coding",
+    "project", "assignment", "quiz", "reflection",
+  ];
+
+  if (definition.estimated_weeks !== 10 || definition.modules.length !== 10) {
+    throw new Error(`${definition.name} must contain ten modules and ten estimated weeks.`);
+  }
+  if (definition.settings?.mastery_score !== 80) {
+    throw new Error(`${definition.name} mastery score must be 80.`);
+  }
+
+  for (const module of definition.modules) {
+    if (!Array.isArray(module.learning_objectives) || module.learning_objectives.length < 4) {
+      throw new Error(`${module.title} needs at least four learning objectives.`);
+    }
+    if (!module.teacher_notes?.trim() || module.teacher_notes.length < 350) {
+      throw new Error(`${module.title} needs complete teacher guidance.`);
+    }
+    if (module.activities.length !== 9) {
+      throw new Error(`${module.title} must contain nine activities.`);
+    }
+    if (JSON.stringify(module.activities.map((item) => item.content?.purpose)) !== JSON.stringify(requiredPurposes)) {
+      throw new Error(`${module.title} activities must follow the progressive Scratch purpose order.`);
+    }
+    if (JSON.stringify(module.activities.map((item) => item.activity_type)) !== JSON.stringify(requiredTypes)) {
+      throw new Error(`${module.title} activities must use the progressive Scratch activity types.`);
+    }
+
+    const [overview, visual, algorithm, discussion, practice, project, challenge, quiz, reflection] =
+      module.activities;
+    if (
+      overview.content.learning_objectives?.length < 4 ||
+      overview.content.vocabulary?.length < 4 ||
+      overview.content.guided_notes?.length < 4 ||
+      overview.content.session_plan?.length !== 5
+    ) {
+      throw new Error(`${overview.title} needs objectives, vocabulary, guided notes, and a 90-minute plan.`);
+    }
+    if (!visual.content?.body?.trim() || visual.content.body.length < 180) {
+      throw new Error(`${visual.title} needs substantive visual-system guidance.`);
+    }
+    if (!Array.isArray(algorithm.content?.algorithm_steps) || algorithm.content.algorithm_steps.length < 5) {
+      throw new Error(`${algorithm.title} needs at least five algorithm steps.`);
+    }
+    if (
+      !discussion.content?.discussion_prompt?.trim() ||
+      discussion.content.discussion_prompt.length < 40 ||
+      discussion.content.questions?.length < 3 ||
+      discussion.content.sentence_starters?.length < 2 ||
+      !discussion.content.moderation_notes?.trim()
+    ) {
+      throw new Error(`${discussion.title} needs a complete moderated discussion.`);
+    }
+    if (
+      !practice.content?.project_brief?.trim() ||
+      practice.content.project_brief.length < 50 ||
+      practice.content.steps?.length < 5 ||
+      practice.content.success_checks?.length < 3 ||
+      practice.content.debugging_hints?.length < 3
+    ) {
+      throw new Error(`${practice.title} needs a complete guided project.`);
+    }
+    if (!project.is_required || project.content?.project_choices?.length !== 2) {
+      throw new Error(`${project.title} needs two required project choices.`);
+    }
+    for (const choice of project.content.project_choices) {
+      if (
+        !choice.title?.trim() ||
+        !choice.brief?.trim() ||
+        choice.brief.length < 60 ||
+        choice.build_steps?.length < 5 ||
+        choice.success_checks?.length < 4
+      ) {
+        throw new Error(`${project.title} contains an incomplete project choice.`);
+      }
+    }
+    if (
+      challenge.is_required ||
+      !challenge.content?.project_brief?.trim() ||
+      challenge.content.project_brief.length < 50 ||
+      challenge.content.steps?.length < 3 ||
+      challenge.content.success_checks?.length < 3
+    ) {
+      throw new Error(`${challenge.title} needs a complete optional challenge.`);
+    }
+
+    const questions = quiz.content?.questions || [];
+    if (
+      Number(quiz.pass_score) !== 80 ||
+      questions.length !== 5 ||
+      new Set(questions.map((question) => question.id)).size !== 5 ||
+      !questions.every((question) =>
+        question.question_type === "multiple_choice" &&
+        question.options?.length === 4 &&
+        question.options.includes(question.correct_answer) &&
+        question.hint?.length >= 20 &&
+        question.explanation?.length >= 30
+      )
+    ) {
+      throw new Error(`${quiz.title} needs five complete explained questions.`);
+    }
+    if (
+      reflection.content?.prompts?.length < 4 ||
+      !reflection.content.submission_accept?.includes(".sb3") ||
+      !reflection.content.submission_instructions?.includes(".sb3")
+    ) {
+      throw new Error(`${reflection.title} needs reflection and .sb3 submission guidance.`);
+    }
+  }
+}
+
 const PROFILE_VALIDATORS = {
   generic: () => {},
   web_development_1: validateWebDevelopment1,
   scratch_intermediate: validateScratchIntermediate,
+  scratch_progressive: validateScratchProgressive,
 };
 
 function validateTemplateDefinition(input) {
@@ -252,4 +370,5 @@ module.exports = {
   validateSharedDefinition,
   validateWebDevelopment1,
   validateScratchIntermediate,
+  validateScratchProgressive,
 };

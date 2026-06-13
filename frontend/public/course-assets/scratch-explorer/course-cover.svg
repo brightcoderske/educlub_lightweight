@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="t d">
+<title id="t">Scratch Explorer course cover</title><desc id="d">Bright creative coding scene with story, music, art, game, and science symbols.</desc>
+<rect width="1200" height="675" fill="#fff7df"/><circle cx="1060" cy="110" r="150" fill="#ffd166"/><circle cx="120" cy="590" r="190" fill="#75d5c7"/>
+<rect x="110" y="105" width="980" height="465" rx="42" fill="#ffffff" stroke="#ef8b4b" stroke-width="10"/>
+<text x="170" y="220" font-family="Arial,sans-serif" font-size="68" font-weight="700" fill="#25324b">SCRATCH EXPLORER</text>
+<text x="174" y="278" font-family="Arial,sans-serif" font-size="32" fill="#52627a">Creative Coding Foundations</text>
+<g transform="translate(170 340)" fill="none" stroke-width="12"><path d="M0 80h120v-80h120v80h120" stroke="#ef476f"/><circle cx="440" cy="40" r="58" stroke="#118ab2"/><path d="M540 95l55-95 55 95z" stroke="#06d6a0"/><path d="M735 0v110m0-70c80-35 80 70 0 35" stroke="#7b61ff"/><path d="M860 90c45-100 105-100 150 0" stroke="#ff9f1c"/></g>
+<text x="170" y="520" font-family="Arial,sans-serif" font-size="28" fill="#52627a">Stories • Animation • Art • Games • STEM</text>
+</svg>

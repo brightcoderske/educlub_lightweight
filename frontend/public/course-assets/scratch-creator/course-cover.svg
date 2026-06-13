@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="t d">
+<title id="t">Scratch Creator course cover</title><desc id="d">Blue-green workshop scene representing games, simulations, data, and smart systems.</desc>
+<defs><linearGradient id="g" x1="0" x2="1"><stop stop-color="#082f49"/><stop offset="1" stop-color="#0f766e"/></linearGradient></defs><rect width="1200" height="675" fill="url(#g)"/>
+<rect x="85" y="80" width="1030" height="515" rx="42" fill="#ecfeff" opacity=".96"/>
+<text x="150" y="205" font-family="Arial" font-size="68" font-weight="700" fill="#083344">SCRATCH CREATOR</text><text x="154" y="265" font-family="Arial" font-size="32" fill="#0f766e">Games, STEAM and Smart Systems</text>
+<g transform="translate(155 330)" fill="none" stroke-width="12"><rect width="160" height="110" rx="22" stroke="#0284c7"/><path d="M35 55h90M80 15v80" stroke="#0284c7"/><path d="M235 105V25l70 35 70-35v80" stroke="#14b8a6"/><path d="M450 105V60l45-35 45 35v45m-70 0V78h40v27" stroke="#f59e0b"/><path d="M625 105V75m55 30V45m55 60V15" stroke="#7c3aed"/><circle cx="870" cy="60" r="52" stroke="#ef476f"/><path d="M835 60h70M870 25v70" stroke="#ef476f"/></g>
+<text x="155" y="520" font-family="Arial" font-size="28" fill="#155e75">Build • Model • Measure • Improve</text>
+</svg>

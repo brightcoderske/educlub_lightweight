@@ -2,6 +2,35 @@ const coursesService = require("../services/courses.service");
 const fs = require("fs");
 const path = require("path");
 
+const SUBMISSION_FILE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "text/plain",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+const SCRATCH_FILE_TYPES = [
+  "application/x.scratch.sb3",
+  "application/zip",
+  "application/octet-stream",
+];
+
+function isAllowedSubmissionFile(fileName = "", mimeType = "") {
+  const extension = path.extname(fileName).toLowerCase();
+  const normalizedMimeType = mimeType.toLowerCase();
+
+  if (extension === ".sb3") {
+    return SCRATCH_FILE_TYPES.includes(normalizedMimeType);
+  }
+
+  return SUBMISSION_FILE_TYPES.includes(normalizedMimeType);
+}
+
 function getPublicUploadUrl(req, relativePath) {
   const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.API_PUBLIC_URL;
   if (publicBaseUrl) {
@@ -17,7 +46,10 @@ function saveDataUpload(req, folder, options = {}) {
 
   const mimeType = match[1].toLowerCase();
   const allowedTypes = options.allowedTypes || [];
-  if (allowedTypes.length && !allowedTypes.includes(mimeType)) {
+  const isAllowed = options.isAllowed
+    ? options.isAllowed(fileName, mimeType)
+    : !allowedTypes.length || allowedTypes.includes(mimeType);
+  if (!isAllowed) {
     throw new Error(options.error || "This file type is not allowed.");
   }
 
@@ -273,19 +305,9 @@ async function uploadActivityImage(req, res) {
 async function uploadSubmissionFile(req, res) {
   try {
     const url = saveDataUpload(req, "activity-submissions", {
-      allowedTypes: [
-        "image/png",
-        "image/jpeg",
-        "image/jpg",
-        "image/gif",
-        "image/webp",
-        "application/pdf",
-        "text/plain",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ],
+      isAllowed: isAllowedSubmissionFile,
       defaultName: "activity-submission",
-      error: "Upload an image, PDF, text file, or Word document.",
+      error: "Upload an image, PDF, text, Word, or Scratch .sb3 project file.",
       maxBytes: 5 * 1024 * 1024,
       sizeError: "Submission uploads are capped at 5MB.",
     });
@@ -516,6 +538,7 @@ async function revealModuleFeedbackIdentity(req, res) {
 }
 
 module.exports = {
+  isAllowedSubmissionFile,
   getAllCourses,
   createCourse,
   getCourseById,

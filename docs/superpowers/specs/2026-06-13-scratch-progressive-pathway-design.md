@@ -592,9 +592,11 @@ Each template has exactly 10 ordered modules. The existing generic course
 builder, quizzes, assignments, reflections, project submissions, adoption, and
 template synchronization should be reused.
 
-The previous `SCRATCH-INTERMEDIATE` design is superseded by this pathway and
-should not be implemented as a fourth overlapping course. Useful content from
-that design can be mapped primarily into Scratch Creator.
+The existing `SCRATCH-INTERMEDIATE` course remains available as a separate
+course. The three pathway templates are added alongside it and do not overwrite
+or remove its content, code, assets, or school copies. School administrators
+may continue allocating Intermediate independently from Explorer, Creator, and
+Innovator.
 
 Before implementation, the template contract must determine whether every
 project variant is represented as a separate Educlub `project` activity or as

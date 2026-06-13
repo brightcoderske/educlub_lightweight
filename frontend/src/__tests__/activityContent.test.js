@@ -16,6 +16,34 @@ test("keeps teacher notes out and returns learner support", () => {
   expect(selected.teacher_notes).toBeUndefined();
 });
 
+test("returns Scratch submission guidance", () => {
+  const selected = selectActivityContent({
+    submission_accept: [
+      ".sb3",
+      "application/x.scratch.sb3",
+      "application/zip",
+      "application/octet-stream",
+    ],
+    submission_help: [
+      "Save the project to your computer.",
+      "Upload your downloaded Scratch .sb3 project.",
+    ],
+  });
+
+  expect(selected.submission.accept).toContain(".sb3");
+  expect(selected.submission.accept).toContain("application/zip");
+  expect(selected.submission.help).toContain("Save the project");
+  expect(selected.submission.help).toContain("Scratch");
+});
+
+test("returns safe default submission metadata", () => {
+  const selected = selectActivityContent();
+
+  expect(selected.submission.accept).toContain("image/png");
+  expect(selected.submission.accept).not.toContain("application/zip");
+  expect(selected.submission.help).toBe("");
+});
+
 test("combines separate starter HTML and CSS", () => {
   expect(starterCode({
     starter_html: "<h1>Hello</h1>",
