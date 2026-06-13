@@ -24,6 +24,7 @@ import LearnerFeedbackChat from "components/LearnerFeedbackChat";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
+import { activityLearningPath, findContinueLearning } from "./learningNavigation";
 
 const apiOrigin = new URL(API_BASE_URL).origin;
 
@@ -92,6 +93,7 @@ function LearnerDashboard() {
   const [showFeaturedCompetition, setShowFeaturedCompetition] = useState(false);
   const [badges, setBadges] = useState([]);
   const [dueItems, setDueItems] = useState([]);
+  const [continueLearning, setContinueLearning] = useState(null);
 
   useEffect(() => {
     if (!isLearner()) {
@@ -121,6 +123,7 @@ function LearnerDashboard() {
     setFeaturedCompetition(data.featuredCompetition);
     setBadges(data.badges || []);
     setDueItems(data.dueItems || []);
+    setContinueLearning(data.continueLearning || null);
     if (showFeatured) {
       setShowFeaturedCompetition(Boolean(data.featuredCompetition));
     }
@@ -160,6 +163,7 @@ function LearnerDashboard() {
           featuredCompetition: featured,
           badges: badgesRes,
           dueItems: [],
+          continueLearning: null,
         };
         learnerDashboardCache = {
           userId: user?.id,
@@ -179,7 +183,7 @@ function LearnerDashboard() {
       sunday.setDate(monday.getDate() + 7);
       const overviews = await Promise.all(
         response
-          .filter((allocation) => allocation.status === "active")
+          .filter((allocation) => ["active", "in_progress"].includes(allocation.status))
           .map((allocation) =>
             apiClient
               .get(`/courses/${allocation.course_id}/learning-overview`)
@@ -202,6 +206,7 @@ function LearnerDashboard() {
             total: module.total_activities,
           }))
       );
+      const nextContinueLearning = findContinueLearning(overviews.filter(Boolean));
       const nextStats = {
         total: response.length || 0,
         active: response.filter((a) => a.status === "active").length || 0,
@@ -217,6 +222,7 @@ function LearnerDashboard() {
         featuredCompetition: featured,
         badges: badgesRes,
         dueItems: nextDueItems,
+        continueLearning: nextContinueLearning,
       };
 
       learnerDashboardCache = {
@@ -304,10 +310,32 @@ function LearnerDashboard() {
             </MDTypography>
             <MDBox
               display="grid"
-              gridTemplateColumns="minmax(0, 1fr) minmax(0, 1fr)"
+              gridTemplateColumns={{
+                xs: "minmax(0, 1fr)",
+                sm: continueLearning ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))",
+              }}
               gap={1}
               width={{ xs: "100%", sm: "auto" }}
             >
+              {continueLearning && (
+                <MDButton
+                  variant="gradient"
+                  color="success"
+                  startIcon={<Icon fontSize="small">play_arrow</Icon>}
+                  onClick={() =>
+                    navigate(
+                      activityLearningPath(
+                        continueLearning.courseId,
+                        continueLearning.moduleId,
+                        continueLearning.activityId
+                      )
+                    )
+                  }
+                  sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
+                >
+                  Continue Learning
+                </MDButton>
+              )}
               <MDButton
                 variant="gradient"
                 color="info"

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
@@ -18,6 +18,7 @@ import MDProgress from "components/MDProgress";
 import MDTypography from "components/MDTypography";
 import { apiClient } from "lib/api";
 import { selectActivityContent, starterCode, starterParts, webPreview } from "./activityContent";
+import { findActivityNavigation, resolveInitialActivity } from "../learningNavigation";
 
 function done(status) {
   return ["completed", "graded"].includes(status);
@@ -981,6 +982,8 @@ CompletionCelebration.propTypes = {
 function ModuleLearn() {
   const { courseId, moduleId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const contentTopRef = useRef(null);
   const [data, setData] = useState(null);
   const [activeActivityId, setActiveActivityId] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -1019,8 +1022,7 @@ function ModuleLearn() {
       setActiveActivityId(
         (current) =>
           current ||
-          response.module.activities?.find((activity) => activity.is_unlocked)?.id ||
-          null
+          resolveInitialActivity(response.module.activities || [], searchParams.get("activity"))
       );
     } catch (err) {
       setError(err.message || "Failed to load module");
@@ -1137,6 +1139,11 @@ function ModuleLearn() {
     };
   }, [activeActivity?.id]);
 
+  useEffect(() => {
+    if (!activeActivityId) return;
+    contentTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [activeActivityId]);
+
   const updateProgress = async (activity, status) => {
     if (!activity) return;
     setSaving(true);
@@ -1160,6 +1167,8 @@ function ModuleLearn() {
       return;
     }
     setActiveActivityId(activity.id);
+    setSearchParams({ activity: String(activity.id) }, { replace: true });
+    setError("");
     if (activity.status === "not_started") {
       await updateProgress(activity, "in_progress");
     }
@@ -1289,12 +1298,24 @@ function ModuleLearn() {
 
   const goNextActivity = () => {
     const activities = data?.module?.activities || [];
-    const index = activities.findIndex((activity) => activity.id === activeActivityId);
-    const next = activities[index + 1];
-    if (next?.is_unlocked) {
+    const { next } = findActivityNavigation(activities, activeActivityId);
+    if (next) {
       selectActivity(next);
     }
   };
+
+  const goPreviousActivity = () => {
+    const activities = data?.module?.activities || [];
+    const { previous } = findActivityNavigation(activities, activeActivityId);
+    if (previous) {
+      selectActivity(previous);
+    }
+  };
+
+  const activityNavigation = findActivityNavigation(
+    data?.module?.activities || [],
+    activeActivityId
+  );
 
   const submitFeedback = async () => {
     setFeedbackSaving(true);
@@ -1368,6 +1389,36 @@ function ModuleLearn() {
           </MDBox>
         )}
 
+        <MDBox
+          mb={2}
+          display="flex"
+          gap={1}
+          overflow="auto"
+          pb={0.5}
+          sx={{ scrollbarWidth: "thin" }}
+        >
+          {(data?.module?.activities || []).map((activity, index) => (
+            <MDButton
+              key={`top-${activity.id}`}
+              variant={activity.id === activeActivityId ? "gradient" : "outlined"}
+              color={
+                done(activity.status)
+                  ? "success"
+                  : activity.availability_mode === "try_more"
+                  ? "warning"
+                  : "info"
+              }
+              size="small"
+              disabled={!activity.is_unlocked}
+              title={activity.lock_reason || activity.title}
+              onClick={() => selectActivity(activity)}
+              sx={{ flex: "0 0 auto", whiteSpace: "nowrap" }}
+            >
+              {index + 1}. {activity.title}
+            </MDButton>
+          ))}
+        </MDBox>
+
         <Grid container spacing={2.5}>
           <Grid item xs={12} md={3}>
             <Card>
@@ -1409,7 +1460,7 @@ function ModuleLearn() {
           </Grid>
 
           <Grid item xs={12} md={9}>
-            <Card>
+            <Card ref={contentTopRef}>
               <MDBox p={{ xs: 2.5, md: 4 }}>
                 {activeActivity ? (
                   <>
@@ -1460,20 +1511,24 @@ function ModuleLearn() {
                       gap={1.5}
                       mt={3}
                     >
-                      <MDButton
-                        variant="outlined"
-                        color="dark"
-                        disabled={
-                          !(data?.module?.activities || [])[
-                            (data?.module?.activities || []).findIndex(
-                              (activity) => activity.id === activeActivityId
-                            ) + 1
-                          ]?.is_unlocked
-                        }
-                        onClick={goNextActivity}
-                      >
-                        Next Activity
-                      </MDButton>
+                      <MDBox display="flex" gap={1} flexWrap="wrap">
+                        <MDButton
+                          variant="outlined"
+                          color="dark"
+                          disabled={!activityNavigation.previous}
+                          onClick={goPreviousActivity}
+                        >
+                          Previous Activity
+                        </MDButton>
+                        <MDButton
+                          variant="outlined"
+                          color="info"
+                          disabled={!activityNavigation.next}
+                          onClick={goNextActivity}
+                        >
+                          Next Activity
+                        </MDButton>
+                      </MDBox>
                       <MDButton
                         variant="gradient"
                         color="success"

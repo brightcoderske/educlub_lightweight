@@ -17,6 +17,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { activityLearningPath } from "../learningNavigation";
 
 function statusColor(status) {
   if (["completed", "graded"].includes(status)) return "success";
@@ -164,11 +165,44 @@ function CourseOverview() {
                             courseModule.activities.map((activity) => (
                               <MDBox
                                 key={activity.id}
+                                component="button"
+                                type="button"
                                 display="flex"
                                 justifyContent="space-between"
                                 alignItems="center"
-                                py={1}
-                                sx={{ borderBottom: "1px solid #f1f3f4" }}
+                                width="100%"
+                                py={1.25}
+                                px={1}
+                                border={0}
+                                textAlign="left"
+                                disabled={!activity.is_unlocked}
+                                aria-disabled={!activity.is_unlocked}
+                                title={activity.lock_reason || ""}
+                                onClick={() => {
+                                  if (!activity.is_unlocked) {
+                                    setError(
+                                      activity.lock_reason ||
+                                        "Complete the previous required activity first."
+                                    );
+                                    return;
+                                  }
+                                  navigate(
+                                    activityLearningPath(
+                                      overview.course.id,
+                                      courseModule.id,
+                                      activity.id
+                                    )
+                                  );
+                                }}
+                                sx={{
+                                  borderBottom: "1px solid #f1f3f4",
+                                  bgcolor: "transparent",
+                                  cursor: activity.is_unlocked ? "pointer" : "not-allowed",
+                                  opacity: activity.is_unlocked ? 1 : 0.58,
+                                  "&:hover": activity.is_unlocked
+                                    ? { bgcolor: "#f8fafc" }
+                                    : undefined,
+                                }}
                               >
                                 <MDBox display="flex" alignItems="center" gap={1.25} minWidth={0}>
                                   <Icon fontSize="small" color="action">
@@ -183,6 +217,12 @@ function CourseOverview() {
                                     <MDTypography variant="caption" color="text" display="block">
                                       {activity.activity_type} | {activity.points || 0} marks
                                     </MDTypography>
+                                    {!activity.is_unlocked && (
+                                      <MDTypography variant="caption" color="error" display="block">
+                                        {activity.lock_reason ||
+                                          "Complete the previous activity first."}
+                                      </MDTypography>
+                                    )}
                                   </MDBox>
                                 </MDBox>
                                 <Chip
