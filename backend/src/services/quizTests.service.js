@@ -1,4 +1,5 @@
 const { query } = require("../config");
+const { normalizeAttemptMarks } = require("./quizAttemptMarks");
 const { answersMatch } = require("./quizAnswerPolicy");
 
 const QUIZ_CATEGORIES = new Set(["quiz", "maths", "science", "stem"]);
@@ -636,6 +637,86 @@ async function getAttemptReview(user, testId) {
   };
 }
 
+async function updateAttemptMarks(user, attemptId, data = {}) {
+  const values = [Number(attemptId)];
+  let scope = "";
+  if (user.role === "school_admin" || user.role === "teacher") {
+    values.push(Number(user.schoolId));
+    scope = ` AND l.school_id = $${values.length}::integer
+              AND (qt.school_id IS NULL OR qt.school_id = $${values.length}::integer)`;
+  }
+
+  const result = await query(
+    `SELECT qta.*, l.school_id, qt.quiz_type, qt.term, qt.academic_year,
+            qt.week_number
+     FROM quiz_test_attempts qta
+     JOIN learners l ON l.id = qta.learner_id
+     JOIN quiz_tests qt ON qt.id = qta.quiz_test_id
+     WHERE qta.id = $1::integer
+       ${scope}
+     LIMIT 1`,
+    values,
+  );
+  const existing = result.rows[0];
+  if (!existing) return null;
+
+  const marks = normalizeAttemptMarks(data.earned_points, existing.total_points);
+  const updated = await query(
+    `UPDATE quiz_test_attempts
+     SET earned_points = $2::numeric,
+         score = $3::numeric
+     WHERE id = $1::integer
+     RETURNING *`,
+    [attemptId, marks.earnedPoints, marks.score],
+  );
+
+  if (
+    existing.quiz_type === "weekly" &&
+    existing.term &&
+    existing.academic_year &&
+    existing.week_number
+  ) {
+    const best = await query(
+      `SELECT MAX(qta.score)::numeric AS score
+       FROM quiz_test_attempts qta
+       JOIN quiz_tests qt ON qt.id = qta.quiz_test_id
+       WHERE qta.learner_id = $1::integer
+         AND qt.quiz_type = 'weekly'
+         AND qt.term = $2::varchar
+         AND qt.academic_year = $3::integer
+         AND qt.week_number = $4::integer`,
+      [
+        existing.learner_id,
+        existing.term,
+        existing.academic_year,
+        existing.week_number,
+      ],
+    );
+    await query(
+      `INSERT INTO weekly_marks (
+         learner_id, week_number, term, academic_year, quiz_score
+       )
+       VALUES ($1::integer, $2::integer, $3::varchar, $4::integer, $5::numeric)
+       ON CONFLICT (learner_id, week_number, term, academic_year)
+       DO UPDATE SET quiz_score = EXCLUDED.quiz_score, updated_at = NOW()`,
+      [
+        existing.learner_id,
+        existing.week_number,
+        existing.term,
+        existing.academic_year,
+        Number(best.rows[0]?.score || 0),
+      ],
+    );
+  }
+
+  return {
+    ...updated.rows[0],
+    score: marks.score,
+    earned_points: marks.earnedPoints,
+    total_points: marks.totalPoints,
+  };
+}
+
 module.exports = {
   listTests,
   getTest,
@@ -646,4 +727,5 @@ module.exports = {
   submitAttempt,
   getReport,
   getAttemptReview,
+  updateAttemptMarks,
 };

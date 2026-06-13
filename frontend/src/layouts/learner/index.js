@@ -472,7 +472,7 @@ function LearnerDashboard() {
                 <MDBox display="flex" justifyContent="space-between" alignItems="center" gap={1}>
                   <MDBox>
                     <MDTypography variant="h6" fontWeight="bold">
-                      My Module Badges
+                      My Learning Badges
                     </MDTypography>
                     <MDTypography variant="caption" color="text">
                       {badges.length} earned across your learning history
@@ -496,7 +496,7 @@ function LearnerDashboard() {
                     ))
                   ) : (
                     <MDTypography variant="body2" color="text">
-                      Complete a module to earn your first badge.
+                      Complete a course module or typing assessment to earn your first badge.
                     </MDTypography>
                   )}
                 </MDBox>

@@ -4,6 +4,7 @@ const TIERS = {
   silver: { tier: "silver", label: "Silver", color: "#a7adb7" },
   gold: { tier: "gold", label: "Gold", color: "#d4af37" },
 };
+const { getTypingBadge } = require("./typingBadges");
 
 function clampScore(value) {
   const score = Number(value);
@@ -78,16 +79,69 @@ async function recalculateModuleBadge(learnerId, moduleId) {
 
 async function listLearnerBadges(learnerId) {
   const { query } = require("../config");
-  const result = await query(
+  const [result, typingResult] = await Promise.all([
+    query(
     `SELECT b.*, c.name AS course_name, cm.title AS module_title
      FROM learner_module_badges b
      JOIN courses c ON c.id = b.course_id
      JOIN course_modules cm ON cm.id = b.module_id
      WHERE b.learner_id = $1::integer
-     ORDER BY b.updated_at DESC`,
+    ORDER BY b.updated_at DESC`,
     [learnerId],
+    ),
+    query(
+      `WITH lesson_totals AS (
+         SELECT typing_test_id, COUNT(*)::integer AS lesson_count
+         FROM typing_lessons
+         GROUP BY typing_test_id
+       ),
+       completed_trials AS (
+         SELECT ta.typing_test_id,
+                ta.attempt_number,
+                AVG(ta.final_score)::numeric AS net_wpm,
+                AVG(ta.accuracy)::numeric AS accuracy,
+                MAX(ta.submitted_at) AS awarded_at
+         FROM typing_attempts ta
+         JOIN lesson_totals lt ON lt.typing_test_id = ta.typing_test_id
+         WHERE ta.learner_id = $1::integer
+         GROUP BY ta.typing_test_id, ta.attempt_number, lt.lesson_count
+         HAVING COUNT(DISTINCT ta.typing_lesson_id) = lt.lesson_count
+       ),
+       ranked AS (
+         SELECT *, ROW_NUMBER() OVER (
+           PARTITION BY typing_test_id
+           ORDER BY net_wpm DESC, accuracy DESC, attempt_number ASC
+         ) AS rank
+         FROM completed_trials
+       )
+       SELECT ranked.*, tt.name AS test_name
+       FROM ranked
+       JOIN typing_tests tt ON tt.id = ranked.typing_test_id
+       WHERE ranked.rank = 1
+       ORDER BY ranked.awarded_at DESC`,
+      [learnerId],
+    ),
+  ]);
+  const moduleBadges = result.rows.map((row) => ({
+    ...row,
+    ...getBadgeTier(row.score_percent),
+    badge_type: "module",
+  }));
+  const typingBadges = typingResult.rows.map((row) => {
+    const badge = getTypingBadge(row.net_wpm, row.accuracy);
+    return {
+      id: `typing-${row.typing_test_id}`,
+      badge_type: "typing",
+      badge_name: row.test_name,
+      score_percent: Number(row.accuracy || 0),
+      net_wpm: Number(row.net_wpm || 0),
+      awarded_at: row.awarded_at,
+      ...badge,
+    };
+  });
+  return [...typingBadges, ...moduleBadges].sort(
+    (left, right) => new Date(right.awarded_at || 0) - new Date(left.awarded_at || 0),
   );
-  return result.rows.map((row) => ({ ...row, ...getBadgeTier(row.score_percent) }));
 }
 
 module.exports = { getBadgeTier, recalculateModuleBadge, listLearnerBadges };

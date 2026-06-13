@@ -6,6 +6,8 @@ import Checkbox from "@mui/material/Checkbox";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import Icon from "@mui/material/Icon";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
@@ -14,6 +16,7 @@ import eduClubLogo from "assets/images/brand/educlub-logo.png";
 import heroImage from "assets/images/bg-sign-up-cover.jpeg";
 import { apiClient } from "lib/api";
 import { useAuth } from "context/AuthContext";
+import { passwordIssues, registrationIssues } from "./registrationValidation";
 
 const initialForm = {
   first_name: "",
@@ -115,19 +118,6 @@ function updateStructuredData(origin) {
   document.head.appendChild(script);
 }
 
-function passwordIssues(password) {
-  const issues = [];
-
-  if (password.length < 8) issues.push("8+ characters");
-  if (!/[a-z]/.test(password)) issues.push("lowercase");
-  if (!/[A-Z]/.test(password)) issues.push("uppercase");
-  if (!/[0-9]/.test(password)) issues.push("number");
-  if (!/[^A-Za-z0-9]/.test(password)) issues.push("symbol");
-  if (/\s/.test(password)) issues.push("no spaces");
-
-  return issues;
-}
-
 function upsertMeta(selector, attributes) {
   let element = document.querySelector(selector);
   if (!element) {
@@ -162,6 +152,8 @@ function RegistrationLanding() {
   const [submitting, setSubmitting] = useState(false);
   const [courseCount, setCourseCount] = useState(0);
   const [registrationOpen, setRegistrationOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     const title = "eduClub LMS | Digital Skills, Online Learning and Monthly Competitions for Kids";
@@ -286,19 +278,8 @@ function RegistrationLanding() {
   }, [hash, pathname]);
 
   const issues = useMemo(() => passwordIssues(form.password), [form.password]);
-  const canSubmit =
-    form.first_name &&
-    form.second_name &&
-    form.grade &&
-    form.school_id &&
-    form.term_id &&
-    form.email &&
-    form.parent_full_name &&
-    form.parent_phone &&
-    form.password &&
-    form.password === form.confirm_password &&
-    issues.length === 0 &&
-    form.parent_consent;
+  const missingRequirements = useMemo(() => registrationIssues(form), [form]);
+  const canSubmit = missingRequirements.length === 0;
 
   const setField = (name, value) => {
     setForm((current) => ({ ...current, [name]: value }));
@@ -316,7 +297,7 @@ function RegistrationLanding() {
     setMessage("");
 
     if (!canSubmit) {
-      setError("Please complete the required fields and password rules.");
+      setError(`Complete before registering: ${missingRequirements.join("; ")}.`);
       return;
     }
 
@@ -451,20 +432,50 @@ function RegistrationLanding() {
         </Grid>
         <Grid item xs={12} md={6}>
           <MDInput
-            type="password"
+            type={showPassword ? "text" : "password"}
             label="Password *"
             fullWidth
             value={form.password}
             onChange={(e) => setField("password", e.target.value)}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((current) => !current)}
+                    edge="end"
+                  >
+                    <Icon>{showPassword ? "visibility_off" : "visibility"}</Icon>
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
         </Grid>
         <Grid item xs={12} md={6}>
           <MDInput
-            type="password"
+            type={showConfirmPassword ? "text" : "password"}
             label="Confirm password *"
             fullWidth
             value={form.confirm_password}
             onChange={(e) => setField("confirm_password", e.target.value)}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label={
+                      showConfirmPassword
+                        ? "Hide password confirmation"
+                        : "Show password confirmation"
+                    }
+                    onClick={() => setShowConfirmPassword((current) => !current)}
+                    edge="end"
+                  >
+                    <Icon>{showConfirmPassword ? "visibility_off" : "visibility"}</Icon>
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
         </Grid>
       </Grid>
@@ -479,6 +490,11 @@ function RegistrationLanding() {
           ? `Password needs: ${issues.join(", ")}.`
           : "Password meets the security policy."}
       </MDTypography>
+      {!canSubmit && (
+        <MDTypography variant="caption" color="error" display="block" mt={1}>
+          Complete before registering: {missingRequirements.join("; ")}.
+        </MDTypography>
+      )}
       {schools.length === 0 && (
         <MDTypography variant="caption" color="text" display="block" mt={1}>
           Ask your school administrator to enable learner self-registration for your school.
@@ -552,11 +568,7 @@ function RegistrationLanding() {
             <MDButton variant="outlined" color="white" onClick={openRegistration}>
               Register
             </MDButton>
-            <MDButton
-              variant="outlined"
-              color="white"
-              onClick={() => navigate("/login")}
-            >
+            <MDButton variant="outlined" color="white" onClick={() => navigate("/login")}>
               Login
             </MDButton>
           </MDBox>

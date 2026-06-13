@@ -65,13 +65,13 @@ function LearnerCertificates() {
           <DashboardIdentity
             user={user}
             title="Certificates & Badges"
-            subtitle="Your approved certificates and module achievements."
+            subtitle="Your approved certificates, course achievements and typing badges."
           />
         </MDBox>
         <Card>
           <MDBox p={3}>
             <MDTypography variant="h6" fontWeight="bold">
-              Module Badges
+              Learning Badges
             </MDTypography>
             <MDBox mt={1.5} display="flex" gap={1} flexWrap="wrap">
               {badges.length ? (
@@ -86,7 +86,7 @@ function LearnerCertificates() {
                 ))
               ) : (
                 <MDTypography variant="body2" color="text">
-                  Complete a module to earn your first badge.
+                  Complete a course module or typing assessment to earn your first badge.
                 </MDTypography>
               )}
             </MDBox>

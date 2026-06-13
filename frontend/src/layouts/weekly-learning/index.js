@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
@@ -72,7 +72,7 @@ const defaultQuestions = () => [
     prompt: "",
     options: ["", "", "", ""],
     correct_answer: "",
-    points: 1,
+    points: 5,
   },
 ];
 
@@ -89,7 +89,7 @@ const emptyQuizForm = () => ({
   pass_score: 50,
   max_attempts: 1,
   duration_seconds: 600,
-  total_points: 1,
+  total_points: 5,
   is_published: false,
   is_open: false,
   questions: defaultQuestions(),
@@ -174,6 +174,13 @@ function WeeklyLearning() {
   const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [quizAttemptReview, setQuizAttemptReview] = useState(null);
   const [quizAttemptReviewLoading, setQuizAttemptReviewLoading] = useState(false);
+  const [quizReviewFilters, setQuizReviewFilters] = useState({
+    grade: "",
+    stream: "",
+    learnerName: "",
+  });
+  const [quizMarkDrafts, setQuizMarkDrafts] = useState({});
+  const [savingQuizAttemptId, setSavingQuizAttemptId] = useState(null);
   const quizStartedAtRef = useRef(null);
   const quizSubmitRef = useRef(null);
   const [bulkForm, setBulkForm] = useState({
@@ -198,6 +205,25 @@ function WeeklyLearning() {
   });
   const [typingForm, setTypingForm] = useState(emptyTypingForm);
   const [quizForm, setQuizForm] = useState(emptyQuizForm);
+  const quizReviewOptions = useMemo(() => {
+    const attempts = quizAttemptReview?.attempts || [];
+    return {
+      grades: [...new Set(attempts.map((attempt) => attempt.grade).filter(Boolean))].sort(),
+      streams: [...new Set(attempts.map((attempt) => attempt.stream).filter(Boolean))].sort(),
+    };
+  }, [quizAttemptReview?.attempts]);
+  const filteredQuizAttempts = useMemo(() => {
+    const learnerName = quizReviewFilters.learnerName.trim().toLowerCase();
+    return (quizAttemptReview?.attempts || []).filter(
+      (attempt) =>
+        (!quizReviewFilters.grade || attempt.grade === quizReviewFilters.grade) &&
+        (!quizReviewFilters.stream || attempt.stream === quizReviewFilters.stream) &&
+        (!learnerName ||
+          String(attempt.full_name || "")
+            .toLowerCase()
+            .includes(learnerName))
+    );
+  }, [quizAttemptReview?.attempts, quizReviewFilters]);
 
   const loadData = async () => {
     setLoading(true);
@@ -799,15 +825,45 @@ function WeeklyLearning() {
   const openQuizAttemptReview = async (test) => {
     setError("");
     setQuizAttemptReviewLoading(true);
+    setQuizReviewFilters({ grade: "", stream: "", learnerName: "" });
     setQuizAttemptReview({ test, attempts: [] });
     try {
       const review = await apiClient.get(`/quiz-tests/tests/${test.id}/attempts`);
       setQuizAttemptReview(review);
+      setQuizMarkDrafts(
+        Object.fromEntries(
+          (review.attempts || []).map((attempt) => [attempt.id, attempt.earned_points])
+        )
+      );
     } catch (err) {
       setQuizAttemptReview(null);
       setError(err.message || "Could not load quiz attempts.");
     } finally {
       setQuizAttemptReviewLoading(false);
+    }
+  };
+
+  const saveQuizAttemptMarks = async (attempt) => {
+    setError("");
+    setMessage("");
+    setSavingQuizAttemptId(attempt.id);
+    try {
+      const updated = await apiClient.put(`/quiz-tests/attempts/${attempt.id}/marks`, {
+        earned_points: quizMarkDrafts[attempt.id],
+      });
+      setQuizAttemptReview((current) => ({
+        ...current,
+        attempts: current.attempts.map((item) =>
+          item.id === attempt.id ? { ...item, ...updated } : item
+        ),
+      }));
+      setMessage(
+        `Updated ${attempt.full_name}'s mark to ${updated.earned_points} / ${updated.total_points}.`
+      );
+    } catch (err) {
+      setError(err.message || "Could not update quiz marks.");
+    } finally {
+      setSavingQuizAttemptId(null);
     }
   };
 
@@ -2824,7 +2880,71 @@ function WeeklyLearning() {
             </MDTypography>
           ) : (
             <MDBox display="flex" flexDirection="column" gap={1.5}>
-              {quizAttemptReview.attempts.map((attempt) => (
+              <Grid container spacing={1.5}>
+                <Grid item xs={12} md={4}>
+                  <MDInput
+                    label="Learner name"
+                    fullWidth
+                    value={quizReviewFilters.learnerName}
+                    onChange={(event) =>
+                      setQuizReviewFilters((current) => ({
+                        ...current,
+                        learnerName: event.target.value,
+                      }))
+                    }
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <MDInput
+                    select
+                    label="Grade"
+                    fullWidth
+                    SelectProps={{ native: true }}
+                    value={quizReviewFilters.grade}
+                    onChange={(event) =>
+                      setQuizReviewFilters((current) => ({
+                        ...current,
+                        grade: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">All grades</option>
+                    {quizReviewOptions.grades.map((grade) => (
+                      <option key={grade} value={grade}>
+                        {grade}
+                      </option>
+                    ))}
+                  </MDInput>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <MDInput
+                    select
+                    label="Stream"
+                    fullWidth
+                    SelectProps={{ native: true }}
+                    value={quizReviewFilters.stream}
+                    onChange={(event) =>
+                      setQuizReviewFilters((current) => ({
+                        ...current,
+                        stream: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">All streams</option>
+                    {quizReviewOptions.streams.map((stream) => (
+                      <option key={stream} value={stream}>
+                        {stream}
+                      </option>
+                    ))}
+                  </MDInput>
+                </Grid>
+              </Grid>
+              {!filteredQuizAttempts.length && (
+                <MDTypography variant="body2" color="text">
+                  No learner attempts match these filters.
+                </MDTypography>
+              )}
+              {filteredQuizAttempts.map((attempt) => (
                 <Card key={attempt.id} variant="outlined">
                   <MDBox p={2}>
                     <MDBox
@@ -2845,15 +2965,43 @@ function WeeklyLearning() {
                           {attempt.attempt_number}
                         </MDTypography>
                       </MDBox>
-                      <Chip
-                        label={`${attempt.earned_points} / ${attempt.total_points} (${attempt.score}%)`}
-                        color={
-                          Number(attempt.score) >= Number(quizAttemptReview.test?.pass_score || 0)
-                            ? "success"
-                            : "warning"
-                        }
-                        size="small"
-                      />
+                      <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                        <MDInput
+                          type="number"
+                          label={`Mark / ${attempt.total_points}`}
+                          value={quizMarkDrafts[attempt.id] ?? attempt.earned_points}
+                          inputProps={{
+                            min: 0,
+                            max: attempt.total_points,
+                            step: "any",
+                          }}
+                          onChange={(event) =>
+                            setQuizMarkDrafts((current) => ({
+                              ...current,
+                              [attempt.id]: event.target.value,
+                            }))
+                          }
+                          sx={{ width: 120 }}
+                        />
+                        <MDButton
+                          variant="gradient"
+                          color="info"
+                          size="small"
+                          disabled={savingQuizAttemptId === attempt.id}
+                          onClick={() => saveQuizAttemptMarks(attempt)}
+                        >
+                          {savingQuizAttemptId === attempt.id ? "Saving..." : "Save Mark"}
+                        </MDButton>
+                        <Chip
+                          label={`${attempt.earned_points} / ${attempt.total_points} (${attempt.score}%)`}
+                          color={
+                            Number(attempt.score) >= Number(quizAttemptReview.test?.pass_score || 0)
+                              ? "success"
+                              : "warning"
+                          }
+                          size="small"
+                        />
+                      </MDBox>
                     </MDBox>
                     <MDBox display="flex" flexDirection="column" gap={1}>
                       {(quizAttemptReview.test?.questions || []).map((question, questionIndex) => {

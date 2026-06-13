@@ -2504,13 +2504,7 @@ function CourseBuilder() {
                 variant="outlined"
                 color="info"
                 startIcon={<Icon>visibility</Icon>}
-                onClick={() =>
-                  window.open(
-                    `/system-admin/courses/${entityId}/preview`,
-                    "_blank",
-                    "noopener,noreferrer"
-                  )
-                }
+                onClick={() => navigate(`/system-admin/courses/${entityId}/preview`)}
               >
                 View as Learner
               </MDButton>
@@ -2521,13 +2515,7 @@ function CourseBuilder() {
                   variant="outlined"
                   color="info"
                   startIcon={<Icon>visibility</Icon>}
-                  onClick={() =>
-                    window.open(
-                      `/school-admin/courses/${entityId}/preview`,
-                      "_blank",
-                      "noopener,noreferrer"
-                    )
-                  }
+                  onClick={() => navigate(`/school-admin/courses/${entityId}/preview`)}
                 >
                   Preview as Learner
                 </MDButton>

@@ -42,6 +42,12 @@ router.get(
   requireRole("system_admin", "school_admin", "teacher"),
   quizTestsController.attemptReview,
 );
+router.put(
+  "/attempts/:attemptId/marks",
+  authenticateToken,
+  requireRole("system_admin", "school_admin", "teacher"),
+  quizTestsController.updateAttemptMarks,
+);
 router.get(
   "/report",
   authenticateToken,

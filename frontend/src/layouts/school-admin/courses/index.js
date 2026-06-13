@@ -362,6 +362,16 @@ function Courses() {
                                   Build
                                 </MDButton>
                                 <MDButton
+                                  variant="outlined"
+                                  color="info"
+                                  size="small"
+                                  onClick={() =>
+                                    navigate(`/school-admin/courses/${course.id}/preview`)
+                                  }
+                                >
+                                  Preview as Learner
+                                </MDButton>
+                                <MDButton
                                   variant="gradient"
                                   color="success"
                                   size="small"

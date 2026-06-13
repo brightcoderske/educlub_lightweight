@@ -111,6 +111,21 @@ async function attemptReview(req, res) {
   }
 }
 
+async function updateAttemptMarks(req, res) {
+  try {
+    const attempt = await quizTestsService.updateAttemptMarks(
+      req.user,
+      req.params.attemptId,
+      req.body,
+    );
+    if (!attempt) return res.status(404).json({ error: "Quiz attempt not found" });
+    res.json(attempt);
+  } catch (error) {
+    console.error("Update quiz attempt marks error:", error);
+    res.status(400).json({ error: error.message || "Failed to update marks" });
+  }
+}
+
 module.exports = {
   listTests,
   getTest,
@@ -121,4 +136,5 @@ module.exports = {
   submitAttempt,
   report,
   attemptReview,
+  updateAttemptMarks,
 };
