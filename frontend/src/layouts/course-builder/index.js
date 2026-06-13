@@ -2499,6 +2499,22 @@ function CourseBuilder() {
             )}
           </MDBox>
           <MDBox display="flex" gap={1} flexWrap="wrap">
+            {isTemplate && (
+              <MDButton
+                variant="outlined"
+                color="info"
+                startIcon={<Icon>visibility</Icon>}
+                onClick={() =>
+                  window.open(
+                    `/system-admin/courses/${entityId}/preview`,
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                }
+              >
+                View as Learner
+              </MDButton>
+            )}
             {!isTemplate && (
               <>
                 <MDButton

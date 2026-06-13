@@ -986,11 +986,13 @@ CompletionCelebration.propTypes = {
 };
 
 function ModuleLearn() {
-  const { courseId, moduleId } = useParams();
+  const { courseId, templateId, moduleId } = useParams();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const previewMode = pathname.includes("/preview");
+  const templatePreviewMode = previewMode && pathname.startsWith("/system-admin");
+  const entityId = templatePreviewMode ? templateId : courseId;
   const contentTopRef = useRef(null);
   const [data, setData] = useState(null);
   const [activeActivityId, setActiveActivityId] = useState(null);
@@ -1023,7 +1025,11 @@ function ModuleLearn() {
     if (!silent) setLoading(true);
     setError("");
     try {
-      const response = await apiClient.get(`/courses/${courseId}/modules/${moduleId}/learn`);
+      const response = await apiClient.get(
+        templatePreviewMode
+          ? `/course-templates/${entityId}/modules/${moduleId}/learn`
+          : `/courses/${entityId}/modules/${moduleId}/learn`
+      );
       setData(response);
       setFeedbackRating(Number(response.feedback?.rating || 0));
       setFeedbackComment(response.feedback?.comment || "");
@@ -1105,7 +1111,7 @@ function ModuleLearn() {
   useEffect(() => {
     setActiveActivityId(null);
     loadModule();
-  }, [courseId, moduleId]);
+  }, [entityId, moduleId, templatePreviewMode]);
 
   useEffect(() => {
     setAnswers(
@@ -1130,7 +1136,7 @@ function ModuleLearn() {
     setCodePreviewHtml("");
 
     async function loadDiscussion() {
-      if (activeActivity?.activity_type !== "discussion") return;
+      if (previewMode || activeActivity?.activity_type !== "discussion") return;
       try {
         const response = await apiClient.get(`/courses/activities/${activeActivity.id}/discussion`);
         setDiscussion(response);
@@ -1399,7 +1405,9 @@ function ModuleLearn() {
         </MDBox>
         <IconButton
           aria-label="Close learning page"
-          onClick={() => navigate(courseOverviewPath(courseId, previewMode))}
+          onClick={() =>
+            navigate(courseOverviewPath(entityId, previewMode, templatePreviewMode))
+          }
         >
           <Icon>close</Icon>
         </IconButton>

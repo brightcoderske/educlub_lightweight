@@ -50,6 +50,37 @@ async function getTemplateBuilder(req, res) {
   }
 }
 
+async function getTemplateLearningOverview(req, res) {
+  try {
+    const overview =
+      await courseTemplatesService.getTemplateLearningOverview(
+        req.params.templateId,
+      );
+    if (!overview) return res.status(404).json({ error: "Template not found" });
+    res.json(overview);
+  } catch (error) {
+    console.error("Get template learning overview error:", error);
+    res.status(500).json({ error: "Failed to get template learning overview" });
+  }
+}
+
+async function getTemplateModuleLearning(req, res) {
+  try {
+    const moduleLearning =
+      await courseTemplatesService.getTemplateModuleLearning(
+        req.params.templateId,
+        req.params.moduleId,
+      );
+    if (!moduleLearning) {
+      return res.status(404).json({ error: "Template module not found" });
+    }
+    res.json(moduleLearning);
+  } catch (error) {
+    console.error("Get template module learning error:", error);
+    res.status(500).json({ error: "Failed to get template module learning" });
+  }
+}
+
 async function createTemplateModule(req, res) {
   try {
     const module = await courseTemplatesService.createTemplateModule(
@@ -144,6 +175,8 @@ module.exports = {
   createTemplate,
   updateTemplate,
   getTemplateBuilder,
+  getTemplateLearningOverview,
+  getTemplateModuleLearning,
   createTemplateModule,
   updateTemplateModule,
   deleteTemplateModule,

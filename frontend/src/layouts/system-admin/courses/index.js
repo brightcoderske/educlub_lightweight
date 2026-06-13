@@ -22,6 +22,11 @@ function SystemAdminCourses() {
       ]}
       actions={[
         {
+          label: "View as Learner",
+          color: "info",
+          path: (course) => `/system-admin/courses/${course.id}/preview`,
+        },
+        {
           label: "Reviews",
           color: "dark",
           path: (course) => `/system-admin/courses/${course.id}/reviews`,

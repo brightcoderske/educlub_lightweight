@@ -39,11 +39,13 @@ function progressColor(value) {
 }
 
 function CourseOverview() {
-  const { courseId } = useParams();
+  const { courseId, templateId } = useParams();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user } = useAuth();
   const previewMode = pathname.includes("/preview");
+  const templatePreviewMode = previewMode && pathname.startsWith("/system-admin");
+  const entityId = templatePreviewMode ? templateId : courseId;
   const [overview, setOverview] = useState(null);
   const [openModules, setOpenModules] = useState({});
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,11 @@ function CourseOverview() {
     setLoading(true);
     setError("");
     try {
-      const response = await apiClient.get(`/courses/${courseId}/learning-overview`);
+      const response = await apiClient.get(
+        templatePreviewMode
+          ? `/course-templates/${entityId}/learning-overview`
+          : `/courses/${entityId}/learning-overview`
+      );
       setOverview(response);
       const firstOpen = response.modules?.[0]?.id;
       setOpenModules(firstOpen ? { [firstOpen]: true } : {});
@@ -66,7 +72,7 @@ function CourseOverview() {
 
   useEffect(() => {
     loadOverview();
-  }, [courseId]);
+  }, [entityId, templatePreviewMode]);
 
   const toggleModule = (moduleId) => {
     setOpenModules((current) => ({ ...current, [moduleId]: !current[moduleId] }));
@@ -86,7 +92,13 @@ function CourseOverview() {
             variant="outlined"
             color="dark"
             onClick={() =>
-              navigate(previewMode ? `/school-admin/courses/${courseId}/builder` : "/learner")
+              navigate(
+                templatePreviewMode
+                  ? `/system-admin/courses/${entityId}/builder`
+                  : previewMode
+                  ? `/school-admin/courses/${entityId}/builder`
+                  : "/learner"
+              )
             }
           >
             {previewMode ? "Back to Builder" : "Back"}
@@ -209,7 +221,8 @@ function CourseOverview() {
                                           overview.course.id,
                                           courseModule.id,
                                           activity.id,
-                                          true
+                                          true,
+                                          templatePreviewMode
                                         )
                                       : activityLearningPath(
                                           overview.course.id,
@@ -268,7 +281,8 @@ function CourseOverview() {
                                     overview.course.id,
                                     courseModule.id,
                                     null,
-                                    previewMode
+                                    previewMode,
+                                    templatePreviewMode
                                   )
                                 )
                               }

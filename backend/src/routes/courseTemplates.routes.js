@@ -14,6 +14,18 @@ router.get(
   authenticateToken,
   controller.getTemplateBuilder,
 );
+router.get(
+  "/:templateId/learning-overview",
+  authenticateToken,
+  isSystemAdmin,
+  controller.getTemplateLearningOverview,
+);
+router.get(
+  "/:templateId/modules/:moduleId/learn",
+  authenticateToken,
+  isSystemAdmin,
+  controller.getTemplateModuleLearning,
+);
 router.put(
   "/:templateId",
   authenticateToken,

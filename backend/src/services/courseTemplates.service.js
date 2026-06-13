@@ -1,5 +1,9 @@
 const { query } = require("../config");
 const notificationsService = require("./notifications.service");
+const {
+  buildTemplateLearningOverview,
+  buildTemplateModuleLearning,
+} = require("./courseTemplatePreview");
 
 function normalizeCourseCategory(category) {
   if (["general", "weekly_typing", "weekly_quiz"].includes(category)) {
@@ -258,6 +262,17 @@ async function getTemplateBuilder(templateId) {
   });
 
   return { template, modules: [...modules.values()] };
+}
+
+async function getTemplateLearningOverview(templateId) {
+  return buildTemplateLearningOverview(await getTemplateBuilder(templateId));
+}
+
+async function getTemplateModuleLearning(templateId, moduleId) {
+  return buildTemplateModuleLearning(
+    await getTemplateBuilder(templateId),
+    moduleId,
+  );
 }
 
 async function createTemplateModule(templateId, data = {}) {
@@ -736,6 +751,8 @@ module.exports = {
   createTemplate,
   updateTemplate,
   getTemplateBuilder,
+  getTemplateLearningOverview,
+  getTemplateModuleLearning,
   createTemplateModule,
   updateTemplateModule,
   deleteTemplateModule,
