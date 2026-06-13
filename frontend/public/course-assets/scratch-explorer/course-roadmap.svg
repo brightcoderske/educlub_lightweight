@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="t d">
+<title id="t">Scratch Explorer roadmap</title><desc id="d">Ten connected colorful steps from first creative code to an Explorer showcase.</desc>
+<rect width="1200" height="675" fill="#fffaf0"/><text x="80" y="92" font-family="Arial" font-size="48" font-weight="700" fill="#25324b">Explorer Roadmap</text>
+<path d="M100 210H1100M1100 210v260H100" fill="none" stroke="#b9c5d6" stroke-width="14" stroke-linecap="round"/>
+<g font-family="Arial" font-size="24" text-anchor="middle" font-weight="700">
+<g fill="#ef476f"><circle cx="120" cy="210" r="48"/><text x="120" y="219" fill="white">1</text></g><g fill="#ff9f1c"><circle cx="330" cy="210" r="48"/><text x="330" y="219" fill="white">2</text></g><g fill="#ffd166"><circle cx="540" cy="210" r="48"/><text x="540" y="219" fill="#25324b">3</text></g><g fill="#06d6a0"><circle cx="750" cy="210" r="48"/><text x="750" y="219" fill="white">4</text></g><g fill="#118ab2"><circle cx="960" cy="210" r="48"/><text x="960" y="219" fill="white">5</text></g>
+<g fill="#7b61ff"><circle cx="960" cy="470" r="48"/><text x="960" y="479" fill="white">6</text></g><g fill="#118ab2"><circle cx="750" cy="470" r="48"/><text x="750" y="479" fill="white">7</text></g><g fill="#06d6a0"><circle cx="540" cy="470" r="48"/><text x="540" y="479" fill="white">8</text></g><g fill="#ff9f1c"><circle cx="330" cy="470" r="48"/><text x="330" y="479" fill="white">9</text></g><g fill="#ef476f"><circle cx="120" cy="470" r="48"/><text x="120" y="479" fill="white">10</text></g></g>
+<text x="80" y="610" font-family="Arial" font-size="28" fill="#52627a">Imagine → Plan → Build → Test → Explain → Create</text>
+</svg>

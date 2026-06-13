@@ -10,7 +10,8 @@
     "email:verify": "node scripts/verify-email.js",
     "migrate": "node ../scripts/migrate.js",
     "seed": "node ../scripts/seed-admin.js",
-    "import:web-development-1": "node scripts/import-web-development-1.js"
+    "import:web-development-1": "node scripts/import-web-development-1.js",
+    "import:scratch-pathway": "node scripts/import-scratch-pathway.js"
   },
   "dependencies": {
     "archiver": "^6.0.1",

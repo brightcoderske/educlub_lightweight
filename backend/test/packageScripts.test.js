@@ -9,4 +9,8 @@ test("exposes backend tests and the Web Development 1 importer", () => {
     packageJson.scripts["import:web-development-1"],
     "node scripts/import-web-development-1.js",
   );
+  assert.equal(
+    packageJson.scripts["import:scratch-pathway"],
+    "node scripts/import-scratch-pathway.js",
+  );
 });

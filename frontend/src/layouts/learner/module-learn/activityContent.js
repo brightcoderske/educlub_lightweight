@@ -1,3 +1,10 @@
+export const DEFAULT_SUBMISSION_ACCEPT =
+  "image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+function metadataText(value, separator) {
+  return Array.isArray(value) ? value.filter(Boolean).join(separator) : value || "";
+}
+
 export function selectActivityContent(content = {}, quizResult = {}) {
   const feedback = quizResult.feedback || {};
   return {
@@ -5,6 +12,12 @@ export function selectActivityContent(content = {}, quizResult = {}) {
     hints: content.friendly_hints || [],
     levelUp: content.level_up || content.project_brief || "",
     badgeName: content.module_badge?.name || "",
+    submission: {
+      accept:
+        metadataText(content.submission_accept, ",") ||
+        DEFAULT_SUBMISSION_ACCEPT,
+      help: metadataText(content.submission_help, " "),
+    },
     questionFeedback: Object.fromEntries(
       (content.questions || []).map((question) => [
         question.id,

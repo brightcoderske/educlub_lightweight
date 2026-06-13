@@ -3,6 +3,125 @@ const assert = require("node:assert/strict");
 const { validateTemplateDefinition } = require("../src/courseTemplates/templateDefinition");
 const template = require("../src/courseTemplates/webDevelopment1.template");
 
+test("shared validation does not force every template to eight modules", () => {
+  const generic = {
+    name: "Small Course",
+    code: "SMALL",
+    estimated_weeks: 1,
+    learning_objectives: ["Complete one project."],
+    validation_profile: "generic",
+    modules: [{
+      title: "Module 1",
+      activities: [{
+        title: "Read",
+        activity_type: "lesson",
+        content: { purpose: "reading", body: "Hello" },
+      }],
+    }],
+  };
+
+  assert.equal(validateTemplateDefinition(generic).modules.length, 1);
+});
+
+test("Web Development profile still requires eight complete missions", () => {
+  assert.equal(validateTemplateDefinition(template).modules.length, 8);
+  assert.throws(
+    () => validateTemplateDefinition({ ...template, modules: template.modules.slice(0, 7) }),
+    /eight modules/
+  );
+});
+
+test("shared validation rejects positions that are not contiguous", () => {
+  assert.throws(
+    () => validateTemplateDefinition({
+      name: "Broken Positions",
+      code: "BROKEN-POSITIONS",
+      estimated_weeks: 1,
+      validation_profile: "generic",
+      modules: [{
+        title: "Module 1",
+        position: 2,
+        activities: [{
+          title: "Read",
+          activity_type: "lesson",
+          content: { purpose: "reading", body: "Hello" },
+        }],
+      }],
+    }),
+    /module positions must be contiguous/
+  );
+});
+
+test("shared validation does not silently replace zero positions", () => {
+  assert.throws(
+    () => validateTemplateDefinition({
+      name: "Zero Position",
+      code: "ZERO-POSITION",
+      estimated_weeks: 1,
+      modules: [{
+        title: "Module 1",
+        position: 0,
+        activities: [{
+          title: "Read",
+          activity_type: "lesson",
+          content: { purpose: "reading", body: "Hello" },
+        }],
+      }],
+    }),
+    /module positions must be contiguous/
+  );
+});
+
+test("shared validation reports malformed collections clearly", () => {
+  assert.throws(
+    () => validateTemplateDefinition({
+      name: "Broken Modules",
+      code: "BROKEN-MODULES",
+      estimated_weeks: 1,
+      modules: {},
+    }),
+    /Template modules must be an array/
+  );
+});
+
+test("shared validation requires activity titles", () => {
+  assert.throws(
+    () => validateTemplateDefinition({
+      name: "Missing Activity Title",
+      code: "MISSING-ACTIVITY-TITLE",
+      estimated_weeks: 1,
+      modules: [{
+        title: "Module 1",
+        activities: [{
+          activity_type: "lesson",
+          content: { body: "Hello" },
+        }],
+      }],
+    }),
+    /Every activity needs a title/
+  );
+});
+
+test("shared validation rejects unknown profiles", () => {
+  assert.throws(
+    () => validateTemplateDefinition({
+      name: "Unknown Profile",
+      code: "UNKNOWN-PROFILE",
+      estimated_weeks: 1,
+      validation_profile: "missing",
+      modules: [{
+        title: "Module 1",
+        activities: [{
+          title: "Read",
+          activity_type: "lesson",
+          content: { body: "Hello" },
+        }],
+      }],
+    }),
+    /Unknown template validation profile missing/
+  );
+});
+
 test("Web Development 1 contains eight missions and eighty activities", () => {
   const result = validateTemplateDefinition(template);
   assert.equal(result.modules.length, 8);

@@ -158,9 +158,7 @@ if (env.nodeEnv !== "test") {
   importBuiltInTemplates()
     .then((result) => {
       console.log(
-        result.skipped
-          ? `Built-in template already exists: ${result.template_id}.`
-          : `Built-in templates ready: ${result.modules} modules, ${result.activities} activities.`,
+        `Built-in templates ready: ${result.imported} imported, ${result.skipped} preserved, ${result.modules} modules, ${result.activities} activities.`,
       );
       app.listen(PORT, () => {
         console.log(`eduClub Backend Server running on port ${PORT}`);

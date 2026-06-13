@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="t d">
+<title id="t">Scratch Creator roadmap</title><desc id="d">Ten connected project cards covering story systems, games, simulations, data, and machine learning.</desc>
+<rect width="1200" height="675" fill="#ecfeff"/><text x="70" y="82" font-family="Arial" font-size="48" font-weight="700" fill="#083344">Creator Project Path</text>
+<g font-family="Arial" font-size="21" font-weight="700"><g fill="#fff" stroke-width="6">
+<rect x="70" y="135" width="195" height="120" rx="22" stroke="#0284c7"/><rect x="285" y="135" width="195" height="120" rx="22" stroke="#14b8a6"/><rect x="500" y="135" width="195" height="120" rx="22" stroke="#f59e0b"/><rect x="715" y="135" width="195" height="120" rx="22" stroke="#7c3aed"/><rect x="930" y="135" width="195" height="120" rx="22" stroke="#ef476f"/>
+<rect x="70" y="335" width="195" height="120" rx="22" stroke="#14b8a6"/><rect x="285" y="335" width="195" height="120" rx="22" stroke="#0284c7"/><rect x="500" y="335" width="195" height="120" rx="22" stroke="#7c3aed"/><rect x="715" y="335" width="195" height="120" rx="22" stroke="#ef476f"/><rect x="930" y="335" width="195" height="120" rx="22" stroke="#f59e0b"/></g>
+<g fill="#164e63" text-anchor="middle"><text x="168" y="205">1 Story</text><text x="382" y="205">2 Maze</text><text x="598" y="205">3 Arcade</text><text x="812" y="205">4 Procedures</text><text x="1028" y="205">5 Simulator</text><text x="168" y="405">6 Forces</text><text x="382" y="405">7 Ecosystem</text><text x="598" y="405">8 Data</text><text x="812" y="405">9 ML</text><text x="1028" y="405">10 Design</text></g></g>
+<text x="70" y="570" font-family="Arial" font-size="28" fill="#155e75">Create systems. Test evidence. Explain limitations.</text>
+</svg>

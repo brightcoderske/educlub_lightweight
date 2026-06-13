@@ -598,7 +598,7 @@ function ActivityBody({
               <input
                 hidden
                 type="file"
-                accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                accept={learnerContent.submission.accept}
                 onChange={(event) => onSubmissionFileChange(event.target.files?.[0] || null)}
               />
             </MDButton>
@@ -606,6 +606,11 @@ function ActivityBody({
               {submissionFile?.name || "No file selected"}
             </MDTypography>
           </MDBox>
+          {learnerContent.submission.help && (
+            <MDTypography variant="caption" color="text" display="block" mt={1}>
+              {learnerContent.submission.help}
+            </MDTypography>
+          )}
           <MDButton
             variant="gradient"
             color="success"
