@@ -27,6 +27,12 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { apiClient } from "lib/api";
 import { useAuth } from "context/AuthContext";
+import {
+  addAcceptableAnswer,
+  normalizeAcceptableAnswers,
+  removeAcceptableAnswer,
+  updateAcceptableAnswer,
+} from "./quizAnswerUtils";
 
 const categories = [
   ["weekly_typing", "Weekly Typing"],
@@ -114,6 +120,16 @@ function formatWeekDate(value) {
   });
 }
 
+function formatReviewAnswer(value) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([left, right]) => `${left}: ${right}`)
+      .join(", ");
+  }
+  return String(value ?? "") || "-";
+}
+
 const gradeOptions = Array.from({ length: 12 }, (_, index) => `Grade ${index + 1}`);
 
 function WeeklyLearning() {
@@ -156,6 +172,8 @@ function WeeklyLearning() {
   const [quizRemaining, setQuizRemaining] = useState(0);
   const [quizMissing, setQuizMissing] = useState([]);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
+  const [quizAttemptReview, setQuizAttemptReview] = useState(null);
+  const [quizAttemptReviewLoading, setQuizAttemptReviewLoading] = useState(false);
   const quizStartedAtRef = useRef(null);
   const quizSubmitRef = useRef(null);
   const [bulkForm, setBulkForm] = useState({
@@ -696,6 +714,10 @@ function WeeklyLearning() {
                 )
               : question.question_type === "ordering"
               ? question.options
+              : question.question_type === "short_answer"
+              ? normalizeAcceptableAnswers(question.correct_answer)
+                  .map((answer) => answer.trim())
+                  .filter(Boolean)
               : question.correct_answer,
         })),
       };
@@ -726,7 +748,10 @@ function WeeklyLearning() {
           ? response.questions.map((question) => ({
               ...question,
               correct_answer:
-                question.question_type !== "ordering" && Array.isArray(question.correct_answer)
+                question.question_type === "multiple_choice" ||
+                question.question_type === "short_answer"
+                  ? normalizeAcceptableAnswers(question.correct_answer)
+                  : question.question_type !== "ordering" && Array.isArray(question.correct_answer)
                   ? question.correct_answer.join(", ")
                   : question.correct_answer || "",
               options: question.options?.length
@@ -768,6 +793,21 @@ function WeeklyLearning() {
       await loadData();
     } catch (err) {
       setError(err.message || "Could not duplicate quiz setup.");
+    }
+  };
+
+  const openQuizAttemptReview = async (test) => {
+    setError("");
+    setQuizAttemptReviewLoading(true);
+    setQuizAttemptReview({ test, attempts: [] });
+    try {
+      const review = await apiClient.get(`/quiz-tests/tests/${test.id}/attempts`);
+      setQuizAttemptReview(review);
+    } catch (err) {
+      setQuizAttemptReview(null);
+      setError(err.message || "Could not load quiz attempts.");
+    } finally {
+      setQuizAttemptReviewLoading(false);
     }
   };
 
@@ -1756,6 +1796,8 @@ function WeeklyLearning() {
                                           ? "True"
                                           : questionType === "multiple_choice"
                                           ? []
+                                          : questionType === "short_answer"
+                                          ? [""]
                                           : "",
                                     });
                                   }}
@@ -1903,16 +1945,65 @@ function WeeklyLearning() {
                               ) : (
                                 <Grid item xs={12}>
                                   {question.question_type === "short_answer" ? (
-                                    <MDInput
-                                      label="Correct answer"
-                                      fullWidth
-                                      value={question.correct_answer}
-                                      onChange={(event) =>
-                                        updateQuizQuestion(index, {
-                                          correct_answer: event.target.value,
-                                        })
-                                      }
-                                    />
+                                    <MDBox display="flex" flexDirection="column" gap={1}>
+                                      {normalizeAcceptableAnswers(question.correct_answer).map(
+                                        (answer, answerIndex) => (
+                                          <MDBox
+                                            key={`answer-${index}-${answerIndex}`}
+                                            display="flex"
+                                            gap={1}
+                                            alignItems="center"
+                                          >
+                                            <MDInput
+                                              label={
+                                                answerIndex === 0
+                                                  ? "Correct answer"
+                                                  : `Also accept ${answerIndex + 1}`
+                                              }
+                                              fullWidth
+                                              value={answer}
+                                              onChange={(event) =>
+                                                updateQuizQuestion(index, {
+                                                  correct_answer: updateAcceptableAnswer(
+                                                    question.correct_answer,
+                                                    answerIndex,
+                                                    event.target.value
+                                                  ),
+                                                })
+                                              }
+                                            />
+                                            <IconButton
+                                              color="error"
+                                              title="Remove accepted answer"
+                                              onClick={() =>
+                                                updateQuizQuestion(index, {
+                                                  correct_answer: removeAcceptableAnswer(
+                                                    question.correct_answer,
+                                                    answerIndex
+                                                  ),
+                                                })
+                                              }
+                                            >
+                                              <Icon>close</Icon>
+                                            </IconButton>
+                                          </MDBox>
+                                        )
+                                      )}
+                                      <MDButton
+                                        variant="outlined"
+                                        color="info"
+                                        size="small"
+                                        onClick={() =>
+                                          updateQuizQuestion(index, {
+                                            correct_answer: addAcceptableAnswer(
+                                              question.correct_answer
+                                            ),
+                                          })
+                                        }
+                                      >
+                                        Add Accepted Answer
+                                      </MDButton>
+                                    </MDBox>
                                   ) : (
                                     <MDBox display="flex" flexDirection="column" gap={1}>
                                       {(question.options || []).map((option, optionIndex) => {
@@ -2362,6 +2453,14 @@ function WeeklyLearning() {
                                 <MDBox display="flex" gap={0.5} justifyContent="center">
                                   <MDButton
                                     variant="text"
+                                    color="dark"
+                                    size="small"
+                                    onClick={() => openQuizAttemptReview(row)}
+                                  >
+                                    Review
+                                  </MDButton>
+                                  <MDButton
+                                    variant="text"
                                     color="info"
                                     size="small"
                                     onClick={() => editQuizTest(row)}
@@ -2386,9 +2485,14 @@ function WeeklyLearning() {
                                   </MDButton>
                                 </MDBox>
                               ) : (
-                                <MDTypography variant="caption" color="text">
-                                  Native
-                                </MDTypography>
+                                <MDButton
+                                  variant="text"
+                                  color="info"
+                                  size="small"
+                                  onClick={() => openQuizAttemptReview(row)}
+                                >
+                                  Review
+                                </MDButton>
                               )}
                             </TableCell>
                           </TableRow>
@@ -2690,6 +2794,114 @@ function WeeklyLearning() {
         </Grid>
       </MDBox>
       <Footer />
+      <Dialog
+        open={Boolean(quizAttemptReview)}
+        onClose={() => setQuizAttemptReview(null)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogContent sx={{ bgcolor: "#f8fafc" }}>
+          <MDBox display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
+            <MDBox>
+              <MDTypography variant="h5" fontWeight="bold">
+                Quiz Submissions
+              </MDTypography>
+              <MDTypography variant="body2" color="text">
+                {quizAttemptReview?.test?.name || "Weekly quiz"}
+              </MDTypography>
+            </MDBox>
+            <IconButton title="Close" onClick={() => setQuizAttemptReview(null)}>
+              <Icon>close</Icon>
+            </IconButton>
+          </MDBox>
+          {quizAttemptReviewLoading ? (
+            <MDTypography variant="body2" color="text">
+              Loading learner answers...
+            </MDTypography>
+          ) : !quizAttemptReview?.attempts?.length ? (
+            <MDTypography variant="body2" color="text">
+              No learner attempts have been submitted yet.
+            </MDTypography>
+          ) : (
+            <MDBox display="flex" flexDirection="column" gap={1.5}>
+              {quizAttemptReview.attempts.map((attempt) => (
+                <Card key={attempt.id} variant="outlined">
+                  <MDBox p={2}>
+                    <MDBox
+                      display="flex"
+                      justifyContent="space-between"
+                      alignItems="flex-start"
+                      gap={2}
+                      flexWrap="wrap"
+                      mb={1.5}
+                    >
+                      <MDBox>
+                        <MDTypography variant="button" fontWeight="bold">
+                          {attempt.full_name}
+                        </MDTypography>
+                        <MDTypography variant="caption" color="text" display="block">
+                          {attempt.grade || "Grade not set"}
+                          {attempt.stream ? ` | ${attempt.stream}` : ""} | Attempt{" "}
+                          {attempt.attempt_number}
+                        </MDTypography>
+                      </MDBox>
+                      <Chip
+                        label={`${attempt.earned_points} / ${attempt.total_points} (${attempt.score}%)`}
+                        color={
+                          Number(attempt.score) >= Number(quizAttemptReview.test?.pass_score || 0)
+                            ? "success"
+                            : "warning"
+                        }
+                        size="small"
+                      />
+                    </MDBox>
+                    <MDBox display="flex" flexDirection="column" gap={1}>
+                      {(quizAttemptReview.test?.questions || []).map((question, questionIndex) => {
+                        const answer =
+                          attempt.answers?.[question.id] ??
+                          attempt.answers?.[question.position] ??
+                          attempt.answers?.[String(question.position)];
+                        const result =
+                          attempt.feedback?.[question.id] ??
+                          attempt.feedback?.[String(question.id)] ??
+                          {};
+                        return (
+                          <MDBox
+                            key={question.id}
+                            p={1.25}
+                            borderRadius="md"
+                            sx={{
+                              bgcolor: result.correct ? "#ecfdf5" : "#fff7ed",
+                              border: `1px solid ${result.correct ? "#a7f3d0" : "#fed7aa"}`,
+                            }}
+                          >
+                            <MDTypography variant="caption" fontWeight="bold">
+                              {questionIndex + 1}. {question.prompt}
+                            </MDTypography>
+                            <MDTypography variant="caption" display="block" color="text">
+                              Learner answer: {formatReviewAnswer(answer)}
+                            </MDTypography>
+                            <MDTypography variant="caption" display="block" color="text">
+                              Accepted answer: {formatReviewAnswer(question.correct_answer)}
+                            </MDTypography>
+                            <MDTypography
+                              variant="caption"
+                              display="block"
+                              color={result.correct ? "success" : "warning"}
+                            >
+                              Awarded: {Number(result.points || 0)} / {Number(question.points || 0)}
+                            </MDTypography>
+                          </MDBox>
+                        );
+                      })}
+                    </MDBox>
+                  </MDBox>
+                </Card>
+              ))}
+            </MDBox>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={Boolean(activeTest)} onClose={() => null} maxWidth="lg" fullWidth>
         <DialogContent>
           {activeTest && currentLesson() && (

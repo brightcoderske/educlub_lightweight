@@ -1,4 +1,5 @@
 const { query } = require("../config");
+const { answersMatch } = require("./quizAnswerPolicy");
 
 const QUIZ_CATEGORIES = new Set(["quiz", "maths", "science", "stem"]);
 
@@ -38,7 +39,11 @@ function gradeAllowed(eligibleGrades, learnerGrade) {
   return grades.some((grade) => {
     if (normalizeGrade(grade) === learnerText) return true;
     const currentNumber = gradeNumber(grade);
-    return currentNumber !== null && learnerNumber !== null && currentNumber === learnerNumber;
+    return (
+      currentNumber !== null &&
+      learnerNumber !== null &&
+      currentNumber === learnerNumber
+    );
   });
 }
 
@@ -56,7 +61,7 @@ function dateBoundary(value, endOfDay = false) {
       endOfDay ? 23 : 0,
       endOfDay ? 59 : 0,
       endOfDay ? 59 : 0,
-      endOfDay ? 999 : 0
+      endOfDay ? 999 : 0,
     );
   }
   const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -68,7 +73,7 @@ function dateBoundary(value, endOfDay = false) {
     endOfDay ? 23 : 0,
     endOfDay ? 59 : 0,
     endOfDay ? 59 : 0,
-    endOfDay ? 999 : 0
+    endOfDay ? 999 : 0,
   );
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -87,41 +92,9 @@ function computeAvailability(test, now = new Date()) {
   }
   return {
     effective_is_published: true,
-    effective_is_open: normalizeBoolean(test.is_open) && now >= weekStart && now <= termEnd,
+    effective_is_open:
+      normalizeBoolean(test.is_open) && now >= weekStart && now <= termEnd,
   };
-}
-
-function normalizeAnswer(value, preserveOrder = false) {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return Object.entries(value)
-      .map(([key, item]) => [
-        String(key).trim().toLowerCase(),
-        String(item ?? "")
-          .trim()
-          .toLowerCase(),
-      ])
-      .sort(([left], [right]) => left.localeCompare(right));
-  }
-  if (Array.isArray(value)) {
-    const normalized = value.map((item) =>
-      String(item ?? "")
-        .trim()
-        .toLowerCase()
-    );
-    return preserveOrder ? normalized : normalized.sort();
-  }
-  return [String(value ?? "").trim().toLowerCase()].filter(Boolean);
-}
-
-function answersMatch(expected, actual, questionType = "") {
-  if (questionType === "true_false") {
-    return normalizeBoolean(expected) === normalizeBoolean(actual);
-  }
-  const preserveOrder = questionType === "ordering";
-  return (
-    JSON.stringify(normalizeAnswer(expected, preserveOrder)) ===
-    JSON.stringify(normalizeAnswer(actual, preserveOrder))
-  );
 }
 
 function validateQuestionAllocation(data = {}) {
@@ -138,7 +111,7 @@ function validateQuestionAllocation(data = {}) {
   }
   if (allocated > totalPoints) {
     throw new Error(
-      `Question marks total ${allocated}, which exceeds the quiz total of ${totalPoints}.`
+      `Question marks total ${allocated}, which exceeds the quiz total of ${totalPoints}.`,
     );
   }
 }
@@ -150,7 +123,7 @@ async function getLearnerForUser(userId) {
      WHERE user_id = $1::integer
        AND is_active = true
      LIMIT 1`,
-    [userId]
+    [userId],
   );
   return result.rows[0] || null;
 }
@@ -220,23 +193,29 @@ async function listTests(user, filters = {}) {
      ${where}
      GROUP BY qt.id, schedule.term_start_date, schedule.term_end_date, schedule.week_start_date, schedule.week_end_date
      ORDER BY qt.academic_year DESC NULLS LAST, qt.week_number DESC NULLS LAST, qt.created_at DESC`,
-    values
+    values,
   );
 
-  let rows = result.rows.map((row) => ({ ...row, ...computeAvailability(row) }));
+  let rows = result.rows.map((row) => ({
+    ...row,
+    ...computeAvailability(row),
+  }));
   if (user.role === "learner") {
     rows = rows.filter(
       (row) =>
         row.effective_is_published &&
         row.effective_is_open &&
-        gradeAllowed(row.eligible_grades, learner?.grade)
+        gradeAllowed(row.eligible_grades, learner?.grade),
     );
   }
   return rows;
 }
 
 async function saveQuestions(testId, questions = []) {
-  await query("DELETE FROM quiz_test_questions WHERE quiz_test_id = $1::integer", [testId]);
+  await query(
+    "DELETE FROM quiz_test_questions WHERE quiz_test_id = $1::integer",
+    [testId],
+  );
   for (const [index, question] of questions.entries()) {
     await query(
       `INSERT INTO quiz_test_questions (
@@ -255,7 +234,7 @@ async function saveQuestions(testId, questions = []) {
         JSON.stringify(normalizeList(question.options)),
         JSON.stringify(question.correct_answer ?? ""),
         Number(question.points ?? 1),
-      ]
+      ],
     );
   }
 }
@@ -263,7 +242,7 @@ async function saveQuestions(testId, questions = []) {
 async function getTest(testId, user) {
   const tests = await listTests(
     { ...user, role: user.role === "learner" ? "learner" : "system_admin" },
-    { id: testId }
+    { id: testId },
   );
   const base =
     tests.find((test) => Number(test.id) === Number(testId)) ||
@@ -277,13 +256,15 @@ async function getTest(testId, user) {
                 0::integer AS question_count
          FROM quiz_tests qt
          WHERE qt.id = $1::integer`,
-        [testId]
+        [testId],
       )
     ).rows[0];
   if (!base) return null;
 
   if (user.role === "learner") {
-    const visible = (await listTests(user, {})).some((test) => Number(test.id) === Number(testId));
+    const visible = (await listTests(user, {})).some(
+      (test) => Number(test.id) === Number(testId),
+    );
     if (!visible) return null;
   }
 
@@ -292,7 +273,7 @@ async function getTest(testId, user) {
      FROM quiz_test_questions
      WHERE quiz_test_id = $1::integer
      ORDER BY position`,
-    [testId]
+    [testId],
   );
   const includeAnswers = user.role !== "learner";
   return {
@@ -343,7 +324,7 @@ async function createTest(user, data) {
       Boolean(data.is_published),
       Boolean(data.is_open),
       user.userId ? String(user.userId) : "",
-    ]
+    ],
   );
   await saveQuestions(result.rows[0].id, data.questions || []);
   return getTest(result.rows[0].id, user);
@@ -393,7 +374,7 @@ async function updateTest(user, testId, data) {
       Boolean(data.is_published),
       Boolean(data.is_open),
       testId,
-    ]
+    ],
   );
   if (!result.rows[0]) return null;
   await saveQuestions(testId, data.questions || []);
@@ -413,7 +394,10 @@ async function duplicateTest(user, testId) {
 }
 
 async function deleteTest(testId) {
-  const result = await query("DELETE FROM quiz_tests WHERE id = $1::integer RETURNING *", [testId]);
+  const result = await query(
+    "DELETE FROM quiz_tests WHERE id = $1::integer RETURNING *",
+    [testId],
+  );
   return result.rows[0] || null;
 }
 
@@ -428,7 +412,7 @@ async function submitAttempt(user, testId, data = {}) {
      FROM quiz_test_attempts
      WHERE quiz_test_id = $1::integer
        AND learner_id = $2::integer`,
-    [testId, learner.id]
+    [testId, learner.id],
   );
   const nextAttempt = Number(attemptCount.rows[0]?.count || 0) + 1;
   if (nextAttempt > Number(test.max_attempts || 1)) {
@@ -440,7 +424,7 @@ async function submitAttempt(user, testId, data = {}) {
      FROM quiz_test_questions
      WHERE quiz_test_id = $1::integer
      ORDER BY position`,
-    [testId]
+    [testId],
   );
   const answers = data.answers || {};
   let earned = 0;
@@ -450,9 +434,17 @@ async function submitAttempt(user, testId, data = {}) {
     const points = Number(question.points || 0);
     total += points;
     const answer = answers[question.id] ?? answers[question.position];
-    const correct = answersMatch(question.correct_answer, answer, question.question_type);
+    const correct = answersMatch(
+      question.correct_answer,
+      answer,
+      question.question_type,
+    );
     if (correct) earned += points;
-    feedback[question.id] = { correct, points: correct ? points : 0, max_points: points };
+    feedback[question.id] = {
+      correct,
+      points: correct ? points : 0,
+      max_points: points,
+    };
   });
   const score = total ? Math.round((earned / total) * 100) : 0;
 
@@ -476,10 +468,15 @@ async function submitAttempt(user, testId, data = {}) {
       total,
       JSON.stringify(feedback),
       data.duration_seconds || "",
-    ]
+    ],
   );
 
-  if (test.quiz_type === "weekly" && test.term && test.academic_year && test.week_number) {
+  if (
+    test.quiz_type === "weekly" &&
+    test.term &&
+    test.academic_year &&
+    test.week_number
+  ) {
     const weeklyMark = await query(
       `INSERT INTO weekly_marks (learner_id, week_number, term, academic_year, quiz_score)
        VALUES ($1::integer, $2::integer, $3::varchar, $4::integer, $5::integer)
@@ -487,7 +484,7 @@ async function submitAttempt(user, testId, data = {}) {
        DO UPDATE SET quiz_score = GREATEST(COALESCE(weekly_marks.quiz_score, 0), EXCLUDED.quiz_score),
                      updated_at = NOW()
        RETURNING *`,
-      [learner.id, test.week_number, test.term, test.academic_year, score]
+      [learner.id, test.week_number, test.term, test.academic_year, score],
     );
     attempt.rows[0].weekly_mark = weeklyMark.rows[0] || null;
   }
@@ -504,11 +501,23 @@ async function submitAttempt(user, testId, data = {}) {
                      total_score = GREATEST(COALESCE(competition_results.total_score, 0), EXCLUDED.total_score),
                      source = 'educlub_quiz',
                      last_synced_at = NOW()`,
-      [test.competition_id, learner.id, learner.grade || "", test.quiz_category || "quiz", score]
+      [
+        test.competition_id,
+        learner.id,
+        learner.grade || "",
+        test.quiz_category || "quiz",
+        score,
+      ],
     );
   }
 
-  return { attempt: attempt.rows[0], score, earned_points: earned, total_points: total, feedback };
+  return {
+    attempt: attempt.rows[0],
+    score,
+    earned_points: earned,
+    total_points: total,
+    feedback,
+  };
 }
 
 async function getReport(user, filters = {}) {
@@ -547,7 +556,7 @@ async function getReport(user, filters = {}) {
      ${where}
      GROUP BY l.id, l.full_name, l.grade, l.stream, s.name, qt.id, qt.name, qt.week_number, qt.pass_score
      ORDER BY qt.week_number, l.grade, l.stream, l.full_name`,
-    values
+    values,
   );
   return result.rows.map((row) => ({
     ...row,
@@ -560,6 +569,73 @@ async function getReport(user, filters = {}) {
   }));
 }
 
+async function getAttemptReview(user, testId) {
+  const values = [Number(testId)];
+  let testScope = "";
+  let learnerScope = "";
+
+  if (user.role === "school_admin" || user.role === "teacher") {
+    values.push(Number(user.schoolId));
+    testScope = ` AND (qt.school_id IS NULL OR qt.school_id = $${values.length}::integer)`;
+    learnerScope = ` AND l.school_id = $${values.length}::integer`;
+  }
+
+  const testResult = await query(
+    `SELECT qt.*
+     FROM quiz_tests qt
+     WHERE qt.id = $1::integer
+       ${testScope}
+     LIMIT 1`,
+    values,
+  );
+  const test = testResult.rows[0];
+  if (!test) return null;
+
+  const questions = await query(
+    `SELECT id, position, question_type, prompt, image_url, options, correct_answer, points
+     FROM quiz_test_questions
+     WHERE quiz_test_id = $1::integer
+     ORDER BY position`,
+    [testId],
+  );
+  const attempts = await query(
+    `SELECT qta.id,
+            qta.attempt_number,
+            qta.answers,
+            qta.score,
+            qta.earned_points,
+            qta.total_points,
+            qta.feedback,
+            qta.duration_seconds,
+            qta.submitted_at,
+            l.full_name,
+            l.grade,
+            l.stream
+     FROM quiz_test_attempts qta
+     JOIN learners l ON l.id = qta.learner_id
+     WHERE qta.quiz_test_id = $1::integer
+       ${learnerScope}
+     ORDER BY l.full_name, qta.attempt_number DESC`,
+    values,
+  );
+
+  return {
+    test: {
+      ...test,
+      questions: questions.rows.map((question) => ({
+        ...question,
+        points: Number(question.points || 0),
+      })),
+    },
+    attempts: attempts.rows.map((attempt) => ({
+      ...attempt,
+      score: Number(attempt.score || 0),
+      earned_points: Number(attempt.earned_points || 0),
+      total_points: Number(attempt.total_points || 0),
+    })),
+  };
+}
+
 module.exports = {
   listTests,
   getTest,
@@ -569,4 +645,5 @@ module.exports = {
   deleteTest,
   submitAttempt,
   getReport,
+  getAttemptReview,
 };

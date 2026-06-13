@@ -26,18 +26,26 @@ async function createTest(req, res) {
     res.status(201).json(test);
   } catch (error) {
     console.error("Create quiz test error:", error);
-    res.status(400).json({ error: error.message || "Failed to create quiz test" });
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to create quiz test" });
   }
 }
 
 async function updateTest(req, res) {
   try {
-    const test = await quizTestsService.updateTest(req.user, req.params.id, req.body);
+    const test = await quizTestsService.updateTest(
+      req.user,
+      req.params.id,
+      req.body,
+    );
     if (!test) return res.status(404).json({ error: "Quiz not found" });
     res.json(test);
   } catch (error) {
     console.error("Update quiz test error:", error);
-    res.status(400).json({ error: error.message || "Failed to update quiz test" });
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to update quiz test" });
   }
 }
 
@@ -48,7 +56,9 @@ async function duplicateTest(req, res) {
     res.status(201).json(test);
   } catch (error) {
     console.error("Duplicate quiz test error:", error);
-    res.status(400).json({ error: error.message || "Failed to duplicate quiz test" });
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to duplicate quiz test" });
   }
 }
 
@@ -59,13 +69,19 @@ async function deleteTest(req, res) {
     res.json({ message: "Quiz setup deleted." });
   } catch (error) {
     console.error("Delete quiz test error:", error);
-    res.status(400).json({ error: error.message || "Failed to delete quiz test" });
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to delete quiz test" });
   }
 }
 
 async function submitAttempt(req, res) {
   try {
-    res.status(201).json(await quizTestsService.submitAttempt(req.user, req.params.id, req.body));
+    res
+      .status(201)
+      .json(
+        await quizTestsService.submitAttempt(req.user, req.params.id, req.body),
+      );
   } catch (error) {
     console.error("Submit quiz test attempt error:", error);
     res.status(400).json({ error: error.message || "Failed to submit quiz" });
@@ -81,6 +97,20 @@ async function report(req, res) {
   }
 }
 
+async function attemptReview(req, res) {
+  try {
+    const review = await quizTestsService.getAttemptReview(
+      req.user,
+      req.params.id,
+    );
+    if (!review) return res.status(404).json({ error: "Quiz not found" });
+    res.json(review);
+  } catch (error) {
+    console.error("Quiz attempt review error:", error);
+    res.status(500).json({ error: "Failed to load quiz attempts" });
+  }
+}
+
 module.exports = {
   listTests,
   getTest,
@@ -90,4 +120,5 @@ module.exports = {
   deleteTest,
   submitAttempt,
   report,
+  attemptReview,
 };

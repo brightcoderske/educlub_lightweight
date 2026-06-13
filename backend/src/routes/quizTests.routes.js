@@ -10,37 +10,43 @@ router.post(
   "/tests",
   authenticateToken,
   requireRole("system_admin"),
-  quizTestsController.createTest
+  quizTestsController.createTest,
 );
 router.put(
   "/tests/:id",
   authenticateToken,
   requireRole("system_admin"),
-  quizTestsController.updateTest
+  quizTestsController.updateTest,
 );
 router.post(
   "/tests/:id/duplicate",
   authenticateToken,
   requireRole("system_admin"),
-  quizTestsController.duplicateTest
+  quizTestsController.duplicateTest,
 );
 router.delete(
   "/tests/:id",
   authenticateToken,
   requireRole("system_admin"),
-  quizTestsController.deleteTest
+  quizTestsController.deleteTest,
 );
 router.post(
   "/tests/:id/attempts",
   authenticateToken,
   requireRole("learner"),
-  quizTestsController.submitAttempt
+  quizTestsController.submitAttempt,
+);
+router.get(
+  "/tests/:id/attempts",
+  authenticateToken,
+  requireRole("system_admin", "school_admin", "teacher"),
+  quizTestsController.attemptReview,
 );
 router.get(
   "/report",
   authenticateToken,
   requireRole("system_admin", "school_admin", "teacher"),
-  quizTestsController.report
+  quizTestsController.report,
 );
 
 module.exports = router;

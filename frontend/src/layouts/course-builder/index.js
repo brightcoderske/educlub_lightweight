@@ -1737,6 +1737,15 @@ function renderSubmissionContent(row) {
           </MDTypography>
         </MDBox>
       )}
+      {(content.html || content.css || content.javascript || content.js) && (
+        <MDBox p={1.25} borderRadius="md" sx={{ bgcolor: "#111827", whiteSpace: "pre-wrap" }}>
+          <MDTypography variant="caption" sx={{ color: "#e5e7eb" }}>
+            {[content.html, content.css, content.javascript || content.js]
+              .filter(Boolean)
+              .join("\n\n")}
+          </MDTypography>
+        </MDBox>
+      )}
       {content.file?.url && (
         <MDButton
           component="a"
@@ -1851,6 +1860,11 @@ function ActivityReviewDialog({
                               type="number"
                               fullWidth
                               value={form.score ?? ""}
+                              inputProps={{
+                                min: 0,
+                                max: Number(activity?.points || 0) || undefined,
+                                step: "any",
+                              }}
                               onChange={(event) =>
                                 onChangeGrade(row.learner_id, "score", event.target.value)
                               }
