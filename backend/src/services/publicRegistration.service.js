@@ -45,6 +45,7 @@ function validateRegistration(data) {
   const parentPhone = cleanText(data.parent_phone);
   const parentEmail = cleanText(data.parent_email).toLowerCase();
   const password = String(data.password || "");
+  const termId = data.term_id ? Number(data.term_id) : null;
 
   if (!Number.isInteger(grade) || grade < 1 || grade > 12) {
     throw new Error("Choose a grade between 1 and 12.");
@@ -67,6 +68,9 @@ function validateRegistration(data) {
   if (!data.parent_consent) {
     throw new Error("Parent or guardian consent is required.");
   }
+  if (termId !== null && (!Number.isInteger(termId) || termId <= 0)) {
+    throw new Error("Choose a valid academic term.");
+  }
 
   validatePasswordPolicy(password);
 
@@ -82,6 +86,7 @@ function validateRegistration(data) {
     parentPhone,
     parentEmail: parentEmail || null,
     password,
+    termId,
     consentCompetitionUpdates: Boolean(data.consent_competition_updates),
     consentOpenCourseUpdates: Boolean(data.consent_open_course_updates),
   };
@@ -96,6 +101,28 @@ async function listPublicSchools() {
      ORDER BY name`,
   );
 
+  return result.rows;
+}
+
+async function listPublicTerms() {
+  const result = await query(
+    `SELECT t.id,
+            t.name,
+            t.term_type,
+            t.start_date,
+            t.end_date,
+            t.is_active,
+            ay.year AS academic_year,
+            CONCAT(ay.year, ' - ', t.name) AS term_label,
+            (CURRENT_DATE BETWEEN t.start_date AND t.end_date) AS is_current
+     FROM terms t
+     JOIN academic_years ay ON ay.id = t.academic_year_id
+     ORDER BY
+       (CURRENT_DATE BETWEEN t.start_date AND t.end_date) DESC,
+       t.is_active DESC,
+       ay.year DESC,
+       t.start_date DESC`,
+  );
   return result.rows;
 }
 
@@ -145,6 +172,37 @@ async function registerLearner(data, ipAddress, userAgent) {
       throw new Error("This school is not accepting self-registration right now.");
     }
 
+    const termResult = valid.termId
+      ? await client.query(
+          `SELECT t.id, t.name, t.term_type, t.start_date, t.end_date, t.is_active,
+                  ay.year AS academic_year
+           FROM terms t
+           JOIN academic_years ay ON ay.id = t.academic_year_id
+           WHERE t.id = $1::integer
+           LIMIT 1`,
+          [valid.termId],
+        )
+      : await client.query(
+          `SELECT t.id, t.name, t.term_type, t.start_date, t.end_date, t.is_active,
+                  ay.year AS academic_year
+           FROM terms t
+           JOIN academic_years ay ON ay.id = t.academic_year_id
+           WHERE t.term_type = 'regular'
+             AND (
+               CURRENT_DATE BETWEEN t.start_date AND t.end_date
+               OR t.is_active = true
+             )
+           ORDER BY
+             (CURRENT_DATE BETWEEN t.start_date AND t.end_date) DESC,
+             t.is_active DESC,
+             t.start_date DESC
+           LIMIT 1`,
+        );
+    const term = termResult.rows[0];
+    if (!term) {
+      throw new Error("No academic term is available for learner registration.");
+    }
+
     const existing = await client.query(
       "SELECT id FROM users WHERE LOWER(email) = LOWER($1)",
       [valid.email],
@@ -169,10 +227,18 @@ async function registerLearner(data, ipAddress, userAgent) {
     const user = userResult.rows[0];
 
     const learnerResult = await client.query(
-      `INSERT INTO learners (user_id, school_id, full_name, email, grade)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO learners (user_id, school_id, full_name, email, grade, term, academic_year)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [user.id, valid.schoolId, valid.fullName, valid.email, valid.grade],
+      [
+        user.id,
+        valid.schoolId,
+        valid.fullName,
+        valid.email,
+        valid.grade,
+        term.name,
+        term.academic_year,
+      ],
     );
     const learner = learnerResult.rows[0];
 
@@ -184,6 +250,9 @@ async function registerLearner(data, ipAddress, userAgent) {
         schoolId: valid.schoolId,
         schoolName: school.name,
         grade: valid.grade,
+        termId: term.id,
+        term: term.name,
+        academicYear: term.academic_year,
         parentFullName: valid.parentFullName,
         parentPhone: valid.parentPhone,
         parentEmail: valid.parentEmail,
@@ -236,6 +305,8 @@ async function registerLearner(data, ipAddress, userAgent) {
         JSON.stringify({
           schoolId: valid.schoolId,
           grade: valid.grade,
+          term: term.name,
+          academicYear: term.academic_year,
           parentConsent: true,
         }),
         ipAddress || null,
@@ -266,6 +337,8 @@ async function registerLearner(data, ipAddress, userAgent) {
       message: "Registration complete. Welcome to eduClub.",
       email: user.email,
       username: user.username,
+      term: term.name,
+      academic_year: term.academic_year,
     };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -277,5 +350,6 @@ async function registerLearner(data, ipAddress, userAgent) {
 
 module.exports = {
   listPublicSchools,
+  listPublicTerms,
   registerLearner,
 };

@@ -9,6 +9,15 @@ async function schools(req, res) {
   }
 }
 
+async function terms(req, res) {
+  try {
+    res.json(await publicRegistrationService.listPublicTerms());
+  } catch (error) {
+    console.error("Public terms error:", error);
+    res.status(500).json({ error: "Failed to load academic terms" });
+  }
+}
+
 async function registerLearner(req, res) {
   try {
     const result = await publicRegistrationService.registerLearner(
@@ -25,5 +34,6 @@ async function registerLearner(req, res) {
 
 module.exports = {
   schools,
+  terms,
   registerLearner,
 };

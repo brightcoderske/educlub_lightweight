@@ -21,6 +21,7 @@ const initialForm = {
   third_name: "",
   grade: "",
   school_id: "",
+  term_id: "",
   email: "",
   parent_full_name: "",
   parent_phone: "",
@@ -154,6 +155,7 @@ function RegistrationLanding() {
   const { pathname, hash } = useLocation();
   const { login } = useAuth();
   const [schools, setSchools] = useState([]);
+  const [terms, setTerms] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -229,6 +231,23 @@ function RegistrationLanding() {
       .get("/public/schools")
       .then(setSchools)
       .catch(() => setError("Could not load registered schools."));
+    apiClient
+      .get("/public/terms")
+      .then((rows) => {
+        const termRows = Array.isArray(rows) ? rows : [];
+        setTerms(termRows);
+        const defaultTerm =
+          termRows.find((term) => term.is_current) ||
+          termRows.find((term) => term.is_active) ||
+          termRows[0];
+        if (defaultTerm) {
+          setForm((current) => ({
+            ...current,
+            term_id: current.term_id || String(defaultTerm.id),
+          }));
+        }
+      })
+      .catch(() => setError("Could not load academic terms."));
 
     let current = 0;
     const counter = setInterval(() => {
@@ -266,6 +285,7 @@ function RegistrationLanding() {
     form.second_name &&
     form.grade &&
     form.school_id &&
+    form.term_id &&
     form.email &&
     form.parent_full_name &&
     form.parent_phone &&
@@ -333,7 +353,7 @@ function RegistrationLanding() {
             onChange={(e) => setField("third_name", e.target.value)}
           />
         </Grid>
-        <Grid item xs={12} md={5}>
+        <Grid item xs={12} md={4}>
           <MDInput
             select
             fullWidth
@@ -350,7 +370,7 @@ function RegistrationLanding() {
             ))}
           </MDInput>
         </Grid>
-        <Grid item xs={12} md={7}>
+        <Grid item xs={12} md={4}>
           <MDInput
             select
             fullWidth
@@ -367,6 +387,24 @@ function RegistrationLanding() {
             {schools.map((school) => (
               <option key={school.id} value={school.id}>
                 {school.name}
+              </option>
+            ))}
+          </MDInput>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <MDInput
+            select
+            fullWidth
+            label="Academic term *"
+            value={form.term_id}
+            SelectProps={{ native: true }}
+            onChange={(e) => setField("term_id", e.target.value)}
+          >
+            <option value="">{terms.length ? "Choose term" : "No academic terms available"}</option>
+            {terms.map((term) => (
+              <option key={term.id} value={term.id}>
+                {term.term_label || `${term.academic_year} - ${term.name}`}
+                {term.is_current ? " (Current)" : term.is_active ? " (Active)" : ""}
               </option>
             ))}
           </MDInput>

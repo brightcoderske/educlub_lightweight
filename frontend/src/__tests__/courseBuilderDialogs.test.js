@@ -3,6 +3,7 @@ import {
   displayCodeBlockHtml,
   executableBlockHtml,
   executableSourceFromPayload,
+  hintBlockHtml,
   resourceHtml,
 } from "../layouts/course-builder/dialogs/authoringUtils";
 
@@ -42,6 +43,18 @@ test("display code blocks keep language and visible title metadata", () => {
   expect(html).toContain('data-code-language="python"');
   expect(html).toContain("Worked example");
   expect(html).toContain("print(&#039;Hello&#039;)");
+});
+
+test("rich text hints are collapsible and safely escaped", () => {
+  const html = hintBlockHtml({
+    title: "Need a hint?",
+    body: 'Look for the <main> element & its "heading".',
+  });
+
+  expect(html).toContain("data-hint-block");
+  expect(html).toContain("<details");
+  expect(html).toContain("&lt;main&gt;");
+  expect(html).toContain("&quot;heading&quot;");
 });
 
 test("early unlock payloads use selected learner records, not typed IDs", () => {

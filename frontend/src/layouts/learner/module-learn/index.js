@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
@@ -19,6 +19,7 @@ import MDTypography from "components/MDTypography";
 import { apiClient } from "lib/api";
 import { selectActivityContent, starterCode, starterParts, webPreview } from "./activityContent";
 import { findActivityNavigation, resolveInitialActivity } from "../learningNavigation";
+import { courseOverviewPath, moduleLearningPath } from "../previewNavigation";
 
 function done(status) {
   return ["completed", "graded"].includes(status);
@@ -982,7 +983,9 @@ CompletionCelebration.propTypes = {
 function ModuleLearn() {
   const { courseId, moduleId } = useParams();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const previewMode = pathname.includes("/preview");
   const contentTopRef = useRef(null);
   const [data, setData] = useState(null);
   const [activeActivityId, setActiveActivityId] = useState(null);
@@ -1146,6 +1149,10 @@ function ModuleLearn() {
 
   const updateProgress = async (activity, status) => {
     if (!activity) return;
+    if (previewMode) {
+      patchActivityProgress(activity.id, { status });
+      return;
+    }
     setSaving(true);
     try {
       patchActivityProgress(activity.id, { status });
@@ -1191,6 +1198,10 @@ function ModuleLearn() {
 
   const submitQuiz = async () => {
     if (!activeActivity) return;
+    if (previewMode) {
+      setError("Preview mode does not submit quiz attempts.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -1214,6 +1225,10 @@ function ModuleLearn() {
 
   const submitWork = async () => {
     if (!activeActivity) return;
+    if (previewMode) {
+      setError("Preview mode does not submit learner work.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -1277,6 +1292,10 @@ function ModuleLearn() {
 
   const submitDiscussionReply = async () => {
     if (!activeActivity || !discussionReply.trim()) return;
+    if (previewMode) {
+      setError("Preview mode does not post discussion replies.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -1318,6 +1337,7 @@ function ModuleLearn() {
   );
 
   const submitFeedback = async () => {
+    if (previewMode) return;
     setFeedbackSaving(true);
     try {
       const feedback = await apiClient.post(`/courses/modules/${moduleId}/feedback`, {
@@ -1374,13 +1394,20 @@ function ModuleLearn() {
         </MDBox>
         <IconButton
           aria-label="Close learning page"
-          onClick={() => navigate(`/learner/courses/${courseId}`)}
+          onClick={() => navigate(courseOverviewPath(courseId, previewMode))}
         >
           <Icon>close</Icon>
         </IconButton>
       </MDBox>
 
       <MDBox px={{ xs: 2, md: 4, lg: 8 }} py={3} maxWidth="1480px" mx="auto">
+        {previewMode && (
+          <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#fff7ed" }}>
+            <MDTypography variant="body2" color="warning" fontWeight="medium">
+              Learner preview is read-only. Use Preview Complete to test progressive unlocking.
+            </MDTypography>
+          </MDBox>
+        )}
         {error && (
           <MDBox mb={2} p={2} borderRadius="md" sx={{ bgcolor: "#fee2e2" }}>
             <MDTypography variant="body2" color="error" fontWeight="medium">
@@ -1535,11 +1562,15 @@ function ModuleLearn() {
                         disabled={
                           saving ||
                           done(activeActivity.status) ||
-                          activeActivity.activity_type === "quiz"
+                          (!previewMode && activeActivity.activity_type === "quiz")
                         }
                         onClick={() => updateProgress(activeActivity, "completed")}
                       >
-                        {activeActivity.activity_type === "quiz"
+                        {previewMode
+                          ? done(activeActivity.status)
+                            ? "Preview Completed"
+                            : "Preview Complete"
+                          : activeActivity.activity_type === "quiz"
                           ? "Pass Quiz to Complete"
                           : done(activeActivity.status)
                           ? "Completed"
@@ -1555,19 +1586,21 @@ function ModuleLearn() {
               </MDBox>
             </Card>
 
-            <CompletionCelebration
-              data={data}
-              feedbackComment={feedbackComment}
-              feedbackRating={feedbackRating}
-              feedbackSaving={feedbackSaving}
-              onFeedbackCommentChange={setFeedbackComment}
-              onFeedbackRatingChange={setFeedbackRating}
-              onSubmitFeedback={submitFeedback}
-              onNext={() =>
-                navigate(`/learner/courses/${courseId}/modules/${data.next_module.id}/learn`)
-              }
-              onClose={() => navigate(`/learner/courses/${courseId}`)}
-            />
+            {!previewMode && (
+              <CompletionCelebration
+                data={data}
+                feedbackComment={feedbackComment}
+                feedbackRating={feedbackRating}
+                feedbackSaving={feedbackSaving}
+                onFeedbackCommentChange={setFeedbackComment}
+                onFeedbackRatingChange={setFeedbackRating}
+                onSubmitFeedback={submitFeedback}
+                onNext={() =>
+                  navigate(moduleLearningPath(courseId, data.next_module.id, null, false))
+                }
+                onClose={() => navigate(courseOverviewPath(courseId, false))}
+              />
+            )}
           </Grid>
         </Grid>
       </MDBox>

@@ -34,6 +34,7 @@ import {
 import DisplayCodeDialog from "./dialogs/DisplayCodeDialog";
 import EarlyUnlockDialog from "./dialogs/EarlyUnlockDialog";
 import ExecutableCodeDialog from "./dialogs/ExecutableCodeDialog";
+import HintDialog from "./dialogs/HintDialog";
 import ResourceDialog from "./dialogs/ResourceDialog";
 import { executableSourceFromPayload } from "./dialogs/authoringUtils";
 
@@ -238,6 +239,11 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     target: null,
     values: null,
   });
+  const [hintDialog, setHintDialog] = useState({
+    open: false,
+    target: null,
+    values: null,
+  });
 
   const serializeEditor = () => {
     if (!editorRef.current) return "";
@@ -412,6 +418,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
   const selectEditorObject = (event) => {
     const object =
       event.target.closest?.("[data-executable-code]") ||
+      event.target.closest?.("[data-hint-block]") ||
       event.target.closest?.("img,table,td,th,pre,a");
     if (selectedObject && selectedObject !== object) {
       selectedObject.style.outline = "";
@@ -481,6 +488,20 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
             title: target.dataset.codeTitle || "",
             language: target.dataset.codeLanguage || "text",
             code: target.querySelector("code")?.textContent || target.textContent || "",
+          }
+        : null,
+    });
+  };
+
+  const openHintDialog = (target = null) => {
+    rememberSelection();
+    setHintDialog({
+      open: true,
+      target,
+      values: target
+        ? {
+            title: target.dataset.hintTitle || "Need a hint?",
+            body: target.dataset.hintBody || "",
           }
         : null,
     });
@@ -591,6 +612,9 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         </IconButton>
         <IconButton title="Insert executable code" onClick={() => openExecutableDialog()}>
           <Icon>play_circle</Icon>
+        </IconButton>
+        <IconButton title="Insert collapsible hint" onClick={() => openHintDialog()}>
+          <Icon>lightbulb</Icon>
         </IconButton>
         <IconButton
           title="Insert video or external resource"
@@ -737,6 +761,11 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
               Edit Code
             </MDButton>
           )}
+          {selectedObject.matches("[data-hint-block]") && (
+            <MDButton size="small" color="warning" onClick={() => openHintDialog(selectedObject)}>
+              Edit Hint
+            </MDButton>
+          )}
           {selectedObject.matches("a") && (
             <MDButton
               size="small"
@@ -813,6 +842,12 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         initialValues={displayCodeDialog.values}
         onClose={() => setDisplayCodeDialog({ open: false, target: null, values: null })}
         onSave={(html) => insertOrReplaceHtml(html, displayCodeDialog.target)}
+      />
+      <HintDialog
+        open={hintDialog.open}
+        initialValues={hintDialog.values}
+        onClose={() => setHintDialog({ open: false, target: null, values: null })}
+        onSave={(html) => insertOrReplaceHtml(html, hintDialog.target)}
       />
     </MDBox>
   );
@@ -2466,6 +2501,20 @@ function CourseBuilder() {
           <MDBox display="flex" gap={1} flexWrap="wrap">
             {!isTemplate && (
               <>
+                <MDButton
+                  variant="outlined"
+                  color="info"
+                  startIcon={<Icon>visibility</Icon>}
+                  onClick={() =>
+                    window.open(
+                      `/school-admin/courses/${entityId}/preview`,
+                      "_blank",
+                      "noopener,noreferrer"
+                    )
+                  }
+                >
+                  Preview as Learner
+                </MDButton>
                 <MDButton
                   variant={reviewMode ? "gradient" : "outlined"}
                   color="success"

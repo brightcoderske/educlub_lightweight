@@ -104,6 +104,18 @@ export function displayCodeBlockHtml({ code = "", language = "text", title = "" 
   }<code>${escapeHtml(code)}</code></pre><p><br></p>`;
 }
 
+export function hintBlockHtml({ title = "Need a hint?", body = "" }) {
+  return `<details data-hint-block="true" data-hint-title="${escapeHtml(
+    title
+  )}" data-hint-body="${escapeHtml(
+    body
+  )}" contenteditable="false" style="margin:12px 0;padding:12px;border:1px solid #fbbf24;border-radius:8px;background:#fffbeb"><summary style="cursor:pointer;font-weight:700;color:#92400e">${escapeHtml(
+    title
+  )}</summary><div style="margin-top:8px;color:#475569;white-space:pre-wrap">${escapeHtml(
+    body
+  )}</div></details><p><br></p>`;
+}
+
 export function buildEarlyUnlockPayload({
   scopeType,
   learnerIds = [],

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
@@ -18,6 +18,7 @@ import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { activityLearningPath } from "../learningNavigation";
+import { moduleLearningPath } from "../previewNavigation";
 
 function statusColor(status) {
   if (["completed", "graded"].includes(status)) return "success";
@@ -40,7 +41,9 @@ function progressColor(value) {
 function CourseOverview() {
   const { courseId } = useParams();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { user } = useAuth();
+  const previewMode = pathname.includes("/preview");
   const [overview, setOverview] = useState(null);
   const [openModules, setOpenModules] = useState({});
   const [loading, setLoading] = useState(true);
@@ -79,10 +82,24 @@ function CourseOverview() {
             title={overview?.course?.name || "Course"}
             subtitle={overview?.course?.description || "Your modules and activities"}
           />
-          <MDButton variant="outlined" color="dark" onClick={() => navigate("/learner")}>
-            Back
+          <MDButton
+            variant="outlined"
+            color="dark"
+            onClick={() =>
+              navigate(previewMode ? `/school-admin/courses/${courseId}/builder` : "/learner")
+            }
+          >
+            {previewMode ? "Back to Builder" : "Back"}
           </MDButton>
         </MDBox>
+
+        {previewMode && (
+          <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#fff7ed" }}>
+            <MDTypography variant="body2" color="warning" fontWeight="medium">
+              Preview mode uses learner sequencing but does not save learner progress.
+            </MDTypography>
+          </MDBox>
+        )}
 
         {loading ? (
           <Card>
@@ -187,11 +204,18 @@ function CourseOverview() {
                                     return;
                                   }
                                   navigate(
-                                    activityLearningPath(
-                                      overview.course.id,
-                                      courseModule.id,
-                                      activity.id
-                                    )
+                                    previewMode
+                                      ? moduleLearningPath(
+                                          overview.course.id,
+                                          courseModule.id,
+                                          activity.id,
+                                          true
+                                        )
+                                      : activityLearningPath(
+                                          overview.course.id,
+                                          courseModule.id,
+                                          activity.id
+                                        )
                                   );
                                 }}
                                 sx={{
@@ -240,7 +264,12 @@ function CourseOverview() {
                               startIcon={<Icon fontSize="small">open_in_new</Icon>}
                               onClick={() =>
                                 navigate(
-                                  `/learner/courses/${overview.course.id}/modules/${courseModule.id}/learn`
+                                  moduleLearningPath(
+                                    overview.course.id,
+                                    courseModule.id,
+                                    null,
+                                    previewMode
+                                  )
                                 )
                               }
                             >
