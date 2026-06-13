@@ -1,5 +1,7 @@
 import {
   activityToStructuredForm,
+  replaceActivityInBuilderData,
+  saveActivityWithFeedback,
   structuredFormContent,
 } from "../layouts/course-builder/activityForm";
 
@@ -20,16 +22,78 @@ test("loads editable course-template fields", () => {
 });
 
 test("saves separate HTML CSS media and friendly hints", () => {
-  const content = structuredFormContent({
-    original_content: { vocabulary: [{ term: "HTML", meaning: "Structure" }], unlimited_retries: true },
-    starter_html: "<h1>Hello</h1>", starter_css: "h1 { color: blue; }",
-    friendly_hints_text: "Check the heading.\nPreview the page.",
-    image_alt: "A page heading.", transcript: "Add an h1 element.",
-  }, []);
+  const content = structuredFormContent(
+    {
+      original_content: {
+        vocabulary: [{ term: "HTML", meaning: "Structure" }],
+        unlimited_retries: true,
+      },
+      starter_html: "<h1>Hello</h1>",
+      starter_css: "h1 { color: blue; }",
+      friendly_hints_text: "Check the heading.\nPreview the page.",
+      image_alt: "A page heading.",
+      transcript: "Add an h1 element.",
+    },
+    []
+  );
   expect(content.starter_html).toBe("<h1>Hello</h1>");
   expect(content.starter_css).toBe("h1 { color: blue; }");
   expect(content.friendly_hints).toEqual(["Check the heading.", "Preview the page."]);
   expect(content.media.image_alt).toBe("A page heading.");
   expect(content.vocabulary).toEqual([{ term: "HTML", meaning: "Structure" }]);
   expect(content.unlimited_retries).toBe(true);
+});
+
+test("keeps the activity editor open and reports a rejected save", async () => {
+  const result = await saveActivityWithFeedback(
+    async () => {
+      throw new Error("Your session has expired. Please sign in again, then retry.");
+    },
+    { title: "Updated lesson" }
+  );
+
+  expect(result).toEqual({
+    saved: false,
+    error: "Your session has expired. Please sign in again, then retry.",
+  });
+});
+
+test("confirms a successful activity save", async () => {
+  const payload = { title: "Updated lesson" };
+  const onSave = jest.fn().mockResolvedValue({ id: 9, ...payload });
+
+  await expect(saveActivityWithFeedback(onSave, payload)).resolves.toEqual({
+    saved: true,
+    error: "",
+  });
+  expect(onSave).toHaveBeenCalledWith(payload);
+});
+
+test("updates the saved activity locally without reloading the whole builder", () => {
+  const data = {
+    template: { id: 2, version: 3 },
+    modules: [
+      {
+        id: 4,
+        activities: [
+          { id: 8, title: "Old title", content: { description: "Old content" } },
+          { id: 9, title: "Keep me" },
+        ],
+      },
+    ],
+  };
+
+  const updated = replaceActivityInBuilderData(data, {
+    id: 8,
+    title: "New title",
+    content: { description: "New content" },
+  });
+
+  expect(updated.modules[0].activities[0]).toEqual({
+    id: 8,
+    title: "New title",
+    content: { description: "New content" },
+  });
+  expect(updated.modules[0].activities[1]).toBe(data.modules[0].activities[1]);
+  expect(updated.template.version).toBe(4);
 });

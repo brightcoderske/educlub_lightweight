@@ -88,3 +88,45 @@ export function structuredFormContent(form, questions) {
     questions,
   };
 }
+
+export async function saveActivityWithFeedback(onSave, payload) {
+  try {
+    await onSave(payload);
+    return { saved: true, error: "" };
+  } catch (error) {
+    return {
+      saved: false,
+      error: error?.message || "The activity could not be saved. Please try again.",
+    };
+  }
+}
+
+export function replaceActivityInBuilderData(data, updatedActivity) {
+  if (!data || !updatedActivity) return data;
+
+  const nextData = {
+    ...data,
+    modules: (data.modules || []).map((courseModule) => ({
+      ...courseModule,
+      activities: (courseModule.activities || []).map((activity) =>
+        Number(activity.id) === Number(updatedActivity.id) ? updatedActivity : activity
+      ),
+    })),
+  };
+
+  if (nextData.template && Number.isFinite(Number(nextData.template.version))) {
+    nextData.template = {
+      ...nextData.template,
+      version: Number(nextData.template.version) + 1,
+    };
+  }
+
+  if (nextData.course && Number.isFinite(Number(nextData.course.school_version))) {
+    nextData.course = {
+      ...nextData.course,
+      school_version: Number(nextData.course.school_version) + 1,
+    };
+  }
+
+  return nextData;
+}

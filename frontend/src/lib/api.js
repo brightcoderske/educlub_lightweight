@@ -38,6 +38,9 @@ class ApiClient {
     const payload = await parseApiResponse(response);
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("Your session has expired. Please sign in again, then retry.");
+      }
       throw new Error(payload.error || payload.message || "Request failed");
     }
 

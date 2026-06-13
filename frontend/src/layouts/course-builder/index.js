@@ -25,7 +25,12 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { apiClient } from "lib/api";
 import { useAuth } from "context/AuthContext";
-import { activityToStructuredForm, structuredFormContent } from "./activityForm";
+import {
+  activityToStructuredForm,
+  replaceActivityInBuilderData,
+  saveActivityWithFeedback,
+  structuredFormContent,
+} from "./activityForm";
 import DisplayCodeDialog from "./dialogs/DisplayCodeDialog";
 import EarlyUnlockDialog from "./dialogs/EarlyUnlockDialog";
 import ExecutableCodeDialog from "./dialogs/ExecutableCodeDialog";
@@ -897,7 +902,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
     updateQuestion(index, { correct_answer: option });
   };
 
-  const save = () => {
+  const save = async () => {
     const allocatedMarks = form.questions.reduce(
       (sum, question) => sum + Number(question.points ?? 0),
       0
@@ -938,7 +943,8 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
     }));
     const content = structuredFormContent(form, normalizedQuestions);
 
-    onSave({
+    setValidationError("");
+    const result = await saveActivityWithFeedback(onSave, {
       title: form.title,
       activity_type: form.activity_type,
       content,
@@ -950,10 +956,21 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
       pass_score: form.pass_score || null,
       is_published: form.is_published,
     });
+
+    if (!result.saved) {
+      setValidationError(result.error);
+    }
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+    <Dialog
+      open={open}
+      onClose={(event, reason) => {
+        if (!saving) onClose(event, reason);
+      }}
+      fullWidth
+      maxWidth="lg"
+    >
       <DialogTitle>Manage Activity</DialogTitle>
       <DialogContent dividers>
         {validationError && (
@@ -1635,11 +1652,11 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
         </Grid>
       </DialogContent>
       <DialogActions>
-        <MDButton variant="outlined" color="dark" onClick={onClose}>
+        <MDButton variant="outlined" color="dark" disabled={saving} onClick={onClose}>
           Close
         </MDButton>
         <MDButton variant="gradient" color="info" disabled={saving || !form.title} onClick={save}>
-          Save Activity
+          {saving ? "Saving..." : "Save Activity"}
         </MDButton>
       </DialogActions>
     </Dialog>
@@ -2350,12 +2367,14 @@ function CourseBuilder() {
       const endpoint = isTemplate
         ? `/course-templates/activities/${selectedActivity.id}`
         : `/courses/activities/${selectedActivity.id}`;
-      await apiClient.put(endpoint, payload);
+      const updatedActivity = await apiClient.put(endpoint, payload);
+      setData((current) => replaceActivityInBuilderData(current, updatedActivity));
       setMessage("Activity saved.");
       setActivityManagerOpen(false);
-      await loadBuilder();
+      return updatedActivity;
     } catch (err) {
       setError(err.message);
+      throw err;
     } finally {
       setSaving(false);
     }
