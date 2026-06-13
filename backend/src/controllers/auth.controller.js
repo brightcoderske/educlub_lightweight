@@ -19,7 +19,7 @@ async function verify2FA(req, res) {
       code,
       rememberDevice,
       req.ip,
-      req.get("user-agent")
+      req.get("user-agent"),
     );
     res.json(result);
   } catch (error) {
@@ -30,6 +30,15 @@ async function verify2FA(req, res) {
 
 async function logout(req, res) {
   res.json({ message: "Logged out successfully" });
+}
+
+async function refreshSession(req, res) {
+  try {
+    res.json(await authService.refreshSession(req.user.userId));
+  } catch (error) {
+    console.error("Refresh session error:", error);
+    res.status(401).json({ error: error.message });
+  }
 }
 
 async function getCurrentUser(req, res) {
@@ -48,7 +57,7 @@ async function resetPassword(req, res) {
     const result = await authService.resetPassword(
       req.user.userId,
       oldPassword,
-      newPassword
+      newPassword,
     );
     res.json(result);
   } catch (error) {
@@ -77,7 +86,7 @@ async function requestPasswordReset(req, res) {
     const result = await authService.requestPasswordReset(
       email,
       req.ip,
-      req.get("user-agent")
+      req.get("user-agent"),
     );
     res.json(result);
   } catch (error) {
@@ -121,6 +130,7 @@ module.exports = {
   login,
   verify2FA,
   logout,
+  refreshSession,
   getCurrentUser,
   resetPassword,
   resetPasswordByAdmin,

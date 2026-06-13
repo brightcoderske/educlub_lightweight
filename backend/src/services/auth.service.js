@@ -36,8 +36,8 @@ function validatePasswordPolicy(password) {
 function isDeliverableEmail(email) {
   return Boolean(
     email &&
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
-      !email.endsWith(".local")
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+    !email.endsWith(".local"),
   );
 }
 
@@ -61,7 +61,7 @@ function createAuthToken(user) {
       username: user.username,
     },
     env.jwtSecret,
-    { expiresIn: env.jwtExpiresIn }
+    { expiresIn: env.jwtExpiresIn },
   );
 }
 
@@ -94,6 +94,21 @@ async function buildAuthResponse(user, extra = {}) {
   };
 }
 
+async function refreshSession(userId) {
+  const result = await query(
+    `SELECT u.*
+     FROM users u
+     WHERE u.id = $1
+       AND u.is_active = true`,
+    [userId],
+  );
+  const user = result.rows[0];
+  if (!user) {
+    throw new Error("User account is no longer active.");
+  }
+  return buildAuthResponse(user);
+}
+
 async function isTrustedMfaDevice(userId, trustedDeviceToken) {
   if (!trustedDeviceToken) {
     return false;
@@ -108,7 +123,7 @@ async function isTrustedMfaDevice(userId, trustedDeviceToken) {
        AND revoked_at IS NULL
        AND expires_at > NOW()
      RETURNING id`,
-    [userId, tokenHash]
+    [userId, tokenHash],
   );
 
   return result.rows.length > 0;
@@ -124,7 +139,7 @@ async function createTrustedMfaDevice(userId, ipAddress, userAgent) {
        user_id, token_hash, ip_address, user_agent, expires_at
      )
      VALUES ($1, $2, $3, $4, $5)`,
-    [userId, tokenHash, ipAddress || null, userAgent || null, expiresAt]
+    [userId, tokenHash, ipAddress || null, userAgent || null, expiresAt],
   );
 
   return {
@@ -142,7 +157,7 @@ function normalizeMfaPolicy(value) {
 
 async function getMfaPolicy() {
   const result = await query(
-    "SELECT value FROM system_settings WHERE key = 'mfa_policy'"
+    "SELECT value FROM system_settings WHERE key = 'mfa_policy'",
   );
   return normalizeMfaPolicy(result.rows[0]?.value);
 }
@@ -157,7 +172,7 @@ async function updateMfaPolicy(policy, updatedByUserId) {
          updated_by_user_id = EXCLUDED.updated_by_user_id,
          updated_at = NOW()
      RETURNING value`,
-    [JSON.stringify(nextPolicy), updatedByUserId]
+    [JSON.stringify(nextPolicy), updatedByUserId],
   );
 
   return normalizeMfaPolicy(result.rows[0]?.value);
@@ -177,7 +192,7 @@ async function revokeTrustedMfaDevices(userId) {
     `UPDATE trusted_mfa_devices
      SET revoked_at = NOW()
      WHERE user_id = $1 AND revoked_at IS NULL`,
-    [userId]
+    [userId],
   );
 }
 
@@ -185,7 +200,7 @@ async function createPasswordResetToken(
   user,
   requestedByUserId,
   ipAddress,
-  userAgent
+  userAgent,
 ) {
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashResetToken(token);
@@ -195,7 +210,7 @@ async function createPasswordResetToken(
     `UPDATE password_reset_tokens
      SET used_at = NOW()
      WHERE user_id = $1 AND used_at IS NULL`,
-    [user.id]
+    [user.id],
   );
 
   await query(
@@ -210,7 +225,7 @@ async function createPasswordResetToken(
       expiresAt,
       ipAddress || null,
       userAgent || null,
-    ]
+    ],
   );
 
   return {
@@ -224,7 +239,7 @@ async function sendPasswordResetLinkForUser(
   user,
   requestedByUserId,
   ipAddress,
-  userAgent
+  userAgent,
 ) {
   if (!isDeliverableEmail(user.email)) {
     throw new Error("This account does not have a reachable email address.");
@@ -234,13 +249,13 @@ async function sendPasswordResetLinkForUser(
     user,
     requestedByUserId,
     ipAddress,
-    userAgent
+    userAgent,
   );
   const sent = await sendPasswordResetLinkEmail(
     user.email,
     user.full_name,
     reset.resetUrl,
-    reset.expiresMinutes
+    reset.expiresMinutes,
   );
 
   if (!sent) {
@@ -263,7 +278,7 @@ async function requestPasswordReset(identifier, ipAddress, userAgent) {
      FROM users
      WHERE (LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($1))
        AND is_active = true`,
-    [identifier]
+    [identifier],
   );
   const user = result.rows[0];
 
@@ -289,7 +304,7 @@ async function confirmPasswordReset(token, newPassword) {
      FROM password_reset_tokens prt
      JOIN users u ON u.id = prt.user_id
      WHERE prt.token_hash = $1`,
-    [tokenHash]
+    [tokenHash],
   );
   const reset = result.rows[0];
 
@@ -307,17 +322,17 @@ async function confirmPasswordReset(token, newPassword) {
     `UPDATE users
      SET password = $1, force_password_reset = false, updated_at = NOW()
      WHERE id = $2`,
-    [hashedPassword, reset.user_id]
+    [hashedPassword, reset.user_id],
   );
   await revokeTrustedMfaDevices(reset.user_id);
   await query(
     "UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1",
-    [reset.id]
+    [reset.id],
   );
   await query(
     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values)
      VALUES ($1, 'password_reset_completed', 'user', $1, $2)`,
-    [reset.user_id, JSON.stringify({ via: "reset_link" })]
+    [reset.user_id, JSON.stringify({ via: "reset_link" })],
   );
 
   return { message: "Password updated successfully. You can now sign in." };
@@ -326,7 +341,7 @@ async function confirmPasswordReset(token, newPassword) {
 async function login(email, password, trustedDeviceToken) {
   const result = await query(
     "SELECT * FROM users WHERE (LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($1)) AND is_active = true",
-    [email]
+    [email],
   );
   const user = result.rows[0];
 
@@ -345,7 +360,7 @@ async function login(email, password, trustedDeviceToken) {
 
     await query(
       "UPDATE users SET mfa_code = $1, mfa_code_expires_at = $2 WHERE id = $3",
-      [mfaCode, expiresAt, user.id]
+      [mfaCode, expiresAt, user.id],
     );
 
     // Send MFA code via email
@@ -354,7 +369,7 @@ async function login(email, password, trustedDeviceToken) {
     const tempToken = jwt.sign(
       { userId: user.id, mfaPending: true },
       env.jwtSecret,
-      { expiresIn: "5m" }
+      { expiresIn: "5m" },
     );
     return { mfaRequired: true, tempToken };
   }
@@ -367,7 +382,7 @@ async function verify2FA(
   code,
   rememberDevice,
   ipAddress,
-  userAgent
+  userAgent,
 ) {
   const decoded = jwt.verify(tempToken, env.jwtSecret);
   if (!decoded.mfaPending) {
@@ -376,7 +391,7 @@ async function verify2FA(
 
   const result = await query(
     "SELECT * FROM users WHERE id = $1 AND is_active = true",
-    [decoded.userId]
+    [decoded.userId],
   );
   const user = result.rows[0];
 
@@ -396,7 +411,7 @@ async function verify2FA(
   // Clear the MFA code after successful verification
   await query(
     "UPDATE users SET mfa_code = NULL, mfa_code_expires_at = NULL WHERE id = $1",
-    [user.id]
+    [user.id],
   );
 
   const trustedDevice = rememberDevice
@@ -414,7 +429,7 @@ async function getCurrentUser(userId) {
      FROM users u
      LEFT JOIN schools s ON s.id = u.school_id
      WHERE u.id = $1`,
-    [userId]
+    [userId],
   );
   const user = result.rows[0];
   if (!user) {
@@ -430,7 +445,7 @@ async function getCurrentUser(userId) {
 async function resetPassword(userId, oldPassword, newPassword) {
   const result = await query(
     "SELECT * FROM users WHERE id = $1 AND is_active = true",
-    [userId]
+    [userId],
   );
   const user = result.rows[0];
 
@@ -451,7 +466,7 @@ async function resetPassword(userId, oldPassword, newPassword) {
   // Update password and clear force_password_reset flag
   await query(
     "UPDATE users SET password = $1, force_password_reset = false, updated_at = NOW() WHERE id = $2",
-    [hashedPassword, userId]
+    [hashedPassword, userId],
   );
   await revokeTrustedMfaDevices(userId);
 
@@ -474,7 +489,7 @@ async function resetPasswordByAdmin(userId, newPassword) {
   // Update password and set force_password_reset flag
   await query(
     "UPDATE users SET password = $1, force_password_reset = true, updated_at = NOW() WHERE id = $2",
-    [hashedPassword, userId]
+    [hashedPassword, userId],
   );
   await revokeTrustedMfaDevices(userId);
 
@@ -490,6 +505,7 @@ function generateMFACode() {
 
 module.exports = {
   login,
+  refreshSession,
   verify2FA,
   getCurrentUser,
   resetPassword,

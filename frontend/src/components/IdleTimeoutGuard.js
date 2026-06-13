@@ -8,9 +8,18 @@ import PropTypes from "prop-types";
 import MDButton from "components/MDButton";
 import MDTypography from "components/MDTypography";
 
-const IDLE_LIMIT_MS = 20 * 60 * 1000;
+const IDLE_LIMIT_MS = 60 * 60 * 1000;
 const WARNING_MS = 30 * 1000;
-const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"];
+const ACTIVITY_EVENTS = [
+  "pointerdown",
+  "keydown",
+  "touchstart",
+  "scroll",
+  "wheel",
+  "input",
+  "change",
+  "focus",
+];
 
 function IdleTimeoutGuard({ active, onTimeout }) {
   const [warningOpen, setWarningOpen] = useState(false);
@@ -18,6 +27,7 @@ function IdleTimeoutGuard({ active, onTimeout }) {
   const warningTimerRef = useRef(null);
   const logoutTimerRef = useRef(null);
   const countdownRef = useRef(null);
+  const timedOutRef = useRef(false);
 
   const clearTimers = () => {
     window.clearTimeout(warningTimerRef.current);
@@ -29,6 +39,7 @@ function IdleTimeoutGuard({ active, onTimeout }) {
     clearTimers();
     setWarningOpen(false);
     setSecondsLeft(30);
+    timedOutRef.current = false;
 
     if (!active) return;
 
@@ -41,6 +52,8 @@ function IdleTimeoutGuard({ active, onTimeout }) {
     }, IDLE_LIMIT_MS - WARNING_MS);
 
     logoutTimerRef.current = window.setTimeout(() => {
+      if (timedOutRef.current) return;
+      timedOutRef.current = true;
       clearTimers();
       setWarningOpen(false);
       onTimeout();
@@ -58,11 +71,13 @@ function IdleTimeoutGuard({ active, onTimeout }) {
     ACTIVITY_EVENTS.forEach((eventName) => {
       window.addEventListener(eventName, resetTimers, { passive: true });
     });
+    document.addEventListener("visibilitychange", resetTimers);
 
     return () => {
       ACTIVITY_EVENTS.forEach((eventName) => {
         window.removeEventListener(eventName, resetTimers);
       });
+      document.removeEventListener("visibilitychange", resetTimers);
       clearTimers();
     };
   }, [active]);

@@ -1,8 +1,9 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
 import API_BASE_URL from "lib/apiBase";
-import { parseApiResponse } from "lib/api";
+import { apiClient, parseApiResponse } from "lib/api";
+import { AUTH_EXPIRED_EVENT } from "lib/session";
 
 const AuthContext = createContext(null);
 
@@ -10,6 +11,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const getOnboardingPath = (nextUser) => {
     if (nextUser?.forcePasswordReset) {
@@ -32,7 +34,13 @@ export const AuthProvider = ({ children }) => {
       };
     }
 
-    redirectBasedOnRole(nextUser.role);
+    const returnPath = sessionStorage.getItem("returnAfterLogin");
+    if (returnPath?.startsWith("/") && !returnPath.startsWith("//")) {
+      sessionStorage.removeItem("returnAfterLogin");
+      navigate(returnPath, { replace: true });
+    } else {
+      redirectBasedOnRole(nextUser.role);
+    }
     return { success: true };
   };
 
@@ -60,6 +68,53 @@ export const AuthProvider = ({ children }) => {
     }
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    const expireSession = () => {
+      if (location.pathname !== "/authentication/sign-in") {
+        sessionStorage.setItem(
+          "returnAfterLogin",
+          `${location.pathname}${location.search}${location.hash}`
+        );
+      }
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      setUser(null);
+      navigate("/authentication/sign-in", { replace: true });
+    };
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, expireSession);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expireSession);
+  }, [location.hash, location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    let lastCheckAt = 0;
+    const refreshOnActivity = async () => {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - lastCheckAt < 60_000) return;
+      lastCheckAt = now;
+      try {
+        const refreshed = await apiClient.refreshSessionIfNeeded();
+        if (refreshed?.user) setUser(refreshed.user);
+      } catch {
+        // The API client emits the centralized expiry event when authentication is invalid.
+      }
+    };
+
+    const events = ["pointerdown", "keydown", "touchstart", "scroll", "focus"];
+    events.forEach((eventName) =>
+      window.addEventListener(eventName, refreshOnActivity, { passive: true })
+    );
+    document.addEventListener("visibilitychange", refreshOnActivity);
+
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, refreshOnActivity));
+      document.removeEventListener("visibilitychange", refreshOnActivity);
+    };
+  }, [user]);
 
   const login = async (email, password) => {
     try {
