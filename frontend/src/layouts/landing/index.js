@@ -169,7 +169,7 @@ function RegistrationLanding() {
       "eduClub is a safe online learning platform for kids with digital literacy courses, learner dashboards, typing competitions, maths challenges, science and STEM competitions, secure course access and parent consent.";
     const keywords =
       "LMS for kids, learn online for kids, digital skills for children, digital literacy courses, monthly competitions, typing competition, maths competition, STEM competition, science competition, online learning platform for schools, learner dashboard, online courses for children";
-    const canonicalUrl = `${window.location.origin}/`;
+    const canonicalUrl = `${window.location.origin}${pathname === "/register" ? "/register" : "/"}`;
 
     document.title = title;
     upsertMeta("meta[name='description']", {
@@ -259,7 +259,13 @@ function RegistrationLanding() {
     }, 45);
 
     return () => clearInterval(counter);
-  }, []);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pathname === "/register") {
+      setRegistrationOpen(true);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     // Friendly marketing URLs share one component and scroll to stable section anchors.
@@ -549,7 +555,7 @@ function RegistrationLanding() {
             <MDButton
               variant="outlined"
               color="white"
-              onClick={() => navigate("/authentication/sign-in")}
+              onClick={() => navigate("/login")}
             >
               Login
             </MDButton>

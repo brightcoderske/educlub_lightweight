@@ -39,6 +39,8 @@ import ForgotPassword from "layouts/authentication/forgot-password";
 import SetPassword from "layouts/authentication/set-password";
 import PrivacyConsent from "layouts/authentication/privacy-consent";
 import RegistrationLanding from "layouts/landing";
+import PublicSite, { PublicNotFound } from "layouts/public-site";
+import { PUBLIC_ALIASES, PUBLIC_PAGE_PATHS } from "layouts/public-site/publicPages";
 import Reports from "layouts/school-admin/reports";
 import Leaderboard from "layouts/school-admin/leaderboard";
 import Courses from "layouts/school-admin/courses";
@@ -48,16 +50,33 @@ import Teachers from "layouts/school-admin/teachers";
 // @mui icons
 import Icon from "@mui/material/Icon";
 
-const routes = [
-  {
+const publicContentRoutes = [
+  ...PUBLIC_PAGE_PATHS.map((route) => ({
     type: "collapse",
     name: "eduClub",
-    key: "landing",
-    icon: <Icon fontSize="small">home</Icon>,
-    route: "/",
-    component: <RegistrationLanding />,
+    key: `public-${route === "/" ? "home" : route.slice(1).replaceAll("/", "-")}`,
+    icon: <Icon fontSize="small">public</Icon>,
+    route,
+    component: <PublicSite />,
+    public: true,
     hidden: true,
-  },
+  })),
+  ...Object.keys(PUBLIC_ALIASES)
+    .filter((route) => route !== "/authentication/sign-in")
+    .map((route) => ({
+      type: "collapse",
+      name: "eduClub",
+      key: `public-alias-${route.slice(1).replaceAll("/", "-")}`,
+      icon: <Icon fontSize="small">public</Icon>,
+      route,
+      component: <PublicSite />,
+      public: true,
+      hidden: true,
+    })),
+];
+
+const routes = [
+  ...publicContentRoutes,
   {
     type: "collapse",
     name: "Register",
@@ -65,78 +84,17 @@ const routes = [
     icon: <Icon fontSize="small">how_to_reg</Icon>,
     route: "/register",
     component: <RegistrationLanding />,
+    public: true,
     hidden: true,
   },
   {
     type: "collapse",
-    name: "Why Choose eduClub",
-    key: "why-choose-us",
-    icon: <Icon fontSize="small">verified_user</Icon>,
-    route: "/why-choose-us",
-    component: <RegistrationLanding />,
-    hidden: true,
-  },
-  {
-    type: "collapse",
-    name: "Why Choose eduClub",
-    key: "why-chose-us",
-    icon: <Icon fontSize="small">verified_user</Icon>,
-    route: "/why-chose-us",
-    component: <RegistrationLanding />,
-    hidden: true,
-  },
-  {
-    type: "collapse",
-    name: "Why Choose eduClub",
-    key: "why_chose_us",
-    icon: <Icon fontSize="small">verified_user</Icon>,
-    route: "/why_chose_us",
-    component: <RegistrationLanding />,
-    hidden: true,
-  },
-  {
-    type: "collapse",
-    name: "Talk To Us",
-    key: "talk-to-us",
-    icon: <Icon fontSize="small">call</Icon>,
-    route: "/talk-to-us",
-    component: <RegistrationLanding />,
-    hidden: true,
-  },
-  {
-    type: "collapse",
-    name: "Contact eduClub",
-    key: "contact",
-    icon: <Icon fontSize="small">chat</Icon>,
-    route: "/contact",
-    component: <RegistrationLanding />,
-    hidden: true,
-  },
-  {
-    type: "collapse",
-    name: "Partners",
-    key: "partners",
-    icon: <Icon fontSize="small">handshake</Icon>,
-    route: "/partners",
-    component: <RegistrationLanding />,
-    hidden: true,
-  },
-  {
-    type: "collapse",
-    name: "Digital Skills",
-    key: "digital-skills",
-    icon: <Icon fontSize="small">devices</Icon>,
-    route: "/digital-skills",
-    component: <RegistrationLanding />,
-    hidden: true,
-  },
-  {
-    type: "collapse",
-    name: "Competitions",
-    key: "public-competitions",
-    icon: <Icon fontSize="small">emoji_events</Icon>,
-    route: "/competitions",
-    component: <RegistrationLanding />,
+    name: "Log In",
+    key: "login",
+    icon: <Icon fontSize="small">login</Icon>,
+    route: "/login",
+    component: <SignIn />,
+    public: true,
     hidden: true,
   },
   {
@@ -146,6 +104,17 @@ const routes = [
     icon: <Icon fontSize="small">login</Icon>,
     route: "/authentication/sign-in",
     component: <SignIn />,
+    public: true,
+    hidden: true,
+  },
+  {
+    type: "collapse",
+    name: "Page Not Found",
+    key: "public-not-found",
+    icon: <Icon fontSize="small">error_outline</Icon>,
+    route: "*",
+    component: <PublicNotFound />,
+    public: true,
     hidden: true,
   },
   {
@@ -451,6 +420,7 @@ const routes = [
     icon: <Icon fontSize="small">lock_reset</Icon>,
     route: "/authentication/forgot-password",
     component: <ForgotPassword />,
+    public: true,
     hidden: true,
   },
   {
@@ -460,6 +430,7 @@ const routes = [
     icon: <Icon fontSize="small">password</Icon>,
     route: "/authentication/set-password",
     component: <SetPassword />,
+    public: true,
     hidden: true,
   },
   {

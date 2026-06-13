@@ -6,7 +6,8 @@
 * Copyright 2026 eduClub
 */
 
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { Routes, Route, Navigate, useLocation, matchPath } from "react-router-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 
@@ -25,43 +26,29 @@ function AppContent() {
   const { user, loading, logout } = useAuth();
   const { pathname } = useLocation();
 
-  const authRoutes = [
-    "/authentication/sign-in",
-    "/authentication/reset-password",
-    "/authentication/forgot-password",
-    "/authentication/set-password",
-    "/privacy-consent",
-    "/",
-    "/register",
-    "/why-choose-us",
-    "/why-chose-us",
-    "/why_chose_us",
-    "/talk-to-us",
-    "/contact",
-    "/partners",
-    "/digital-skills",
-    "/competitions",
-  ];
-  const publicRoutes = [
-    "/",
-    "/register",
-    "/why-choose-us",
-    "/why-chose-us",
-    "/why_chose_us",
-    "/talk-to-us",
-    "/contact",
-    "/partners",
-    "/digital-skills",
-    "/competitions",
-    "/authentication/sign-in",
-    "/authentication/forgot-password",
-    "/authentication/set-password",
-  ];
+  const matchedRoute =
+    routes.find(
+      (route) =>
+        route.route !== "*" && matchPath({ path: route.route, end: true }, pathname)
+    ) || routes.find((route) => route.route === "*");
+  const publicRoute = Boolean(matchedRoute?.public);
+  const authRoute = publicRoute || pathname.startsWith("/authentication/") || pathname === "/privacy-consent";
   const focusedLearningRoute = /^\/learner\/courses\/[^/]+\/modules\/[^/]+\/learn$/.test(pathname);
-  const showSidenav = Boolean(user) && !authRoutes.includes(pathname) && !focusedLearningRoute;
+  const showSidenav = Boolean(user) && !authRoute && !focusedLearningRoute;
   const sidenavRoutes = routes.filter(
     (route) => !route.hidden && (!route.roles || route.roles.includes(user?.role))
   );
+
+  useEffect(() => {
+    if (publicRoute) return;
+    let robots = document.querySelector("meta[name='robots']");
+    if (!robots) {
+      robots = document.createElement("meta");
+      robots.setAttribute("name", "robots");
+      document.head.appendChild(robots);
+    }
+    robots.setAttribute("content", "noindex, nofollow");
+  }, [pathname, publicRoute]);
 
   const dashboardForRole = (role) => {
     if (role === "system_admin") return "/system-admin";
@@ -77,8 +64,8 @@ function AppContent() {
     return null;
   };
 
-  const guardedElement = (route, component, roles) => {
-    if (!user && !publicRoutes.includes(route)) {
+  const guardedElement = (route, component, roles, isPublic) => {
+    if (!user && !isPublic) {
       return <Navigate to="/authentication/sign-in" replace />;
     }
 
@@ -87,28 +74,11 @@ function AppContent() {
       return <Navigate to={onboardingPath} replace />;
     }
 
-    if (
-      user &&
-      [
-        "/",
-        "/register",
-        "/why-choose-us",
-        "/why-chose-us",
-        "/why_chose_us",
-        "/talk-to-us",
-        "/contact",
-        "/partners",
-        "/digital-skills",
-        "/competitions",
-      ].includes(route)
-    ) {
-      return <Navigate to={dashboardForRole(user.role)} replace />;
-    }
-
-    if (user && route === "/authentication/sign-in") {
+    if (user && ["/login", "/authentication/sign-in"].includes(route)) {
       if (onboardingPath) {
         return <Navigate to={onboardingPath} replace />;
       }
+      return <Navigate to={dashboardForRole(user.role)} replace />;
     }
 
     if (user && roles && !roles.includes(user.role)) {
@@ -119,8 +89,12 @@ function AppContent() {
   };
 
   const getRoutes = () =>
-    routes.map(({ key, route, component, roles }) => (
-      <Route key={key} path={route} element={guardedElement(route, component, roles)} />
+    routes.map(({ key, route, component, roles, public: isPublic }) => (
+      <Route
+        key={key}
+        path={route}
+        element={guardedElement(route, component, roles, isPublic)}
+      />
     ));
 
   if (loading) {
@@ -140,7 +114,6 @@ function AppContent() {
       <IdleTimeoutGuard active={Boolean(user)} onTimeout={logout} />
       <Routes>
         {getRoutes()}
-        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>
   );

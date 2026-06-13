@@ -1,6 +1,12 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
 Allow: /
+Disallow: /system-admin/
+Disallow: /school-admin/
+Disallow: /teacher/
+Disallow: /learner/
+Disallow: /privacy-consent
+Disallow: /authentication/reset-password
+Disallow: /authentication/forgot-password
+Disallow: /authentication/set-password
 
-Sitemap: https://your-frontend-domain.com/sitemap.xml
+Sitemap: https://www.educlub.co.ke/sitemap.xml

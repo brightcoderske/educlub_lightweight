@@ -35,7 +35,7 @@
   },
   "scripts": {
     "start": "node scripts/run-react-scripts.js start",
-    "build": "node scripts/run-react-scripts.js build",
+    "build": "node scripts/run-react-scripts.js build && node scripts/generate-public-seo.js",
     "test": "jest --config jest.config.cjs",
     "eject": "react-scripts eject",
     "install:clean": "rm -rf node_modules/ && rm -rf package-lock.json && npm install && npm start"
