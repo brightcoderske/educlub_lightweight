@@ -5,7 +5,7 @@ module.exports = buildScratchCourse({
   name: "Scratch Innovator: Advanced Computing and Responsible AI",
   code: "SCRATCH-INNOVATOR",
   description: "Use Scratch as an advanced laboratory for algorithms, modelling, control systems, data science, machine learning, generative AI, and responsible innovation.",
-  targetLevel: "Advanced | Recommended readiness: variables, lists, clones, broadcasts, and custom blocks | School-admin placement",
+  targetLevel: "Advanced | Lists, clones, broadcasts and custom blocks | Admin placement",
   imageUrl: "/course-assets/scratch-innovator/course-cover.svg",
   imageAlt: "Young innovators testing advanced algorithms, data systems, simulations, robotics, and responsible AI ideas.",
   roadmapUrl: "/course-assets/scratch-innovator/course-roadmap.svg",

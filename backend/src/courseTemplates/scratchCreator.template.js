@@ -5,7 +5,7 @@ module.exports = buildScratchCourse({
   name: "Scratch Creator: Games, STEAM and Smart Systems",
   code: "SCRATCH-CREATOR",
   description: "Create substantial games, simulations, data projects, smart systems, and a responsible introduction to machine learning.",
-  targetLevel: "Developing | Recommended readiness: events, loops, conditions, and basic variables | School-admin placement",
+  targetLevel: "Developing | Events, loops, conditions and variables | Admin placement",
   imageUrl: "/course-assets/scratch-creator/course-cover.svg",
   imageAlt: "Learners creating games, simulations, data displays, and smart systems with block coding.",
   roadmapUrl: "/course-assets/scratch-creator/course-roadmap.svg",

@@ -258,7 +258,7 @@ function buildScratchCourse(course) {
     estimated_weeks: 10,
     learning_objectives: course.learningObjectives,
     certificate_enabled: true,
-    course_category: "coding",
+    course_category: "general",
     settings: {
       mastery_score: 80,
       unlimited_quiz_retries: true,

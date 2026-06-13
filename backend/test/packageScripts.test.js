@@ -14,3 +14,18 @@ test("exposes backend tests and the Web Development 1 importer", () => {
     "node scripts/import-scratch-pathway.js",
   );
 });
+
+test("Scratch pathway importer includes all four Scratch templates", () => {
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../scripts/import-scratch-pathway.js"),
+    "utf8",
+  );
+  for (const templateName of [
+    "scratchIntermediate.template",
+    "scratchExplorer.template",
+    "scratchCreator.template",
+    "scratchInnovator.template",
+  ]) {
+    assert.match(source, new RegExp(templateName.replace(".", "\\.")));
+  }
+});

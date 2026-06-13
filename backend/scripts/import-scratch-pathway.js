@@ -3,6 +3,7 @@ const { pool } = require("../src/config");
 const { importTemplateDefinition } = require("../src/services/courseTemplateImport.service");
 
 const templates = [
+  require("../src/courseTemplates/scratchIntermediate.template"),
   require("../src/courseTemplates/scratchExplorer.template"),
   require("../src/courseTemplates/scratchCreator.template"),
   require("../src/courseTemplates/scratchInnovator.template"),

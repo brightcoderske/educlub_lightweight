@@ -148,3 +148,22 @@ test("every progressive course cover and roadmap asset exists", () => {
     }
   }
 });
+
+test("all Scratch template metadata fits the production database columns", () => {
+  const allScratchTemplates = [
+    require("../src/courseTemplates/scratchIntermediate.template"),
+    ...templates,
+  ];
+
+  for (const template of allScratchTemplates) {
+    assert.ok(template.code.length <= 80, `${template.code} code exceeds varchar(80)`);
+    assert.ok(
+      template.target_level.length <= 80,
+      `${template.code} target_level exceeds varchar(80)`,
+    );
+    assert.ok(
+      ["general", "weekly_typing", "weekly_quiz"].includes(template.course_category),
+      `${template.code} uses an unsupported production course category`,
+    );
+  }
+});

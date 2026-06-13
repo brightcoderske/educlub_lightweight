@@ -5,7 +5,7 @@ module.exports = buildScratchCourse({
   name: "Scratch Explorer: Creative Coding Foundations",
   code: "SCRATCH-EXPLORER",
   description: "Build confidence through stories, animation, art, games, quizzes, nature models, and engineering investigations.",
-  targetLevel: "Foundation | Recommended readiness: new Scratch learners | Ages 7-14 may join by school placement",
+  targetLevel: "Foundation | New Scratch learners | School-admin placement",
   imageUrl: "/course-assets/scratch-explorer/course-cover.svg",
   imageAlt: "Young creators exploring stories, music, games, nature, and digital art with block coding.",
   roadmapUrl: "/course-assets/scratch-explorer/course-roadmap.svg",

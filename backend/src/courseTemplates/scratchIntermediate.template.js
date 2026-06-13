@@ -218,7 +218,7 @@ module.exports = {
     "Test with users, improve from evidence, and submit a portfolio of .sb3 projects.",
   ],
   certificate_enabled: true,
-  course_category: "coding",
+  course_category: "general",
   settings: {
     mastery_score: 80,
     unlimited_quiz_retries: true,
