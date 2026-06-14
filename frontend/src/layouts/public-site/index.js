@@ -78,8 +78,14 @@ function PublicHeader() {
           sx={{ cursor: "pointer" }}
           onClick={() => navigate("/")}
         >
-          <MDBox component="img" src={eduClubLogo} alt="eduClub logo" width="42px" mr={1} />
-          <MDTypography variant="h5" fontWeight="bold" color="dark">
+          <img
+            src={eduClubLogo}
+            alt="eduClub logo"
+            width="42"
+            height="42"
+            style={{ width: 42, height: 42, marginRight: 8 }}
+          />
+          <MDTypography component="span" variant="h5" fontWeight="bold" color="dark">
             eduClub
           </MDTypography>
         </MDBox>
@@ -149,7 +155,7 @@ function PublicFooter() {
     <MDBox component="footer" bgColor="dark" px={{ xs: 2, md: 6 }} py={4}>
       <Grid container spacing={3}>
         <Grid item xs={12} md={5}>
-          <MDTypography variant="h5" color="white" fontWeight="bold">
+          <MDTypography component="p" variant="h5" color="white" fontWeight="bold">
             eduClub
           </MDTypography>
           <MDTypography variant="body2" color="white" mt={1} lineHeight={1.7}>
@@ -218,10 +224,15 @@ function RelatedPages({ paths }) {
           <Grid item xs={12} sm={6} lg={4} key={path}>
             <Card sx={{ height: "100%" }}>
               <MDBox p={2.5}>
-                <MDTypography variant="h6" fontWeight="bold">
+                <MDTypography component="h3" variant="h6" fontWeight="bold">
                   {related.h1}
                 </MDTypography>
-                <MDTypography variant="body2" color="text" mt={1} lineHeight={1.6}>
+                <MDTypography
+                  variant="body2"
+                  mt={1}
+                  lineHeight={1.6}
+                  sx={{ color: "#455a64" }}
+                >
                   {related.description}
                 </MDTypography>
                 <MDButton
@@ -297,11 +308,11 @@ export default function PublicSite() {
             {page.h1}
           </MDTypography>
           <MDTypography
+            component="p"
             variant="h5"
-            color="text"
             mt={2.5}
             lineHeight={1.65}
-            sx={{ maxWidth: 900 }}
+            sx={{ maxWidth: 900, color: "#455a64" }}
           >
             {page.intro}
           </MDTypography>
@@ -325,7 +336,12 @@ export default function PublicSite() {
                     <MDTypography component="h2" variant="h4" fontWeight="bold">
                       {item.title}
                     </MDTypography>
-                    <MDTypography variant="body1" color="text" mt={1.5} lineHeight={1.75}>
+                    <MDTypography
+                      variant="body1"
+                      mt={1.5}
+                      lineHeight={1.75}
+                      sx={{ color: "#455a64" }}
+                    >
                       {item.body}
                     </MDTypography>
                     <MDBox mt={2}>
@@ -334,7 +350,7 @@ export default function PublicSite() {
                           <Icon color="success" fontSize="small">
                             check_circle
                           </Icon>
-                          <MDTypography variant="body2" color="text">
+                          <MDTypography variant="body2" sx={{ color: "#455a64" }}>
                             {point}
                           </MDTypography>
                         </MDBox>
@@ -359,7 +375,12 @@ export default function PublicSite() {
                         <MDTypography component="h3" variant="h6" fontWeight="bold">
                           {faq.question}
                         </MDTypography>
-                        <MDTypography variant="body2" color="text" mt={1} lineHeight={1.7}>
+                        <MDTypography
+                          variant="body2"
+                          mt={1}
+                          lineHeight={1.7}
+                          sx={{ color: "#455a64" }}
+                        >
                           {faq.answer}
                         </MDTypography>
                       </MDBox>
@@ -389,7 +410,7 @@ export default function PublicSite() {
             gap={2}
           >
             <MDBox>
-              <MDTypography variant="h3" color="white" fontWeight="bold">
+              <MDTypography component="h2" variant="h3" color="white" fontWeight="bold">
                 Ready to start learning?
               </MDTypography>
               <MDTypography variant="body1" color="white" mt={1}>

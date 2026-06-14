@@ -100,7 +100,7 @@ function updateStructuredData(origin) {
     "@type": "EducationalOrganization",
     name: "eduClub LMS",
     url: `${origin}/`,
-    logo: `${origin}/apple-icon.png`,
+    logo: `${origin}/educlub-logo.png`,
     description:
       "eduClub LMS provides online learning, digital literacy courses, learner dashboards and national monthly competitions for kids.",
     educationalCredentialAwarded:
@@ -194,7 +194,7 @@ function RegistrationLanding() {
     });
     upsertMeta("meta[property='og:image']", {
       property: "og:image",
-      content: `${window.location.origin}/apple-icon.png`,
+      content: `${window.location.origin}/educlub-logo.png`,
     });
     upsertMeta("meta[property='og:image:alt']", {
       property: "og:image:alt",
@@ -202,7 +202,7 @@ function RegistrationLanding() {
     });
     upsertMeta("meta[name='twitter:card']", {
       name: "twitter:card",
-      content: "summary_large_image",
+      content: "summary",
     });
     upsertMeta("meta[name='twitter:title']", {
       name: "twitter:title",
@@ -214,7 +214,7 @@ function RegistrationLanding() {
     });
     upsertMeta("meta[name='twitter:image']", {
       name: "twitter:image",
-      content: `${window.location.origin}/apple-icon.png`,
+      content: `${window.location.origin}/educlub-logo.png`,
     });
     upsertLink("canonical", canonicalUrl);
     updateStructuredData(window.location.origin);
@@ -559,8 +559,14 @@ function RegistrationLanding() {
       >
         <MDBox px={{ xs: 2, md: 6 }} py={3} display="flex" justifyContent="space-between">
           <MDBox display="flex" alignItems="center">
-            <MDBox component="img" src={eduClubLogo} alt="eduClub LMS logo" width="56px" mr={1.5} />
-            <MDTypography variant="h4" color="white" fontWeight="bold">
+            <img
+              src={eduClubLogo}
+              alt="eduClub LMS logo"
+              width="56"
+              height="55"
+              style={{ width: 56, height: 55, marginRight: 12 }}
+            />
+            <MDTypography component="span" variant="h4" color="white" fontWeight="bold">
               eduClub LMS
             </MDTypography>
           </MDBox>

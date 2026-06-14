@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import {
   COURSE_PATHS,
+  BRAND_LOGO_URL,
   getPublicPage,
   PUBLIC_PAGES,
   SITE_CONTACT,
@@ -57,7 +58,7 @@ export function buildStructuredData(pathname) {
     "@type": "EducationalOrganization",
     name: "eduClub",
     url: SITE_ORIGIN,
-    logo: `${SITE_ORIGIN}/apple-icon.png`,
+    logo: BRAND_LOGO_URL,
     email: SITE_CONTACT.email,
     telephone: SITE_CONTACT.phoneInternational,
     areaServed: { "@type": "Country", name: "Kenya" },
@@ -138,9 +139,9 @@ export default function usePublicSeo(pathname) {
     setMeta("meta[property='og:url']", { property: "og:url", content: seo.canonical });
     setMeta("meta[property='og:image']", {
       property: "og:image",
-      content: `${SITE_ORIGIN}/apple-icon.png`,
+      content: BRAND_LOGO_URL,
     });
-    setMeta("meta[name='twitter:card']", { name: "twitter:card", content: "summary_large_image" });
+    setMeta("meta[name='twitter:card']", { name: "twitter:card", content: "summary" });
     setMeta("meta[name='twitter:title']", { name: "twitter:title", content: seo.title });
     setMeta("meta[name='twitter:description']", {
       name: "twitter:description",

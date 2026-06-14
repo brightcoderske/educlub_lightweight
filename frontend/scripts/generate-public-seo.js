@@ -50,6 +50,7 @@ function buildSnapshotHtml(template, route, page) {
       "@type": "EducationalOrganization",
       name: "eduClub",
       url: SITE_ORIGIN,
+      logo: `${SITE_ORIGIN}/educlub-logo.png`,
       email: "support@educlub.co.ke",
       telephone: "+254740073575",
     },

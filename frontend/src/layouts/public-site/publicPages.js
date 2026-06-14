@@ -1,4 +1,5 @@
 export const SITE_ORIGIN = "https://www.educlub.co.ke";
+export const BRAND_LOGO_URL = `${SITE_ORIGIN}/educlub-logo.png`;
 
 export const SITE_CONTACT = {
   email: "support@educlub.co.ke",

@@ -105,6 +105,18 @@ test("SEO data uses production canonicals and page-specific educational schema",
     expect.arrayContaining(["EducationalOrganization", "WebSite", "Course"])
   );
   expect(JSON.stringify(schemas)).toContain("support@educlub.co.ke");
+  expect(JSON.stringify(schemas)).toContain("/educlub-logo.png");
+  expect(JSON.stringify(schemas)).not.toContain("/apple-icon.png");
+});
+
+test("public pages size brand images and use accessible muted text", () => {
+  const source = readFileSync(
+    resolve(__dirname, "../layouts/public-site/index.js"),
+    "utf8"
+  );
+  expect(source).toContain('height="42"');
+  expect(source).toContain('component="span"');
+  expect(source).toContain("#455a64");
 });
 
 test("routes expose public content, login, registration and a real not-found page", () => {
