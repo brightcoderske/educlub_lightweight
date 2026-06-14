@@ -170,6 +170,7 @@ function CourseOverview() {
                         display="flex"
                         justifyContent="space-between"
                         alignItems="flex-start"
+                        flexWrap={{ xs: "wrap", md: "nowrap" }}
                         gap={2}
                       >
                         <MDBox flex={1} minWidth={0}>
@@ -203,15 +204,31 @@ function CourseOverview() {
                             {courseModule.score_percent}% marks
                           </MDTypography>
                         </MDBox>
-                        <IconButton
-                          size="small"
-                          aria-label="Toggle activities"
-                          onClick={() => toggleModule(courseModule.id)}
-                        >
-                          <Icon>
-                            {openModules[courseModule.id] ? "expand_less" : "expand_more"}
-                          </Icon>
-                        </IconButton>
+                        <MDBox display="flex" alignItems="center" gap={0.75}>
+                          {previewMode && (
+                            <MDButton
+                              size="small"
+                              variant="outlined"
+                              color="info"
+                              disabled={downloadingModule === courseModule.id}
+                              startIcon={<Icon fontSize="small">picture_as_pdf</Icon>}
+                              onClick={() => downloadModulePdf(courseModule.id)}
+                            >
+                              {downloadingModule === courseModule.id
+                                ? "Preparing..."
+                                : "Download PDF"}
+                            </MDButton>
+                          )}
+                          <IconButton
+                            size="small"
+                            aria-label="Toggle activities"
+                            onClick={() => toggleModule(courseModule.id)}
+                          >
+                            <Icon>
+                              {openModules[courseModule.id] ? "expand_less" : "expand_more"}
+                            </Icon>
+                          </IconButton>
+                        </MDBox>
                       </MDBox>
 
                       <Collapse in={Boolean(openModules[courseModule.id])}>
@@ -301,19 +318,6 @@ function CourseOverview() {
                             ))
                           )}
                           <MDBox display="flex" justifyContent="flex-end" gap={1} mt={2}>
-                            {previewMode && (
-                              <MDButton
-                                variant="outlined"
-                                color="info"
-                                disabled={downloadingModule === courseModule.id}
-                                startIcon={<Icon fontSize="small">picture_as_pdf</Icon>}
-                                onClick={() => downloadModulePdf(courseModule.id)}
-                              >
-                                {downloadingModule === courseModule.id
-                                  ? "Preparing..."
-                                  : "Download PDF"}
-                              </MDButton>
-                            )}
                             <MDButton
                               variant="gradient"
                               color="success"
