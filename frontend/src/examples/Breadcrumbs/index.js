@@ -26,9 +26,10 @@ import Icon from "@mui/material/Icon";
 // Material Dashboard 2 React components
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
+import { buildDashboardBreadcrumbs } from "./navigation";
 
 function Breadcrumbs({ icon, title, route, light }) {
-  const routes = route.slice(0, -1);
+  const { homePath, items } = buildDashboardBreadcrumbs(route);
 
   return (
     <MDBox mr={{ xs: 0, xl: 8 }}>
@@ -39,7 +40,7 @@ function Breadcrumbs({ icon, title, route, light }) {
           },
         }}
       >
-        <Link to="/">
+        <Link to={homePath}>
           <MDTypography
             component="span"
             variant="body2"
@@ -50,8 +51,9 @@ function Breadcrumbs({ icon, title, route, light }) {
             <Icon>{icon}</Icon>
           </MDTypography>
         </Link>
-        {routes.map((el) => (
-          <Link to={`/${el}`} key={el}>
+        {items.map((item) => (
+          item.clickable ? (
+          <Link to={item.path} key={`${item.path}-${item.label}`}>
             <MDTypography
               component="span"
               variant="button"
@@ -61,9 +63,21 @@ function Breadcrumbs({ icon, title, route, light }) {
               opacity={light ? 0.8 : 0.5}
               sx={{ lineHeight: 0 }}
             >
-              {el}
+              {item.label}
             </MDTypography>
           </Link>
+          ) : (
+            <MDTypography
+              key={item.label}
+              variant="button"
+              fontWeight="regular"
+              color={light ? "white" : "dark"}
+              opacity={light ? 0.8 : 0.5}
+              sx={{ lineHeight: 0 }}
+            >
+              {item.label}
+            </MDTypography>
+          )
         ))}
         <MDTypography
           variant="button"

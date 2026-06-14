@@ -4,6 +4,7 @@ import Card from "@mui/material/Card";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDInput from "components/MDInput";
+import PasswordField from "components/PasswordField";
 import MDButton from "components/MDButton";
 import Checkbox from "@mui/material/Checkbox";
 import CoverLayout from "examples/LayoutContainers/CoverLayout";
@@ -199,8 +200,7 @@ function SignIn() {
             />
           </MDBox>
           <MDBox mb={2}>
-            <MDInput
-              type="password"
+            <PasswordField
               label="Password"
               fullWidth
               value={password}

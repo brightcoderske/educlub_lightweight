@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "@mui/material/Card";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
-import MDInput from "components/MDInput";
+import PasswordField from "components/PasswordField";
 import MDButton from "components/MDButton";
 import CoverLayout from "examples/LayoutContainers/CoverLayout";
 import bgImage from "assets/images/bg-sign-in-basic.jpeg";
@@ -83,8 +83,7 @@ function ResetPassword() {
             Email: {user?.email}
           </MDTypography>
           <MDBox mb={2}>
-            <MDInput
-              type="password"
+            <PasswordField
               label="Old Password"
               fullWidth
               value={oldPassword}
@@ -92,8 +91,7 @@ function ResetPassword() {
             />
           </MDBox>
           <MDBox mb={2}>
-            <MDInput
-              type="password"
+            <PasswordField
               label="New Password"
               fullWidth
               value={newPassword}
@@ -101,8 +99,7 @@ function ResetPassword() {
             />
           </MDBox>
           <MDBox mb={2}>
-            <MDInput
-              type="password"
+            <PasswordField
               label="Confirm New Password"
               fullWidth
               value={confirmPassword}

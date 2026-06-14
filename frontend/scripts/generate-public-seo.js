@@ -28,9 +28,18 @@ function buildSnapshotHtml(template, route, page) {
           .join("")}</ul></section>`,
     )
     .join("");
-  const staticContent = `<main data-seo-snapshot="true"><h1>${escapeHtml(
+  const staticContent = `<main class="educlub-first-paint" data-seo-snapshot="true"><div><span>eduClub</span><h1>${escapeHtml(
     page.h1,
-  )}</h1><p>${escapeHtml(page.intro)}</p>${visibleSections}</main>`;
+  )}</h1><p>${escapeHtml(page.intro)}</p>${visibleSections}</div></main>`;
+  const criticalStyles = `<style id="educlub-first-paint">
+    *{box-sizing:border-box}body{margin:0;background:#f7f9fc;color:#17324d;font-family:Arial,sans-serif}
+    .educlub-first-paint{min-height:100vh;padding:64px 24px;background:linear-gradient(135deg,#eef7ff,#fff8e8)}
+    .educlub-first-paint>div{max-width:980px;margin:auto;padding:48px;border-radius:24px;background:#fff;box-shadow:0 18px 50px rgba(23,50,77,.12)}
+    .educlub-first-paint span{display:inline-block;padding:8px 14px;border-radius:999px;background:#1676d2;color:#fff;font-weight:700}
+    .educlub-first-paint h1{max-width:760px;margin:24px 0 16px;font-size:clamp(2rem,5vw,4rem);line-height:1.05}
+    .educlub-first-paint h2{margin-top:32px;color:#1676d2}.educlub-first-paint p,.educlub-first-paint li{font-size:1.05rem;line-height:1.7}
+    @media(max-width:600px){.educlub-first-paint{padding:24px 12px}.educlub-first-paint>div{padding:28px 20px}}
+  </style>`;
   const schema = {
     "@context": "https://schema.org",
     "@type": page.type === "course" ? "Course" : "WebPage",
@@ -52,6 +61,7 @@ function buildSnapshotHtml(template, route, page) {
     /<meta\s+name="description"[^>]*>/i,
     `<meta name="description" content="${escapeHtml(page.description)}" />`,
   );
+  html = html.replace("</head>", `${criticalStyles}</head>`);
   html = replaceOrInsert(
     html,
     /<meta\s+name="keywords"[^>]*>/i,

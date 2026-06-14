@@ -137,6 +137,8 @@ test("SEO generator creates crawlable snapshots and a production sitemap", () =>
   );
   expect(html).toContain(page.title);
   expect(html).toContain(page.h1);
+  expect(html).toContain("data-seo-snapshot");
+  expect(html).toContain("educlub-first-paint");
   expect(html).toContain('rel="canonical" href="https://www.educlub.co.ke/courses/python-programming"');
   expect(html).not.toContain(">Old</title>");
 
