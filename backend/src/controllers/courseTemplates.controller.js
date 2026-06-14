@@ -1,4 +1,5 @@
 const courseTemplatesService = require("../services/courseTemplates.service");
+const { writeModulePdf } = require("../services/modulePdf.service");
 
 async function listTemplates(req, res) {
   try {
@@ -78,6 +79,25 @@ async function getTemplateModuleLearning(req, res) {
   } catch (error) {
     console.error("Get template module learning error:", error);
     res.status(500).json({ error: "Failed to get template module learning" });
+  }
+}
+
+async function downloadTemplateModulePdf(req, res) {
+  try {
+    const moduleLearning =
+      await courseTemplatesService.getTemplateModuleLearning(
+        req.params.templateId,
+        req.params.moduleId,
+      );
+    if (!moduleLearning) {
+      return res.status(404).json({ error: "Template module not found" });
+    }
+    writeModulePdf(res, moduleLearning);
+  } catch (error) {
+    console.error("Download template module PDF error:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to create module PDF" });
+    }
   }
 }
 
@@ -177,6 +197,7 @@ module.exports = {
   getTemplateBuilder,
   getTemplateLearningOverview,
   getTemplateModuleLearning,
+  downloadTemplateModulePdf,
   createTemplateModule,
   updateTemplateModule,
   deleteTemplateModule,

@@ -26,6 +26,12 @@ router.get(
   isSystemAdmin,
   controller.getTemplateModuleLearning,
 );
+router.get(
+  "/:templateId/modules/:moduleId/pdf",
+  authenticateToken,
+  isSystemAdmin,
+  controller.downloadTemplateModulePdf,
+);
 router.put(
   "/:templateId",
   authenticateToken,

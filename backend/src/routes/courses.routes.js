@@ -31,6 +31,12 @@ router.get(
   authenticateToken,
   coursesController.getModuleLearning,
 );
+router.get(
+  "/:courseId/modules/:moduleId/pdf",
+  authenticateToken,
+  canManageCourse,
+  coursesController.downloadModulePdf,
+);
 router.post(
   "/modules/:moduleId/feedback",
   authenticateToken,

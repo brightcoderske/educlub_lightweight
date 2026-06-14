@@ -1,4 +1,5 @@
 const coursesService = require("../services/courses.service");
+const { writeModulePdf } = require("../services/modulePdf.service");
 const fs = require("fs");
 const path = require("path");
 
@@ -169,6 +170,25 @@ async function getModuleLearning(req, res) {
   } catch (error) {
     console.error("Get module learning error:", error);
     res.status(500).json({ error: "Failed to get module learning view" });
+  }
+}
+
+async function downloadModulePdf(req, res) {
+  try {
+    const moduleLearning = await coursesService.getModuleLearning(
+      req.params.courseId,
+      req.params.moduleId,
+      req.user,
+    );
+    if (!moduleLearning) {
+      return res.status(404).json({ error: "Module not found or not available" });
+    }
+    writeModulePdf(res, moduleLearning);
+  } catch (error) {
+    console.error("Download module PDF error:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to create module PDF" });
+    }
   }
 }
 
@@ -546,6 +566,7 @@ module.exports = {
   deleteCourse,
   getLearningOverview,
   getModuleLearning,
+  downloadModulePdf,
   updateActivityProgress,
   getActivityDiscussion,
   addDiscussionReply,

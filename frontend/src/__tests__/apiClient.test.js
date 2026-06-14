@@ -33,3 +33,24 @@ test("does not expire the session for an ordinary permission denial", async () =
   expect(expiryListener).not.toHaveBeenCalled();
   window.removeEventListener("educlub:auth-expired", expiryListener);
 });
+
+test("downloads a PDF response with its server-provided filename", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    headers: {
+      get: (name) =>
+        name.toLowerCase() === "content-disposition"
+          ? 'attachment; filename="educlub-lists.pdf"'
+          : "application/pdf",
+    },
+    blob: async () => new Blob(["pdf"], { type: "application/pdf" }),
+  });
+
+  const result = await apiClient.download("/courses/1/modules/2/pdf");
+
+  expect(result.filename).toBe("educlub-lists.pdf");
+  expect(result.blob.type).toBe("application/pdf");
+  global.fetch = originalFetch;
+});

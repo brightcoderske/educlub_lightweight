@@ -125,6 +125,16 @@ function TeacherDashboard() {
                         <MDButton
                           size="small"
                           variant="outlined"
+                          color="success"
+                          onClick={() =>
+                            navigate(`/school-admin/courses/${course.id}/preview`)
+                          }
+                        >
+                          View as Learner
+                        </MDButton>
+                        <MDButton
+                          size="small"
+                          variant="outlined"
                           color="info"
                           onClick={() => navigate(`/school-admin/courses/${course.id}/builder`)}
                         >

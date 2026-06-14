@@ -50,6 +50,8 @@ function CourseOverview() {
   const [openModules, setOpenModules] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [downloadingModule, setDownloadingModule] = useState(null);
+  const [downloadError, setDownloadError] = useState("");
 
   const loadOverview = async () => {
     setLoading(true);
@@ -76,6 +78,29 @@ function CourseOverview() {
 
   const toggleModule = (moduleId) => {
     setOpenModules((current) => ({ ...current, [moduleId]: !current[moduleId] }));
+  };
+
+  const downloadModulePdf = async (moduleId) => {
+    setDownloadingModule(moduleId);
+    setDownloadError("");
+    try {
+      const endpoint = templatePreviewMode
+        ? `/course-templates/${entityId}/modules/${moduleId}/pdf`
+        : `/courses/${entityId}/modules/${moduleId}/pdf`;
+      const { blob, filename } = await apiClient.download(endpoint);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setDownloadError(err.message || "Failed to download module PDF.");
+    } finally {
+      setDownloadingModule(null);
+    }
   };
 
   return (
@@ -110,6 +135,11 @@ function CourseOverview() {
             <MDTypography variant="body2" color="warning" fontWeight="medium">
               Preview mode uses learner sequencing but does not save learner progress.
             </MDTypography>
+            {downloadError && (
+              <MDTypography variant="caption" color="error" display="block" mt={0.5}>
+                {downloadError}
+              </MDTypography>
+            )}
           </MDBox>
         )}
 
@@ -270,7 +300,20 @@ function CourseOverview() {
                               </MDBox>
                             ))
                           )}
-                          <MDBox display="flex" justifyContent="flex-end" mt={2}>
+                          <MDBox display="flex" justifyContent="flex-end" gap={1} mt={2}>
+                            {previewMode && (
+                              <MDButton
+                                variant="outlined"
+                                color="info"
+                                disabled={downloadingModule === courseModule.id}
+                                startIcon={<Icon fontSize="small">picture_as_pdf</Icon>}
+                                onClick={() => downloadModulePdf(courseModule.id)}
+                              >
+                                {downloadingModule === courseModule.id
+                                  ? "Preparing..."
+                                  : "Download PDF"}
+                              </MDButton>
+                            )}
                             <MDButton
                               variant="gradient"
                               color="success"

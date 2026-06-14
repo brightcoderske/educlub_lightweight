@@ -106,6 +106,25 @@ class ApiClient {
     return this.request("GET", endpoint);
   }
 
+  async download(endpoint) {
+    await this.refreshSessionIfNeeded();
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      method: "GET",
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      return this.parseResponse(response);
+    }
+
+    const disposition = response.headers.get("content-disposition") || "";
+    const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+    return {
+      blob: await response.blob(),
+      filename: filenameMatch?.[1] || "educlub-module.pdf",
+    };
+  }
+
   async post(endpoint, data) {
     return this.request("POST", endpoint, data);
   }
