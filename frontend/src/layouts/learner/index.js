@@ -25,6 +25,7 @@ import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
 import { activityLearningPath, findContinueLearning } from "./learningNavigation";
+import { buildDueThisWeekItems, findActiveWeekLearning } from "./dashboardDueItems";
 
 const apiOrigin = new URL(API_BASE_URL).origin;
 
@@ -140,9 +141,11 @@ function LearnerDashboard() {
         apiClient.get("/academic/terms").catch(() => []),
         apiClient.get("/academic/terms/current").catch(() => null),
       ]);
-      const [competitionsRes, badgesRes] = await Promise.all([
+      const [competitionsRes, badgesRes, typingTestsRes, quizTestsRes] = await Promise.all([
         apiClient.get("/competitions").catch(() => []),
         apiClient.get("/courses/learner/badges").catch(() => []),
+        apiClient.get("/typing/tests?test_type=weekly").catch(() => []),
+        apiClient.get("/quiz-tests/tests?quiz_type=weekly").catch(() => []),
       ]);
       const featured =
         competitionsRes.find(
@@ -175,12 +178,6 @@ function LearnerDashboard() {
       }
 
       const response = await apiClient.get("/allocations");
-      const today = new Date();
-      const monday = new Date(today);
-      monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-      monday.setHours(0, 0, 0, 0);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 7);
       const overviews = await Promise.all(
         response
           .filter((allocation) => ["active", "in_progress"].includes(allocation.status))
@@ -191,22 +188,14 @@ function LearnerDashboard() {
               .catch(() => null)
           )
       );
-      const nextDueItems = overviews.filter(Boolean).flatMap(({ allocation, overview }) =>
-        (overview.modules || [])
-          .filter((module) => {
-            const opensAt = module.opens_at ? new Date(module.opens_at) : null;
-            return opensAt && opensAt >= monday && opensAt < sunday;
-          })
-          .map((module) => ({
-            courseId: allocation.course_id,
-            courseName: allocation.course_name,
-            moduleId: module.id,
-            moduleTitle: module.title,
-            completed: module.completed_activities,
-            total: module.total_activities,
-          }))
-      );
       const nextContinueLearning = findContinueLearning(overviews.filter(Boolean));
+      const activeWeekLearning =
+        findActiveWeekLearning(overviews.filter(Boolean)) || nextContinueLearning;
+      const nextDueItems = buildDueThisWeekItems({
+        typingTests: typingTestsRes,
+        quizTests: quizTestsRes,
+        continueLearning: activeWeekLearning,
+      });
       const nextStats = {
         total: response.length || 0,
         active: response.filter((a) => a.status === "active").length || 0,
@@ -427,12 +416,12 @@ function LearnerDashboard() {
                 </MDTypography>
                 {dueItems.length === 0 ? (
                   <MDTypography variant="body2" color="text">
-                    No new course modules are scheduled for this week.
+                    No quiz, typing task or active course module is due this week.
                   </MDTypography>
                 ) : (
                   <Grid container spacing={1.5}>
                     {dueItems.map((item) => (
-                      <Grid item xs={12} md={6} key={`${item.courseId}-${item.moduleId}`}>
+                      <Grid item xs={12} md={4} key={item.id}>
                         <MDBox
                           p={1.5}
                           border="1px solid #dbeafe"
@@ -440,22 +429,18 @@ function LearnerDashboard() {
                           sx={{ bgcolor: "#eff6ff" }}
                         >
                           <MDTypography variant="button" fontWeight="bold">
-                            {item.moduleTitle}
+                            {item.title}
                           </MDTypography>
                           <MDTypography variant="caption" color="text" display="block">
-                            {item.courseName} · {item.completed}/{item.total} activities done
+                            {item.subtitle}
                           </MDTypography>
                           <MDButton
                             size="small"
                             color="info"
                             variant="text"
-                            onClick={() =>
-                              navigate(
-                                `/learner/courses/${item.courseId}/modules/${item.moduleId}/learn`
-                              )
-                            }
+                            onClick={() => navigate(item.path)}
                           >
-                            Continue
+                            {item.type === "course" ? "Continue Learning" : "Open Task"}
                           </MDButton>
                         </MDBox>
                       </Grid>

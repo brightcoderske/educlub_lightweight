@@ -832,7 +832,19 @@ function WeeklyLearning() {
       setQuizAttemptReview(review);
       setQuizMarkDrafts(
         Object.fromEntries(
-          (review.attempts || []).map((attempt) => [attempt.id, attempt.earned_points])
+          (review.attempts || []).map((attempt) => [
+            attempt.id,
+            Object.fromEntries(
+              (review.test?.questions || []).map((question) => [
+                question.id,
+                Number(
+                  attempt.feedback?.[question.id]?.points ??
+                    attempt.feedback?.[String(question.id)]?.points ??
+                    0
+                ),
+              ])
+            ),
+          ])
         )
       );
     } catch (err) {
@@ -849,7 +861,7 @@ function WeeklyLearning() {
     setSavingQuizAttemptId(attempt.id);
     try {
       const updated = await apiClient.put(`/quiz-tests/attempts/${attempt.id}/marks`, {
-        earned_points: quizMarkDrafts[attempt.id],
+        question_marks: quizMarkDrafts[attempt.id],
       });
       setQuizAttemptReview((current) => ({
         ...current,
@@ -866,6 +878,27 @@ function WeeklyLearning() {
       setSavingQuizAttemptId(null);
     }
   };
+
+  const reviewedQuestionResult = (attempt, question) => {
+    const maxPoints = Number(question.points || 0);
+    const savedResult =
+      attempt.feedback?.[question.id] ?? attempt.feedback?.[String(question.id)] ?? {};
+    const points = Number(
+      quizMarkDrafts[attempt.id]?.[question.id] ??
+        quizMarkDrafts[attempt.id]?.[String(question.id)] ??
+        savedResult.points ??
+        0
+    );
+    if (points >= maxPoints) return { points, status: "Right", color: "success" };
+    if (points > 0) return { points, status: "Partly right", color: "warning" };
+    return { points: 0, status: "Wrong", color: "error" };
+  };
+
+  const reviewedAttemptTotal = (attempt) =>
+    (quizAttemptReview?.test?.questions || []).reduce(
+      (sum, question) => sum + reviewedQuestionResult(attempt, question).points,
+      0
+    );
 
   const openQuizTest = async (test) => {
     setError("");
@@ -2966,23 +2999,6 @@ function WeeklyLearning() {
                         </MDTypography>
                       </MDBox>
                       <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
-                        <MDInput
-                          type="number"
-                          label={`Mark / ${attempt.total_points}`}
-                          value={quizMarkDrafts[attempt.id] ?? attempt.earned_points}
-                          inputProps={{
-                            min: 0,
-                            max: attempt.total_points,
-                            step: "any",
-                          }}
-                          onChange={(event) =>
-                            setQuizMarkDrafts((current) => ({
-                              ...current,
-                              [attempt.id]: event.target.value,
-                            }))
-                          }
-                          sx={{ width: 120 }}
-                        />
                         <MDButton
                           variant="gradient"
                           color="info"
@@ -2990,12 +3006,14 @@ function WeeklyLearning() {
                           disabled={savingQuizAttemptId === attempt.id}
                           onClick={() => saveQuizAttemptMarks(attempt)}
                         >
-                          {savingQuizAttemptId === attempt.id ? "Saving..." : "Save Mark"}
+                          {savingQuizAttemptId === attempt.id ? "Saving..." : "Save Reviewed Marks"}
                         </MDButton>
                         <Chip
-                          label={`${attempt.earned_points} / ${attempt.total_points} (${attempt.score}%)`}
+                          label={`${reviewedAttemptTotal(attempt)} / ${attempt.total_points}`}
                           color={
-                            Number(attempt.score) >= Number(quizAttemptReview.test?.pass_score || 0)
+                            attempt.total_points &&
+                            (reviewedAttemptTotal(attempt) / attempt.total_points) * 100 >=
+                              Number(quizAttemptReview.test?.pass_score || 0)
                               ? "success"
                               : "warning"
                           }
@@ -3009,18 +3027,26 @@ function WeeklyLearning() {
                           attempt.answers?.[question.id] ??
                           attempt.answers?.[question.position] ??
                           attempt.answers?.[String(question.position)];
-                        const result =
-                          attempt.feedback?.[question.id] ??
-                          attempt.feedback?.[String(question.id)] ??
-                          {};
+                        const reviewed = reviewedQuestionResult(attempt, question);
                         return (
                           <MDBox
                             key={question.id}
                             p={1.25}
                             borderRadius="md"
                             sx={{
-                              bgcolor: result.correct ? "#ecfdf5" : "#fff7ed",
-                              border: `1px solid ${result.correct ? "#a7f3d0" : "#fed7aa"}`,
+                              bgcolor:
+                                reviewed.color === "success"
+                                  ? "#ecfdf5"
+                                  : reviewed.color === "warning"
+                                  ? "#fff7ed"
+                                  : "#fef2f2",
+                              border: `1px solid ${
+                                reviewed.color === "success"
+                                  ? "#a7f3d0"
+                                  : reviewed.color === "warning"
+                                  ? "#fed7aa"
+                                  : "#fecaca"
+                              }`,
                             }}
                           >
                             <MDTypography variant="caption" fontWeight="bold">
@@ -3032,13 +3058,35 @@ function WeeklyLearning() {
                             <MDTypography variant="caption" display="block" color="text">
                               Accepted answer: {formatReviewAnswer(question.correct_answer)}
                             </MDTypography>
-                            <MDTypography
-                              variant="caption"
-                              display="block"
-                              color={result.correct ? "success" : "warning"}
+                            <MDBox
+                              display="flex"
+                              alignItems="center"
+                              gap={1}
+                              mt={1}
+                              flexWrap="wrap"
                             >
-                              Awarded: {Number(result.points || 0)} / {Number(question.points || 0)}
-                            </MDTypography>
+                              <MDInput
+                                type="number"
+                                label={`Mark / ${Number(question.points || 0)}`}
+                                value={reviewed.points}
+                                inputProps={{
+                                  min: 0,
+                                  max: Number(question.points || 0),
+                                  step: "any",
+                                }}
+                                onChange={(event) =>
+                                  setQuizMarkDrafts((current) => ({
+                                    ...current,
+                                    [attempt.id]: {
+                                      ...(current[attempt.id] || {}),
+                                      [question.id]: event.target.value,
+                                    },
+                                  }))
+                                }
+                                sx={{ width: 125 }}
+                              />
+                              <Chip label={reviewed.status} color={reviewed.color} size="small" />
+                            </MDBox>
                           </MDBox>
                         );
                       })}

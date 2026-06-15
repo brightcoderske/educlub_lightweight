@@ -1,5 +1,5 @@
 const { query } = require("../config");
-const { normalizeAttemptMarks } = require("./quizAttemptMarks");
+const { normalizeQuestionMarks } = require("./quizAttemptMarks");
 const { answersMatch } = require("./quizAnswerPolicy");
 
 const QUIZ_CATEGORIES = new Set(["quiz", "maths", "science", "stem"]);
@@ -660,14 +660,29 @@ async function updateAttemptMarks(user, attemptId, data = {}) {
   const existing = result.rows[0];
   if (!existing) return null;
 
-  const marks = normalizeAttemptMarks(data.earned_points, existing.total_points);
+  const questions = await query(
+    `SELECT id, points
+     FROM quiz_test_questions
+     WHERE quiz_test_id = $1::integer
+     ORDER BY position`,
+    [existing.quiz_test_id],
+  );
+  const marks = normalizeQuestionMarks(questions.rows, data.question_marks || {});
   const updated = await query(
     `UPDATE quiz_test_attempts
      SET earned_points = $2::numeric,
-         score = $3::numeric
+         total_points = $3::numeric,
+         score = $4::numeric,
+         feedback = $5::jsonb
      WHERE id = $1::integer
      RETURNING *`,
-    [attemptId, marks.earnedPoints, marks.score],
+    [
+      attemptId,
+      marks.earnedPoints,
+      marks.totalPoints,
+      marks.score,
+      JSON.stringify(marks.feedback),
+    ],
   );
 
   if (
@@ -714,6 +729,7 @@ async function updateAttemptMarks(user, attemptId, data = {}) {
     score: marks.score,
     earned_points: marks.earnedPoints,
     total_points: marks.totalPoints,
+    feedback: marks.feedback,
   };
 }
 
