@@ -90,13 +90,19 @@ export const PUBLIC_PAGES = {
     h1: "Practical digital skills, STEM learning and online challenges for curious kids",
     eyebrow: "Learn. Build. Practise. Compete.",
     intro:
-      "eduClub gives learners a clear place to build computer confidence and future-ready skills. Children can explore progressive courses, create real projects, practise typing, answer quizzes and join engaging challenges through one focused learning platform.",
+      "eduClub gives families and schools one focused place for coding classes for kids in Kenya, typing practice for students and STEM courses for children. Learners build computer confidence through progressive courses, real projects, quizzes and engaging challenges.",
     keywords: [
       "online courses for kids Kenya",
       "STEM courses for kids Kenya",
       "digital skills for children Kenya",
       "online learning platform Kenya",
       "future skills for children",
+      "coding classes for kids kenya",
+      "typing practice for students kenya",
+      "stem courses for children kenya",
+      "scratch programming for kids kenya",
+      "computer club activities kenya",
+      "digital skills for students kenya",
     ],
     primaryCta: coursesCta,
     secondaryCta: registerCta,
@@ -144,13 +150,15 @@ export const PUBLIC_PAGES = {
     h1: "Progressive computer and STEM courses that turn learners into confident creators",
     eyebrow: "eduClub course pathways",
     intro:
-      "Our learning pathways are designed for different ages and experience levels. Learners begin with clear foundations, practise through guided examples and finish modules by building, explaining and improving meaningful projects.",
+      "Our coding classes, STEM courses and digital-skills pathways are designed for children and students at different ages and experience levels. Learners begin with clear foundations, practise through guided examples and finish modules by building, explaining and improving meaningful projects.",
     keywords: [
       "computer courses for children Kenya",
       "coding classes for kids Kenya",
       "programming courses for kids Kenya",
       "STEM learning courses Kenya",
       "project based learning for kids",
+      "stem courses for children kenya",
+      "digital skills for students kenya",
     ],
     primaryCta: registerCta,
     secondaryCta: schoolsCta,
@@ -188,10 +196,11 @@ export const PUBLIC_PAGES = {
       "Children learn Scratch coding through progressive, project-based modules with games, stories, animations, STEM challenges, quizzes and creative extension projects.",
     h1: "Scratch coding courses where children learn by creating games, stories and solutions",
     intro:
-      "The eduClub Scratch pathway welcomes beginners and keeps growing creators challenged. Learners explore blocks, events, movement, animation, variables, decisions, loops, debugging, teamwork and responsible AI ideas through complete projects.",
+      "Scratch programming for kids in Kenya should be creative, practical and progressive. The eduClub pathway welcomes beginners and keeps growing creators challenged through complete projects using blocks, events, animation, variables, decisions, loops, debugging, teamwork and responsible AI ideas.",
     keywords: [
       "Scratch coding for kids Kenya",
       "Scratch programming classes Kenya",
+      "scratch programming for kids kenya",
       "coding games for children",
       "project based Scratch course",
     ],
@@ -343,8 +352,8 @@ export const PUBLIC_PAGES = {
     h1: "Typing practice that builds speed, accuracy and confidence for schoolwork",
     eyebrow: "Keyboard skills for modern learning",
     intro:
-      "Typing is a foundation for digital learning, coding and communication. eduClub gives learners regular opportunities to practise correct technique, measure progress and apply keyboard skills in friendly challenges.",
-    keywords: ["typing practice for kids Kenya", "touch typing lessons students", "typing competition Kenya", "keyboard skills children"],
+      "Typing practice for students in Kenya builds a foundation for digital learning, coding and communication. eduClub gives learners regular opportunities to practise correct technique, measure progress and apply keyboard skills in friendly challenges.",
+    keywords: ["typing practice for kids Kenya", "typing practice for students kenya", "touch typing lessons students", "typing competition Kenya", "keyboard skills children"],
     primaryCta: registerCta,
     secondaryCta: { label: "See Competitions", path: "/competitions" },
     sections: [
@@ -419,8 +428,8 @@ export const PUBLIC_PAGES = {
     h1: "A practical LMS and future-skills programme for Kenyan schools and academies",
     eyebrow: "For schools, clubs and learning organisations",
     intro:
-      "Schools can use eduClub to organise progressive learning, allocate courses, monitor learner activity and add competitions to digital-skills programmes. The platform supports school control while giving learners a focused experience.",
-    keywords: ["LMS for schools in Kenya", "learning management system Kenya", "coding curriculum schools Kenya", "online learning tools Kenyan schools"],
+      "Schools and academies can use eduClub to organise computer club activities in Kenya, allocate progressive courses, monitor learner activity and add competitions to digital-skills programmes. The platform supports school control while giving learners a focused experience.",
+    keywords: ["LMS for schools in Kenya", "learning management system Kenya", "coding curriculum schools Kenya", "online learning tools Kenyan schools", "computer club activities kenya"],
     primaryCta: { label: "Talk to eduClub for Schools", path: "/contact" },
     secondaryCta: coursesCta,
     sections: [

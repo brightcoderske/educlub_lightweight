@@ -84,6 +84,36 @@ test("future skills pages target distinct learner needs", () => {
   ].forEach((phrase) => expect(combinedKeywords).toContain(phrase));
 });
 
+test("Kenya search phrases appear on the homepage and relevant indexed pages", () => {
+  const phrases = [
+    "coding classes for kids kenya",
+    "typing practice for students kenya",
+    "stem courses for children kenya",
+    "scratch programming for kids kenya",
+    "computer club activities kenya",
+    "digital skills for students kenya",
+  ];
+  const homepageKeywords = PUBLIC_PAGES["/"].keywords.map((keyword) => keyword.toLowerCase());
+
+  phrases.forEach((phrase) => expect(homepageKeywords).toContain(phrase));
+  expect(PUBLIC_PAGES["/courses"].keywords.map((keyword) => keyword.toLowerCase())).toEqual(
+    expect.arrayContaining([
+      "coding classes for kids kenya",
+      "stem courses for children kenya",
+      "digital skills for students kenya",
+    ])
+  );
+  expect(
+    PUBLIC_PAGES["/courses/scratch-coding"].keywords.map((keyword) => keyword.toLowerCase())
+  ).toContain("scratch programming for kids kenya");
+  expect(PUBLIC_PAGES["/typing"].keywords.map((keyword) => keyword.toLowerCase())).toContain(
+    "typing practice for students kenya"
+  );
+  expect(PUBLIC_PAGES["/for-schools"].keywords.map((keyword) => keyword.toLowerCase())).toContain(
+    "computer club activities kenya"
+  );
+});
+
 test("public navigation keeps learner login and registration immediately available", () => {
   expect(PUBLIC_NAV.utility).toEqual([
     { label: "Log In", path: "/login" },
