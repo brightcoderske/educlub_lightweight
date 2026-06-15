@@ -21,6 +21,31 @@ test("loads editable course-template fields", () => {
   expect(form.image_alt).toBe("Browser and server diagram.");
 });
 
+test("loads legacy activity learning content into the rich editor", () => {
+  const form = activityToStructuredForm({
+    activity_type: "lesson",
+    content: {
+      description: "<h2>Variables</h2><p>A variable stores information.</p>",
+    },
+  });
+
+  expect(form.description).toBe("");
+  expect(form.rich_html).toBe("<h2>Variables</h2><p>A variable stores information.</p>");
+});
+
+test("keeps a short description separate when rich learning content exists", () => {
+  const form = activityToStructuredForm({
+    activity_type: "lesson",
+    content: {
+      description: "A quick introduction to variables.",
+      rich_html: "<h2>Variables</h2><p>A variable stores information.</p>",
+    },
+  });
+
+  expect(form.description).toBe("A quick introduction to variables.");
+  expect(form.rich_html).toContain("A variable stores information.");
+});
+
 test("saves separate HTML CSS media and friendly hints", () => {
   const content = structuredFormContent(
     {

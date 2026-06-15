@@ -1,6 +1,12 @@
 export function activityToStructuredForm(activity = {}) {
   const content = activity.content || {};
   const media = content.media || {};
+  const supportsRichContent = !["quiz", "discussion"].includes(activity.activity_type);
+  const existingRichContent =
+    content.rich_html || content.body || content.text || content.instructions || "";
+  const migrateLegacyDescription =
+    supportsRichContent && !existingRichContent && Boolean(content.description);
+
   return {
     original_content: content,
     title: activity.title || "",
@@ -13,8 +19,8 @@ export function activityToStructuredForm(activity = {}) {
     pass_score: activity.pass_score || "",
     is_published: activity.is_published !== false,
     purpose: content.purpose || "",
-    description: content.description || content.body || "",
-    rich_html: content.rich_html || "",
+    description: migrateLegacyDescription ? "" : content.description || "",
+    rich_html: existingRichContent || (migrateLegacyDescription ? content.description : ""),
     discussion_prompt: content.discussion_prompt || content.prompt || "",
     starter_code: content.starter_code || content.code || "",
     starter_html: content.starter_html || "",
