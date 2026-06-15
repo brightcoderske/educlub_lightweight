@@ -79,6 +79,7 @@ function discussionCardColor(index, depth = 0) {
 
 function ExecutableRichContent({ html }) {
   const contentRef = useRef(null);
+  const [previewImage, setPreviewImage] = useState("");
 
   useEffect(() => {
     const root = contentRef.current;
@@ -115,18 +116,48 @@ function ExecutableRichContent({ html }) {
   }, [html]);
 
   return (
-    <MDBox
-      ref={contentRef}
-      mt={1}
-      sx={{
-        color: "#344767",
-        "& img": { maxWidth: "100%", borderRadius: "8px" },
-        "& iframe": { maxWidth: "100%" },
-        "& table": { width: "100%", borderCollapse: "collapse" },
-        "& td, & th": { border: "1px solid #d1d5db", padding: "6px" },
-      }}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      <MDBox
+        ref={contentRef}
+        mt={1}
+        onClick={(event) => {
+          const target = event.target;
+          if (target.tagName === "IMG") {
+            setPreviewImage(target.getAttribute("src") || "");
+            return;
+          }
+          const toggle = target.closest?.("[data-interactive-toggle]");
+          if (!toggle) return;
+          const block = toggle.closest("[data-interactive-block]");
+          const answer = block?.querySelector("[data-interactive-answer]");
+          if (!answer) return;
+          answer.hidden = !answer.hidden;
+          toggle.textContent = answer.hidden
+            ? block.dataset.interactiveBlock === "self_check"
+              ? "Check answer"
+              : "Show answer"
+            : "Hide answer";
+        }}
+        sx={{
+          color: "#344767",
+          "& img": { maxWidth: "100%", borderRadius: "8px", cursor: "zoom-in" },
+          "& iframe": { maxWidth: "100%" },
+          "& table": { width: "100%", borderCollapse: "collapse" },
+          "& td, & th": { border: "1px solid #d1d5db", padding: "6px" },
+        }}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      <Dialog open={Boolean(previewImage)} onClose={() => setPreviewImage("")} maxWidth="lg">
+        <DialogContent>
+          <MDBox
+            component="img"
+            src={previewImage}
+            alt="Expanded lesson visual"
+            sx={{ display: "block", maxWidth: "100%", maxHeight: "85vh", objectFit: "contain" }}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

@@ -33,3 +33,12 @@ test("weekly quiz review supports learner filters and editable marks", () => {
   expect(source).toContain("event.target.select()");
   expect(source).toContain("/marks");
 });
+
+test("learner rich content activates interactive blocks and expandable images", () => {
+  const learner = readSource("layouts/learner/module-learn/index.js");
+
+  expect(learner).toContain("[data-interactive-toggle]");
+  expect(learner).toContain("[data-interactive-answer]");
+  expect(learner).toContain('target.tagName === "IMG"');
+  expect(learner).toContain("setPreviewImage");
+});

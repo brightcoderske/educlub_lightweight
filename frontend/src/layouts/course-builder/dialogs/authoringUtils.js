@@ -116,6 +116,40 @@ export function hintBlockHtml({ title = "Need a hint?", body = "" }) {
   )}</div></details><p><br></p>`;
 }
 
+export function interactiveBlockHtml({
+  type = "flash_card",
+  title = "Try this",
+  prompt = "",
+  answer = "",
+}) {
+  const safeType = ["flash_card", "reveal", "self_check"].includes(type)
+    ? type
+    : "flash_card";
+  const safeTitle = escapeHtml(title);
+  const safePrompt = escapeHtml(prompt);
+  const safeAnswer = escapeHtml(answer);
+  const attributes = `data-interactive-block="${safeType}" data-block-title="${safeTitle}" data-block-prompt="${safePrompt}" data-block-answer="${safeAnswer}" contenteditable="false"`;
+
+  if (safeType === "reveal") {
+    return `<details ${attributes} style="margin:12px 0;padding:14px;border:1px solid #60a5fa;border-radius:10px;background:#eff6ff"><summary style="cursor:pointer;font-weight:700;color:#1d4ed8">${safeTitle}</summary><p style="margin:10px 0 6px;color:#334155;white-space:pre-wrap">${safePrompt}</p><div style="padding:10px;border-radius:8px;background:#ffffff;color:#334155;white-space:pre-wrap">${safeAnswer}</div></details><p><br></p>`;
+  }
+
+  const isSelfCheck = safeType === "self_check";
+  return `<div ${attributes} style="margin:12px 0;padding:16px;border:1px solid ${
+    isSelfCheck ? "#86efac" : "#c4b5fd"
+  };border-radius:12px;background:${
+    isSelfCheck ? "#f0fdf4" : "#faf5ff"
+  }"><strong style="display:block;color:${
+    isSelfCheck ? "#166534" : "#6d28d9"
+  };margin-bottom:8px">${safeTitle}</strong><p style="color:#334155;white-space:pre-wrap">${safePrompt}</p>${
+    isSelfCheck
+      ? '<input type="text" aria-label="Your answer" placeholder="Type your answer for yourself" style="box-sizing:border-box;width:100%;padding:9px 10px;margin:4px 0 10px;border:1px solid #cbd5e1;border-radius:7px" />'
+      : ""
+  }<button type="button" data-interactive-toggle="true" style="padding:8px 12px;border:0;border-radius:7px;background:${
+    isSelfCheck ? "#16a34a" : "#7c3aed"
+  };color:#ffffff;cursor:pointer">${isSelfCheck ? "Check answer" : "Show answer"}</button><div data-interactive-answer="true" hidden style="margin-top:10px;padding:10px;border-radius:8px;background:#ffffff;color:#334155;white-space:pre-wrap">${safeAnswer}</div></div><p><br></p>`;
+}
+
 export function buildEarlyUnlockPayload({
   scopeType,
   learnerIds = [],

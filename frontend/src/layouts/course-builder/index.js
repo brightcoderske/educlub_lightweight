@@ -35,6 +35,7 @@ import DisplayCodeDialog from "./dialogs/DisplayCodeDialog";
 import EarlyUnlockDialog from "./dialogs/EarlyUnlockDialog";
 import ExecutableCodeDialog from "./dialogs/ExecutableCodeDialog";
 import HintDialog from "./dialogs/HintDialog";
+import InteractiveBlockDialog from "./dialogs/InteractiveBlockDialog";
 import ResourceDialog from "./dialogs/ResourceDialog";
 import { executableSourceFromPayload } from "./dialogs/authoringUtils";
 
@@ -244,6 +245,11 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     target: null,
     values: null,
   });
+  const [interactiveDialog, setInteractiveDialog] = useState({
+    open: false,
+    target: null,
+    values: null,
+  });
 
   const serializeEditor = () => {
     if (!editorRef.current) return "";
@@ -419,6 +425,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
     const object =
       event.target.closest?.("[data-executable-code]") ||
       event.target.closest?.("[data-hint-block]") ||
+      event.target.closest?.("[data-interactive-block]") ||
       event.target.closest?.("img,table,td,th,pre,a");
     if (selectedObject && selectedObject !== object) {
       selectedObject.style.outline = "";
@@ -502,6 +509,22 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         ? {
             title: target.dataset.hintTitle || "Need a hint?",
             body: target.dataset.hintBody || "",
+          }
+        : null,
+    });
+  };
+
+  const openInteractiveDialog = (target = null) => {
+    rememberSelection();
+    setInteractiveDialog({
+      open: true,
+      target,
+      values: target
+        ? {
+            type: target.dataset.interactiveBlock || "flash_card",
+            title: target.dataset.blockTitle || "Try this",
+            prompt: target.dataset.blockPrompt || "",
+            answer: target.dataset.blockAnswer || "",
           }
         : null,
     });
@@ -615,6 +638,9 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         </IconButton>
         <IconButton title="Insert collapsible hint" onClick={() => openHintDialog()}>
           <Icon>lightbulb</Icon>
+        </IconButton>
+        <IconButton title="Insert interactive learning block" onClick={() => openInteractiveDialog()}>
+          <Icon>view_carousel</Icon>
         </IconButton>
         <IconButton
           title="Insert video or external resource"
@@ -766,6 +792,15 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
               Edit Hint
             </MDButton>
           )}
+          {selectedObject.matches("[data-interactive-block]") && (
+            <MDButton
+              size="small"
+              color="info"
+              onClick={() => openInteractiveDialog(selectedObject)}
+            >
+              Edit Interactive Block
+            </MDButton>
+          )}
           {selectedObject.matches("a") && (
             <MDButton
               size="small"
@@ -848,6 +883,12 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         initialValues={hintDialog.values}
         onClose={() => setHintDialog({ open: false, target: null, values: null })}
         onSave={(html) => insertOrReplaceHtml(html, hintDialog.target)}
+      />
+      <InteractiveBlockDialog
+        open={interactiveDialog.open}
+        initialValues={interactiveDialog.values}
+        onClose={() => setInteractiveDialog({ open: false, target: null, values: null })}
+        onSave={(html) => insertOrReplaceHtml(html, interactiveDialog.target)}
       />
     </MDBox>
   );

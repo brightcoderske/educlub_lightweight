@@ -4,6 +4,7 @@ import {
   executableBlockHtml,
   executableSourceFromPayload,
   hintBlockHtml,
+  interactiveBlockHtml,
   resourceHtml,
 } from "../layouts/course-builder/dialogs/authoringUtils";
 
@@ -55,6 +56,35 @@ test("rich text hints are collapsible and safely escaped", () => {
   expect(html).toContain("<details");
   expect(html).toContain("&lt;main&gt;");
   expect(html).toContain("&quot;heading&quot;");
+});
+
+test("interactive rich-content blocks preserve editable prompts and answers", () => {
+  const flashCard = interactiveBlockHtml({
+    type: "flash_card",
+    title: "Key term",
+    prompt: "What is a variable?",
+    answer: "A named place that stores a value.",
+  });
+  const reveal = interactiveBlockHtml({
+    type: "reveal",
+    title: "Reveal the explanation",
+    prompt: "Why do loops help?",
+    answer: "They repeat instructions without duplicating code.",
+  });
+  const selfCheck = interactiveBlockHtml({
+    type: "self_check",
+    title: "Quick check",
+    prompt: "Which block starts a Scratch project?",
+    answer: "When green flag clicked.",
+  });
+
+  expect(flashCard).toContain('data-interactive-block="flash_card"');
+  expect(flashCard).toContain('data-block-prompt="What is a variable?"');
+  expect(flashCard).toContain("Show answer");
+  expect(reveal).toContain('data-interactive-block="reveal"');
+  expect(reveal).toContain("<details");
+  expect(selfCheck).toContain('data-interactive-block="self_check"');
+  expect(selfCheck).toContain("Check answer");
 });
 
 test("early unlock payloads use selected learner records, not typed IDs", () => {
