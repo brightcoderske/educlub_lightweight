@@ -30,5 +30,6 @@ test("weekly quiz review supports learner filters and editable marks", () => {
   expect(source).toContain("saveQuizAttemptMarks");
   expect(source).toContain("question_marks");
   expect(source).toContain("Partly right");
+  expect(source).toContain("event.target.select()");
   expect(source).toContain("/marks");
 });

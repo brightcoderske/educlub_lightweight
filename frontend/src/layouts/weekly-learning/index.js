@@ -3074,6 +3074,7 @@ function WeeklyLearning() {
                                   max: Number(question.points || 0),
                                   step: "any",
                                 }}
+                                onFocus={(event) => event.target.select()}
                                 onChange={(event) =>
                                   setQuizMarkDrafts((current) => ({
                                     ...current,
