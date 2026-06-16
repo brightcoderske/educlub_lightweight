@@ -259,7 +259,7 @@ function ActivityBody({
   const activityPrompt =
     content.reflection_prompt || content.project_brief || content.submission_instructions;
   const prompt = activity.activity_type === "discussion" ? discussionPrompt : activityPrompt;
-  const showLearningContent = activity.activity_type !== "discussion";
+  const showLearningContent = activity.activity_type !== "discussion" || Boolean(richHtml);
 
   return (
     <MDBox>

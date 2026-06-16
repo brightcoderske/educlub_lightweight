@@ -217,6 +217,7 @@ function activityToManagerForm(activity) {
 function RichContentEditor({ value, onChange, onImageUpload }) {
   const editorRef = useRef(null);
   const imageInputRef = useRef(null);
+  const htmlInputRef = useRef(null);
   const savedRangeRef = useRef(null);
   const [colorAnchor, setColorAnchor] = useState(null);
   const [orderedAnchor, setOrderedAnchor] = useState(null);
@@ -224,6 +225,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
   const [tableAnchor, setTableAnchor] = useState(null);
   const [selectedObject, setSelectedObject] = useState(null);
   const [editorError, setEditorError] = useState("");
+  const [sourceMode, setSourceMode] = useState(false);
   const [resourceDialog, setResourceDialog] = useState({
     open: false,
     type: "link",
@@ -267,10 +269,75 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
       editorRef.current.innerHTML = value || "";
       setSelectedObject(null);
     }
-  }, [value]);
+  }, [value, sourceMode]);
 
   const emitChange = () => {
     onChange(serializeEditor());
+  };
+
+  const cleanImportedHtml = (html = "") => {
+    const parser = new DOMParser();
+    const document = parser.parseFromString(String(html || ""), "text/html");
+    const styleHtml = Array.from(document.head?.querySelectorAll("style") || [])
+      .map((element) => element.outerHTML)
+      .join("");
+    const importedRoot = document.body || document;
+
+    importedRoot.querySelectorAll("script,iframe,object,embed,form").forEach((element) => {
+      element.remove();
+    });
+    importedRoot.querySelectorAll("*").forEach((element) => {
+      Array.from(element.attributes).forEach((attribute) => {
+        const name = attribute.name.toLowerCase();
+        const rawValue = attribute.value || "";
+        const compactValue = rawValue.replace(/[\u0000-\u001F\u007F\s]+/g, "");
+        if (name.startsWith("on") || name === "srcdoc") {
+          element.removeAttribute(attribute.name);
+        } else if (["href", "src"].includes(name) && /^javascript:/i.test(compactValue)) {
+          element.removeAttribute(attribute.name);
+        } else if (name === "style") {
+          element.setAttribute(
+            "style",
+            rawValue
+              .replace(/expression\s*\([^)]*\)/gi, "")
+              .replace(/url\s*\(\s*(['"]?)javascript:[^)]+\)/gi, "")
+          );
+        }
+      });
+    });
+
+    return `${styleHtml}${importedRoot.innerHTML}`.trim();
+  };
+
+  const importHtmlFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!/\.html?$/i.test(file.name) && !/text\/html/i.test(file.type || "")) {
+      setEditorError("Choose an .html or .htm file.");
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setEditorError("HTML imports are capped at 1MB.");
+      return;
+    }
+    try {
+      const imported = cleanImportedHtml(await file.text());
+      if (!imported) {
+        setEditorError("That HTML file did not contain importable content.");
+        return;
+      }
+      const hasContent = Boolean((value || "").trim());
+      const shouldReplace =
+        !hasContent || window.confirm("Replace the current rich content with this HTML file?");
+      const nextValue = shouldReplace ? imported : `${value || ""}${imported}`;
+      onChange(nextValue);
+      if (editorRef.current) editorRef.current.innerHTML = nextValue;
+      setSourceMode(false);
+      setEditorError("");
+    } catch (error) {
+      setEditorError(error.message || "Could not import the HTML file.");
+    }
   };
 
   const rememberSelection = () => {
@@ -621,6 +688,19 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         <IconButton title="Upload image" onClick={() => imageInputRef.current?.click()}>
           <Icon>upload</Icon>
         </IconButton>
+        <IconButton title="Import HTML file" onClick={() => htmlInputRef.current?.click()}>
+          <Icon>upload_file</Icon>
+        </IconButton>
+        <IconButton
+          title={sourceMode ? "Use visual editor" : "Edit HTML source"}
+          onClick={() => {
+            if (!sourceMode) emitChange();
+            setSelectedObject(null);
+            setSourceMode((current) => !current);
+          }}
+        >
+          <Icon>{sourceMode ? "visibility" : "html"}</Icon>
+        </IconButton>
         <IconButton
           onClick={() =>
             insertHtml(
@@ -836,29 +916,47 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         hidden
         onChange={uploadImage}
       />
-      <MDBox
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={emitChange}
-        onClick={selectEditorObject}
-        onKeyDown={(event) => {
-          if (selectedObject && ["Delete", "Backspace"].includes(event.key)) {
-            event.preventDefault();
-            updateSelectedObject("delete");
-          }
-        }}
-        p={2}
-        border="1px solid #d1d5db"
-        borderRadius="md"
-        minHeight={220}
-        sx={{
-          bgcolor: "#ffffff",
-          outline: "none",
-          "& img": { maxWidth: "100%", borderRadius: "8px" },
-          "& table": { maxWidth: "100%" },
-        }}
+      <input
+        ref={htmlInputRef}
+        type="file"
+        accept=".html,.htm,text/html"
+        hidden
+        onChange={importHtmlFile}
       />
+      {sourceMode ? (
+        <MDInput
+          label="HTML source"
+          multiline
+          rows={14}
+          fullWidth
+          value={value || ""}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      ) : (
+        <MDBox
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={emitChange}
+          onClick={selectEditorObject}
+          onKeyDown={(event) => {
+            if (selectedObject && ["Delete", "Backspace"].includes(event.key)) {
+              event.preventDefault();
+              updateSelectedObject("delete");
+            }
+          }}
+          p={2}
+          border="1px solid #d1d5db"
+          borderRadius="md"
+          minHeight={220}
+          sx={{
+            bgcolor: "#ffffff",
+            outline: "none",
+            "& img": { maxWidth: "100%", borderRadius: "8px" },
+            "& table": { maxWidth: "100%" },
+          }}
+        />
+      )}
       <ResourceDialog
         open={resourceDialog.open}
         initialType={resourceDialog.type}
@@ -1257,7 +1355,18 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
             </MDInput>
           </Grid>
 
-          {form.activity_type === "quiz" ? (
+          <Grid item xs={12}>
+            <MDTypography variant="h6" fontWeight="bold" mb={1}>
+              Rich Content
+            </MDTypography>
+            <RichContentEditor
+              value={form.rich_html}
+              onImageUpload={onImageUpload}
+              onChange={(richHtml) => setForm({ ...form, rich_html: richHtml })}
+            />
+          </Grid>
+
+          {form.activity_type === "quiz" && (
             <Grid item xs={12}>
               <MDTypography variant="h6" fontWeight="bold" mb={1}>
                 Quiz Questions
@@ -1572,17 +1681,6 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                   Import CSV
                 </MDButton>
               </MDBox>
-            </Grid>
-          ) : (
-            <Grid item xs={12}>
-              <MDTypography variant="h6" fontWeight="bold" mb={1}>
-                Rich Content
-              </MDTypography>
-              <RichContentEditor
-                value={form.rich_html}
-                onImageUpload={onImageUpload}
-                onChange={(richHtml) => setForm({ ...form, rich_html: richHtml })}
-              />
             </Grid>
           )}
 
