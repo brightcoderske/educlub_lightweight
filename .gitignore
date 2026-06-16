@@ -15,6 +15,7 @@ backend/lti-server*.log
 frontend/lti-frontend*.log
 backend/*.tmp
 backend/*.tmp.*
+backend/*.zip
 backend/*token*.txt
 backend/secrets/*
 backend/uploads/reports/*
@@ -31,6 +32,7 @@ uploads/school-logos/*
 !uploads/school-logos/.gitkeep
 .aider*
 .cursor
+.superpowers/
 .worktrees/
 backend\.env
 .env.example
