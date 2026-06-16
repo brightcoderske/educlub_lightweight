@@ -72,6 +72,11 @@ async function uploadBanner(req, res) {
         .json({ error: "Please upload a PNG or JPG image." });
     }
 
+    const unsafeExtension = path.extname(fileName || "").toLowerCase();
+    if ([".php", ".exe", ".js", ".html", ".svg"].includes(unsafeExtension)) {
+      return res.status(400).json({ error: "Banner must be a PNG or JPG image." });
+    }
+
     const match = dataUrl.match(/^data:(image\/(?:png|jpeg|jpg));base64,(.+)$/);
     if (!match) {
       return res

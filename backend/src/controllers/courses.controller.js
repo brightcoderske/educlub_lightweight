@@ -15,6 +15,40 @@ const SUBMISSION_FILE_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
 
+const SUBMISSION_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".pdf",
+  ".txt",
+  ".doc",
+  ".docx",
+  ".sb3",
+]);
+
+const DANGEROUS_EXTENSIONS = new Set([
+  ".php",
+  ".phtml",
+  ".phar",
+  ".asp",
+  ".aspx",
+  ".jsp",
+  ".exe",
+  ".dll",
+  ".bat",
+  ".cmd",
+  ".sh",
+  ".ps1",
+  ".scr",
+  ".com",
+  ".js",
+  ".html",
+  ".htm",
+  ".svg",
+]);
+
 const SCRATCH_FILE_TYPES = [
   "application/x.scratch.sb3",
   "application/zip",
@@ -24,6 +58,10 @@ const SCRATCH_FILE_TYPES = [
 function isAllowedSubmissionFile(fileName = "", mimeType = "") {
   const extension = path.extname(fileName).toLowerCase();
   const normalizedMimeType = mimeType.toLowerCase();
+
+  if (DANGEROUS_EXTENSIONS.has(extension) || !SUBMISSION_EXTENSIONS.has(extension)) {
+    return false;
+  }
 
   if (extension === ".sb3") {
     return SCRATCH_FILE_TYPES.includes(normalizedMimeType);
@@ -54,14 +92,27 @@ function saveDataUpload(req, folder, options = {}) {
     throw new Error(options.error || "This file type is not allowed.");
   }
 
+  const originalExtension = path.extname(fileName || "").toLowerCase();
+  if (DANGEROUS_EXTENSIONS.has(originalExtension)) {
+    throw new Error(options.error || "This file type is not allowed.");
+  }
+  if (
+    originalExtension &&
+    options.allowedExtensions?.length &&
+    !options.allowedExtensions.includes(originalExtension)
+  ) {
+    throw new Error(options.error || "This file type is not allowed.");
+  }
+
   const buffer = Buffer.from(match[2], "base64");
   if (buffer.length > options.maxBytes) {
     throw new Error(options.sizeError || "This file is too large.");
   }
 
-  const extension =
-    path.extname(fileName || "").replace(".", "") ||
-    mimeType.split("/")[1].replace("jpeg", "jpg");
+  const extension = options.extensionFromMime
+    ? mimeType.split("/")[1].replace("jpeg", "jpg")
+    : path.extname(fileName || "").replace(".", "") ||
+      mimeType.split("/")[1].replace("jpeg", "jpg");
   const safeName = `${Date.now()}-${(fileName || options.defaultName || "upload")
     .replace(/\.[^.]+$/, "")
     .replace(/[^a-z0-9_-]/gi, "-")
@@ -308,8 +359,10 @@ async function uploadActivityImage(req, res) {
   try {
     const url = saveDataUpload(req, "activity-images", {
       allowedTypes: ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"],
+      allowedExtensions: [".png", ".jpg", ".jpeg", ".gif", ".webp"],
       defaultName: "activity-image",
       error: "Please upload a PNG, JPG, GIF, or WebP image.",
+      extensionFromMime: true,
       maxBytes: 2 * 1024 * 1024,
       sizeError: "Image uploads are capped at 2MB.",
     });

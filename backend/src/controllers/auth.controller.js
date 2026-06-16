@@ -1,13 +1,27 @@
 const authService = require("../services/auth.service");
+const { recordSecurityEvent } = require("../services/securityAudit.service");
 
 async function login(req, res) {
   try {
     const { email, password, trustedDeviceToken } = req.body;
     const result = await authService.login(email, password, trustedDeviceToken);
+    await recordSecurityEvent({
+      userId: result.user?.id,
+      action: "login_success",
+      details: { role: result.user?.role },
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
     res.json(result);
   } catch (error) {
     console.error("Login error:", error);
-    res.status(401).json({ error: error.message });
+    await recordSecurityEvent({
+      action: "login_failed",
+      details: { email: req.body?.email || "" },
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.status(401).json({ error: "Invalid login details" });
   }
 }
 

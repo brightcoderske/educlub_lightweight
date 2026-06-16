@@ -4,6 +4,7 @@ const {
   buildTemplateLearningOverview,
   buildTemplateModuleLearning,
 } = require("./courseTemplatePreview");
+const { sanitizeActivityContent } = require("../utils/richTextSanitizer");
 
 function normalizeCourseCategory(category) {
   if (["general", "weekly_typing", "weekly_quiz"].includes(category)) {
@@ -328,6 +329,7 @@ async function updateTemplateModule(moduleId, data = {}) {
 }
 
 async function createTemplateActivity(moduleId, data = {}) {
+  const safeContent = sanitizeActivityContent(data.content || {});
   const result = await query(
     `INSERT INTO course_template_activities (
        template_module_id, title, activity_type, content, points, position,
@@ -343,7 +345,7 @@ async function createTemplateActivity(moduleId, data = {}) {
       moduleId,
       data.title,
       data.activity_type || "lesson",
-      JSON.stringify(data.content || {}),
+      JSON.stringify(safeContent),
       data.points || 0,
       data.position || null,
       data.is_required !== false,
@@ -360,6 +362,7 @@ async function createTemplateActivity(moduleId, data = {}) {
 
 async function updateTemplateActivity(activityId, data = {}) {
   const templateId = await getTemplateIdForActivity(activityId);
+  const safeContent = sanitizeActivityContent(data.content || {});
   const result = await query(
     `UPDATE course_template_activities
      SET title = $1,
@@ -378,7 +381,7 @@ async function updateTemplateActivity(activityId, data = {}) {
     [
       data.title,
       data.activity_type || "lesson",
-      JSON.stringify(data.content || {}),
+      JSON.stringify(safeContent),
       data.points || 0,
       data.position || 1,
       data.is_required !== false,

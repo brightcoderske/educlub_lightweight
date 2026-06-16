@@ -1,12 +1,17 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
 
 const env = require("./config/env");
 const { errorHandler, notFoundHandler } = require("./middleware");
+const {
+  blockSuspiciousPaths,
+  emailAwareRateLimitKey,
+  permissionsPolicy,
+  securityHeaders,
+} = require("./middleware/security.middleware");
 const { importBuiltInTemplates } = require("./services/builtInTemplates.service");
 
 // Import routes
@@ -50,7 +55,9 @@ const rateLimitJsonHandler = (req, res, next, options) => {
 };
 
 // Security middleware
-app.use(helmet());
+app.use(blockSuspiciousPaths);
+app.use(securityHeaders(env));
+app.use(permissionsPolicy);
 app.use(
   cors({
     origin: env.corsOrigins,
@@ -62,6 +69,7 @@ app.use(
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  keyGenerator: emailAwareRateLimitKey,
   standardHeaders: true,
   legacyHeaders: false,
   message: "Too many sign-in attempts from this IP, please try again later.",
@@ -76,14 +84,10 @@ const limiter = rateLimit({
   message: "Too many requests from this IP, please try again later.",
   handler: rateLimitJsonHandler,
 });
-app.use("/api/auth/login", authLimiter);
-app.use("/api/auth/2fa/verify", authLimiter);
-app.use("/api/auth/password-reset/request", authLimiter);
-app.use("/api/auth/password-reset/confirm", authLimiter);
-app.use("/api/public/register/learner", authLimiter);
+
 app.use("/api", limiter);
 
-// Body parsing middleware
+// Body parsing middleware. Keep rawBody for signed webhook verification.
 app.use(
   express.json({
     limit: "6mb",
@@ -93,6 +97,13 @@ app.use(
   }),
 );
 app.use(express.urlencoded({ extended: true, limit: "6mb" }));
+
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/2fa/verify", authLimiter);
+app.use("/api/auth/password-reset/request", authLimiter);
+app.use("/api/auth/password-reset/confirm", authLimiter);
+app.use("/api/public/register/learner", authLimiter);
+
 app.use(
   "/uploads",
   (req, res, next) => {

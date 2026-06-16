@@ -17,6 +17,9 @@ const {
 const moduleFeedbackService = require("./moduleFeedback.service");
 const teacherAssignmentsService = require("./teacherAssignments.service");
 const { normalizeActivityGrade } = require("./gradingPolicy");
+const {
+  sanitizeActivityContent: sanitizeActivityContentForStorage,
+} = require("../utils/richTextSanitizer");
 
 function normalizeCourseCategory(category) {
   if (["general", "weekly_typing", "weekly_quiz"].includes(category)) {
@@ -1495,6 +1498,7 @@ async function deleteModule(moduleId, user = {}) {
 }
 
 async function createActivity(moduleId, data = {}) {
+  const safeContent = sanitizeActivityContentForStorage(data.content || {});
   const result = await query(
     `INSERT INTO learning_activities (
        module_id, title, activity_type, content, points, position,
@@ -1510,7 +1514,7 @@ async function createActivity(moduleId, data = {}) {
       moduleId,
       data.title,
       data.activity_type || "lesson",
-      JSON.stringify(data.content || {}),
+      JSON.stringify(safeContent),
       data.points || 0,
       data.position || null,
       data.is_required !== false,
@@ -1558,6 +1562,7 @@ async function updateActivity(activityId, user = {}, data = {}) {
 
   validateQuizAllocation(data);
   validateCodingChallenge(data);
+  const safeContent = sanitizeActivityContentForStorage(data.content || {});
   const result = await query(
     `UPDATE learning_activities
      SET title = $1,
@@ -1576,7 +1581,7 @@ async function updateActivity(activityId, user = {}, data = {}) {
     [
       data.title,
       data.activity_type || "lesson",
-      JSON.stringify(data.content || {}),
+      JSON.stringify(safeContent),
       data.points || 0,
       data.position || 1,
       data.is_required !== false,
