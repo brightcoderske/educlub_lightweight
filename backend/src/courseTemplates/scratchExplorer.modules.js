@@ -7,6 +7,8 @@ const q = (prompt, options, answer, reason) => ({
   explanation: `${answer} is correct because ${reason}`,
 });
 
+const module1RichHtml = require("./scratchExplorer.module1RichHtml");
+
 module.exports = [
   {
     title: "Module 1 - Welcome to Creative Coding",
@@ -42,6 +44,7 @@ module.exports = [
       q("Which file should be uploaded for a Scratch project?", [".sb3", ".exe", ".password", ".html only"], ".sb3", "Scratch saves editable projects in the .sb3 format."),
       q("Which text is safest in a project?", ["CoderStar welcome", "my home address", "my password", "my phone number"], "CoderStar welcome", "a nickname avoids revealing private identifying information."),
     ],
+    rich_html: module1RichHtml,
   },
   {
     title: "Module 2 - Story Studio",

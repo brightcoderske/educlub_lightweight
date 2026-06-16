@@ -1,7 +1,7 @@
 export function activityToStructuredForm(activity = {}) {
   const content = activity.content || {};
   const media = content.media || {};
-  const supportsRichContent = !["quiz", "discussion"].includes(activity.activity_type);
+  const supportsRichContent = true;
   const existingRichContent =
     content.rich_html || content.body || content.text || content.instructions || "";
   const migrateLegacyDescription =

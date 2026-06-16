@@ -102,6 +102,7 @@ function teacherNotes(module, course) {
 function moduleActivities(module, course, moduleIndex) {
   const objectives = objectivesFor(module);
   const guidedNotes = guidedNotesFor(module, course);
+  const richHtml = module.rich_html || {};
   const visualBody = [
     `Imagine the finished project: ${module.outcome}. The user should immediately understand what to do and see useful feedback after each important action.`,
     `Look for four connected parts: input or event, stored information, rule or decision, and visible output. In this module those parts use ${module.focus}.`,
@@ -132,6 +133,7 @@ function moduleActivities(module, course, moduleIndex) {
 
   return [
     activity("Launch, Objectives and Guided Notes", "lesson", "overview", {
+      rich_html: richHtml.overview,
       body: [
         module.introduction,
         numbered("Learning objectives", objectives),
@@ -148,6 +150,7 @@ function moduleActivities(module, course, moduleIndex) {
       },
     }),
     activity("See the System and Predict", "lesson", "visual_learning", {
+      rich_html: richHtml.visual_learning,
       body: visualBody,
       predict_prompt: module.predict,
       system_parts: ["input or event", "stored information", "rule or decision", "visible output"],
@@ -155,6 +158,7 @@ function moduleActivities(module, course, moduleIndex) {
       steam_connection: module.steam,
     }),
     activity("Plan the Algorithm", "coding", "algorithm", {
+      rich_html: richHtml.algorithm,
       description: `Plan ${module.outcome} before building it.`,
       body: numbered("Algorithm", module.algorithm),
       algorithm_steps: module.algorithm,
@@ -171,6 +175,7 @@ function moduleActivities(module, course, moduleIndex) {
       ],
     }, { completion_rule: "submitted" }),
     activity("Discuss, Reason and Respect", "discussion", "discussion", {
+      rich_html: richHtml.discussion,
       discussion_prompt: module.discussion.prompt,
       questions: discussionQuestions,
       sentence_starters: [
@@ -190,6 +195,7 @@ function moduleActivities(module, course, moduleIndex) {
       moderation_notes: "Use fictional or anonymous examples. Respond to ideas rather than people, explain disagreement with evidence, and do not post names, contact details, passwords, faces, voices, or other private information.",
     }, { completion_rule: "submitted" }),
     activity(`Guided Build: ${module.practice.title}`, "coding", "guided_practice", {
+      rich_html: richHtml.guided_practice,
       project_brief: module.practice.brief,
       body: [
         module.practice.brief,
@@ -205,6 +211,7 @@ function moduleActivities(module, course, moduleIndex) {
       ],
     }, { points: 5, completion_rule: "submitted" }),
     activity("Choose and Build a Main Project", "project", "main_project", {
+      rich_html: richHtml.main_project,
       project_brief: `Choose one of the two complete projects. Both practise ${module.focus} and connect to ${module.steam}.`,
       project_choices: module.projects.map((choice) => projectChoice(choice, module)),
       body: module.projects.map((choice, choiceIndex) => {
@@ -221,6 +228,7 @@ function moduleActivities(module, course, moduleIndex) {
       ...SUBMISSION,
     }, { points: 20, completion_rule: "submitted" }),
     activity(`Try It Yourself: ${module.challenge.title}`, "assignment", "challenge", {
+      rich_html: richHtml.challenge,
       project_brief: module.challenge.brief,
       body: [
         module.challenge.brief,
@@ -232,11 +240,13 @@ function moduleActivities(module, course, moduleIndex) {
       submission_instructions: "Submit the optional extension with a note explaining the new rule, evidence that the required project still works, and one limitation.",
     }, { points: 5, is_required: false, completion_rule: "submitted" }),
     activity("Knowledge Check", "quiz", "quiz", {
+      rich_html: richHtml.quiz,
       description: "Answer all five questions. Use the specific hints, read every explanation, and retry until you reach 80 percent mastery.",
       questions: quizQuestions(module, courseCode, moduleIndex + 1),
       unlimited_retries: true,
     }, { points: 10, completion_rule: "score_at_least", pass_score: 80 }),
     activity("Reflect, Explain and Submit", "reflection", "reflection", {
+      rich_html: richHtml.reflection,
       body: numbered("Reflection and evidence", reflectionPrompts),
       prompts: reflectionPrompts,
       confidence_prompt: "Choose one and explain: I need another example; I can do this with hints; I can do this independently; I can teach this idea.",
