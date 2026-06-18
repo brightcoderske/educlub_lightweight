@@ -28,11 +28,11 @@ function AppContent() {
 
   const matchedRoute =
     routes.find(
-      (route) =>
-        route.route !== "*" && matchPath({ path: route.route, end: true }, pathname)
+      (route) => route.route !== "*" && matchPath({ path: route.route, end: true }, pathname)
     ) || routes.find((route) => route.route === "*");
   const publicRoute = Boolean(matchedRoute?.public);
-  const authRoute = publicRoute || pathname.startsWith("/authentication/") || pathname === "/privacy-consent";
+  const authRoute =
+    publicRoute || pathname.startsWith("/authentication/") || pathname === "/privacy-consent";
   const focusedLearningRoute = /^\/learner\/courses\/[^/]+\/modules\/[^/]+\/learn$/.test(pathname);
   const showSidenav = Boolean(user) && !authRoute && !focusedLearningRoute;
   const sidenavRoutes = routes.filter(
@@ -81,8 +81,12 @@ function AppContent() {
       return <Navigate to={dashboardForRole(user.role)} replace />;
     }
 
+    if (user && isPublic && ["/", "/register"].includes(route)) {
+      return <Navigate to={dashboardForRole(user.role)} replace />;
+    }
+
     if (user && roles && !roles.includes(user.role)) {
-      return <Navigate to="/" replace />;
+      return <Navigate to={dashboardForRole(user.role)} replace />;
     }
 
     return component;
@@ -90,11 +94,7 @@ function AppContent() {
 
   const getRoutes = () =>
     routes.map(({ key, route, component, roles, public: isPublic }) => (
-      <Route
-        key={key}
-        path={route}
-        element={guardedElement(route, component, roles, isPublic)}
-      />
+      <Route key={key} path={route} element={guardedElement(route, component, roles, isPublic)} />
     ));
 
   if (loading) {
@@ -112,9 +112,7 @@ function AppContent() {
         />
       )}
       <IdleTimeoutGuard active={Boolean(user)} onTimeout={logout} />
-      <Routes>
-        {getRoutes()}
-      </Routes>
+      <Routes>{getRoutes()}</Routes>
     </>
   );
 }

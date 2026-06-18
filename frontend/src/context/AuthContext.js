@@ -7,9 +7,24 @@ import { AUTH_EXPIRED_EVENT } from "lib/session";
 
 const AuthContext = createContext(null);
 
+export function readStoredUserSession(storage = localStorage) {
+  const token = storage.getItem("token");
+  const userData = storage.getItem("user");
+
+  if (!token || !userData) return null;
+
+  try {
+    return JSON.parse(userData);
+  } catch (error) {
+    storage.removeItem("token");
+    storage.removeItem("user");
+    return null;
+  }
+}
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => readStoredUserSession());
+  const loading = false;
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -45,29 +60,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Check if user is logged in on mount
-    const token = localStorage.getItem("token");
-    const userData = localStorage.getItem("user");
-
-    if (token && userData) {
-      let parsedUser = null;
-      try {
-        parsedUser = JSON.parse(userData);
-      } catch (error) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        setLoading(false);
-        return;
-      }
-
-      setUser(parsedUser);
-      const onboardingPath = getOnboardingPath(parsedUser);
-      if (onboardingPath) {
+    if (user) {
+      const onboardingPath = getOnboardingPath(user);
+      if (onboardingPath && location.pathname !== onboardingPath) {
         navigate(onboardingPath, { replace: true });
       }
     }
-    setLoading(false);
-  }, []);
+  }, [location.pathname, user]);
 
   useEffect(() => {
     const expireSession = () => {

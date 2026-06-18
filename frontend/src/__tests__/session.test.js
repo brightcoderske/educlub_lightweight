@@ -1,4 +1,5 @@
 import { authResponseExpired, shouldRefreshToken, tokenSecondsRemaining } from "../lib/session";
+import { readStoredUserSession } from "../context/AuthContext";
 
 function tokenWithExpiry(expiresAtSeconds) {
   const payload = btoa(JSON.stringify({ exp: expiresAtSeconds }))
@@ -25,4 +26,33 @@ test("only authentication failures expire the local session", () => {
   expect(authResponseExpired(401, { error: "Access token required" })).toBe(true);
   expect(authResponseExpired(403, { error: "Invalid or expired token" })).toBe(true);
   expect(authResponseExpired(403, { error: "Insufficient permissions" })).toBe(false);
+});
+
+test("stored users are restored before the first auth render", () => {
+  const removed = [];
+  const storage = {
+    getItem: (key) =>
+      ({
+        token: "token",
+        user: JSON.stringify({ role: "learner", fullName: "Test Learner" }),
+      }[key] || null),
+    removeItem: (key) => removed.push(key),
+  };
+
+  expect(readStoredUserSession(storage)).toEqual({
+    role: "learner",
+    fullName: "Test Learner",
+  });
+  expect(removed).toEqual([]);
+});
+
+test("bad stored auth data is cleared", () => {
+  const removed = [];
+  const storage = {
+    getItem: (key) => ({ token: "token", user: "{bad-json" }[key] || null),
+    removeItem: (key) => removed.push(key),
+  };
+
+  expect(readStoredUserSession(storage)).toBeNull();
+  expect(removed).toEqual(["token", "user"]);
 });
