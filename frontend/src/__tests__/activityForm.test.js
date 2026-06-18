@@ -1,6 +1,8 @@
 import {
   activityToStructuredForm,
+  moveItemById,
   replaceActivityInBuilderData,
+  reorderItemsById,
   saveActivityWithFeedback,
   structuredFormContent,
 } from "../layouts/course-builder/activityForm";
@@ -67,6 +69,56 @@ test("saves separate HTML CSS media and friendly hints", () => {
   expect(content.media.image_alt).toBe("A page heading.");
   expect(content.vocabulary).toEqual([{ term: "HTML", meaning: "Structure" }]);
   expect(content.unlimited_retries).toBe(true);
+});
+
+test("preserves legacy media and automatic badge fields when hidden in the simplified editor", () => {
+  const form = activityToStructuredForm({
+    content: {
+      media: {
+        image_url: "https://example.com/image.png",
+        video_url: "https://example.com/video",
+      },
+      module_badge: { name: "Completion", image_url: "https://example.com/badge.png" },
+      rich_html: "<p>Lesson body</p>",
+    },
+  });
+
+  const content = structuredFormContent(form, []);
+
+  expect(content.media.image_url).toBe("https://example.com/image.png");
+  expect(content.media.video_url).toBe("https://example.com/video");
+  expect(content.module_badge).toEqual({
+    name: "Completion",
+    image_url: "https://example.com/badge.png",
+  });
+});
+
+test("reorders builder items by drag target and recalculates positions", () => {
+  const items = [
+    { id: 1, position: 1, title: "First" },
+    { id: 2, position: 2, title: "Second" },
+    { id: 3, position: 3, title: "Third" },
+  ];
+
+  expect(reorderItemsById(items, 3, 1)).toEqual([
+    { id: 3, position: 1, title: "Third" },
+    { id: 1, position: 2, title: "First" },
+    { id: 2, position: 3, title: "Second" },
+  ]);
+});
+
+test("moves builder items for touch controls and recalculates positions", () => {
+  const items = [
+    { id: 1, position: 1, title: "First" },
+    { id: 2, position: 2, title: "Second" },
+    { id: 3, position: 3, title: "Third" },
+  ];
+
+  expect(moveItemById(items, 1, 1)).toEqual([
+    { id: 2, position: 1, title: "Second" },
+    { id: 1, position: 2, title: "First" },
+    { id: 3, position: 3, title: "Third" },
+  ]);
 });
 
 test("keeps the activity editor open and reports a rejected save", async () => {

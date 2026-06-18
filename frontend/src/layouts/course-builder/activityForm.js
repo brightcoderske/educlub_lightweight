@@ -107,6 +107,32 @@ export async function saveActivityWithFeedback(onSave, payload) {
   }
 }
 
+export function reorderItemsById(items = [], movedId, targetId) {
+  const currentIndex = items.findIndex((item) => Number(item.id) === Number(movedId));
+  const targetIndex = items.findIndex((item) => Number(item.id) === Number(targetId));
+  if (currentIndex < 0 || targetIndex < 0 || currentIndex === targetIndex) {
+    return items;
+  }
+
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(currentIndex, 1);
+  nextItems.splice(targetIndex, 0, movedItem);
+  return nextItems.map((item, index) => ({ ...item, position: index + 1 }));
+}
+
+export function moveItemById(items = [], movedId, direction) {
+  const currentIndex = items.findIndex((item) => Number(item.id) === Number(movedId));
+  const targetIndex = currentIndex + direction;
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) {
+    return items;
+  }
+
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(currentIndex, 1);
+  nextItems.splice(targetIndex, 0, movedItem);
+  return nextItems.map((item, index) => ({ ...item, position: index + 1 }));
+}
+
 export function replaceActivityInBuilderData(data, updatedActivity) {
   if (!data || !updatedActivity) return data;
 

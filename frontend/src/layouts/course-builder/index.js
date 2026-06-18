@@ -27,7 +27,9 @@ import { apiClient } from "lib/api";
 import { useAuth } from "context/AuthContext";
 import {
   activityToStructuredForm,
+  moveItemById,
   replaceActivityInBuilderData,
+  reorderItemsById,
   saveActivityWithFeedback,
   structuredFormContent,
 } from "./activityForm";
@@ -719,7 +721,10 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         <IconButton title="Insert collapsible hint" onClick={() => openHintDialog()}>
           <Icon>lightbulb</Icon>
         </IconButton>
-        <IconButton title="Insert interactive learning block" onClick={() => openInteractiveDialog()}>
+        <IconButton
+          title="Insert interactive learning block"
+          onClick={() => openInteractiveDialog()}
+        >
           <Icon>view_carousel</Icon>
         </IconButton>
         <IconButton
@@ -1155,7 +1160,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
           </MDBox>
         )}
         <Grid container spacing={2}>
-          <Grid item xs={12} md={5}>
+          <Grid item xs={12} md={6}>
             <MDInput
               label="Activity title"
               fullWidth
@@ -1179,22 +1184,13 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
               ))}
             </MDInput>
           </Grid>
-          <Grid item xs={6} md={2}>
+          <Grid item xs={12} md={3}>
             <MDInput
               label="Marks"
               type="number"
               fullWidth
               value={form.points}
               onChange={(event) => setForm({ ...form, points: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={6} md={2}>
-            <MDInput
-              label="Position"
-              type="number"
-              fullWidth
-              value={form.position}
-              onChange={(event) => setForm({ ...form, position: event.target.value })}
             />
           </Grid>
           <Grid item xs={12}>
@@ -1244,75 +1240,7 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
               onChange={(event) => setForm({ ...form, purpose: event.target.value })}
             />
           </Grid>
-          <Grid item xs={12} md={4}>
-            <MDInput
-              label="Badge name"
-              fullWidth
-              value={form.badge_name}
-              onChange={(event) => setForm({ ...form, badge_name: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <MDInput
-              label="Milestone key"
-              fullWidth
-              value={form.milestone_key}
-              onChange={(event) => setForm({ ...form, milestone_key: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <MDInput
-              label="Image URL"
-              fullWidth
-              value={form.image_url}
-              onChange={(event) => setForm({ ...form, image_url: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <MDInput
-              label="Image alternative text"
-              fullWidth
-              value={form.image_alt}
-              onChange={(event) => setForm({ ...form, image_alt: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <MDInput
-              label="Teacher-approved external video URL"
-              fullWidth
-              value={form.video_url}
-              onChange={(event) => setForm({ ...form, video_url: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <MDInput
-              label="Video title"
-              fullWidth
-              value={form.video_title}
-              onChange={(event) => setForm({ ...form, video_title: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <MDInput
-              label="Video transcript or text alternative"
-              multiline
-              rows={3}
-              fullWidth
-              value={form.transcript}
-              onChange={(event) => setForm({ ...form, transcript: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <MDInput
-              label="Friendly hints (one per line)"
-              multiline
-              rows={3}
-              fullWidth
-              value={form.friendly_hints_text}
-              onChange={(event) => setForm({ ...form, friendly_hints_text: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={8}>
             <MDInput
               label="Teacher notes (hidden from learners)"
               multiline
@@ -1320,16 +1248,6 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
               fullWidth
               value={form.teacher_notes}
               onChange={(event) => setForm({ ...form, teacher_notes: event.target.value })}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <MDInput
-              label="Optional Level Up challenge"
-              multiline
-              rows={3}
-              fullWidth
-              value={form.level_up}
-              onChange={(event) => setForm({ ...form, level_up: event.target.value })}
             />
           </Grid>
           <Grid item xs={12} md={4}>
@@ -2161,6 +2079,7 @@ function CourseBuilder() {
   const [activityManagerOpen, setActivityManagerOpen] = useState(false);
   const [activityReviewOpen, setActivityReviewOpen] = useState(false);
   const [earlyUnlockTarget, setEarlyUnlockTarget] = useState(null);
+  const [draggingOrderItem, setDraggingOrderItem] = useState(null);
   const [activityReview, setActivityReview] = useState(null);
   const [activityReviewLoading, setActivityReviewLoading] = useState(false);
   const [activityReviewSaving, setActivityReviewSaving] = useState(false);
@@ -2476,6 +2395,47 @@ function CourseBuilder() {
     }
   };
 
+  const applyModuleOrder = async (orderedModules) => {
+    const changedModules = orderedModules.filter((courseModule) => {
+      const original = modules.find((item) => Number(item.id) === Number(courseModule.id));
+      return Number(original?.position) !== Number(courseModule.position);
+    });
+    if (!changedModules.length) return;
+
+    setData((current) => (current ? { ...current, modules: orderedModules } : current));
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await Promise.all(
+        changedModules.map((courseModule) => {
+          const endpoint = isTemplate
+            ? `/course-templates/modules/${courseModule.id}`
+            : `/courses/modules/${courseModule.id}`;
+          return apiClient.put(endpoint, {
+            ...moduleToForm(courseModule),
+            position: Number(courseModule.position),
+            unlock_at: isTemplate ? null : courseModule.unlock_at || null,
+          });
+        })
+      );
+      setMessage("Module order saved.");
+    } catch (err) {
+      setError(err.message || "Could not save module order.");
+      await loadBuilder();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reorderModules = (movedId, targetId) => {
+    applyModuleOrder(reorderItemsById(modules, movedId, targetId));
+  };
+
+  const moveModuleOrder = (movedId, direction) => {
+    applyModuleOrder(moveItemById(modules, movedId, direction));
+  };
+
   const deleteModule = async (courseModule) => {
     setSaving(true);
     setError("");
@@ -2591,6 +2551,73 @@ function CourseBuilder() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const applyActivityOrder = async (courseModule, orderedActivities) => {
+    const changedActivities = orderedActivities.filter((activity) => {
+      const original = (courseModule.activities || []).find(
+        (item) => Number(item.id) === Number(activity.id)
+      );
+      return Number(original?.position) !== Number(activity.position);
+    });
+    if (!changedActivities.length) return;
+
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            modules: (current.modules || []).map((moduleItem) =>
+              Number(moduleItem.id) === Number(courseModule.id)
+                ? { ...moduleItem, activities: orderedActivities }
+                : moduleItem
+            ),
+          }
+        : current
+    );
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await Promise.all(
+        changedActivities.map((activity) => {
+          const endpoint = isTemplate
+            ? `/course-templates/activities/${activity.id}`
+            : `/courses/activities/${activity.id}`;
+          return apiClient.put(endpoint, {
+            title: activity.title,
+            activity_type: activity.activity_type,
+            content: activity.content || {},
+            points: Number(activity.points || 0),
+            position: Number(activity.position),
+            is_required: activity.is_required !== false,
+            availability_mode: activity.availability_mode || "required",
+            completion_rule: activity.completion_rule || "manual",
+            pass_score: activity.pass_score || null,
+            is_published: activity.is_published !== false,
+          });
+        })
+      );
+      setMessage("Activity order saved.");
+    } catch (err) {
+      setError(err.message || "Could not save activity order.");
+      await loadBuilder();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reorderActivities = (courseModule, movedId, targetId) => {
+    applyActivityOrder(
+      courseModule,
+      reorderItemsById(courseModule.activities || [], movedId, targetId)
+    );
+  };
+
+  const moveActivityOrder = (courseModule, movedId, direction) => {
+    applyActivityOrder(
+      courseModule,
+      moveItemById(courseModule.activities || [], movedId, direction)
+    );
   };
 
   const syncCourse = async (action) => {
@@ -2842,14 +2869,36 @@ function CourseBuilder() {
                     </MDButton>
                   </MDBox>
                   <MDBox display="flex" flexDirection="column" gap={1}>
-                    {modules.map((courseModule) => {
+                    {modules.map((courseModule, moduleIndex) => {
                       const expanded = Boolean(expandedModules[courseModule.id]);
                       return (
                         <MDBox
                           key={courseModule.id}
+                          draggable={!saving}
+                          onDragStart={() =>
+                            setDraggingOrderItem({ type: "module", id: courseModule.id })
+                          }
+                          onDragEnd={() => setDraggingOrderItem(null)}
+                          onDragOver={(event) => {
+                            if (draggingOrderItem?.type === "module") event.preventDefault();
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            if (draggingOrderItem?.type === "module") {
+                              reorderModules(draggingOrderItem.id, courseModule.id);
+                            }
+                            setDraggingOrderItem(null);
+                          }}
                           border="1px solid #e5e7eb"
                           borderRadius="md"
                           overflow="hidden"
+                          sx={{
+                            bgcolor:
+                              draggingOrderItem?.type === "module" &&
+                              Number(draggingOrderItem.id) === Number(courseModule.id)
+                                ? "#f8fafc"
+                                : "#ffffff",
+                          }}
                         >
                           <MDBox
                             display="flex"
@@ -2858,15 +2907,38 @@ function CourseBuilder() {
                             px={1.5}
                             py={1}
                           >
-                            <MDBox minWidth={0}>
-                              <MDTypography variant="button" fontWeight="medium">
-                                {courseModule.title}
-                              </MDTypography>
-                              <MDTypography variant="caption" color="text" display="block">
-                                {courseModule.activities.length} activities
-                              </MDTypography>
+                            <MDBox display="flex" alignItems="center" gap={0.75} minWidth={0}>
+                              <Icon color="disabled" sx={{ cursor: "grab" }}>
+                                drag_indicator
+                              </Icon>
+                              <MDBox minWidth={0}>
+                                <MDTypography variant="button" fontWeight="medium">
+                                  {courseModule.title}
+                                </MDTypography>
+                                <MDTypography variant="caption" color="text" display="block">
+                                  {courseModule.activities.length} activities
+                                </MDTypography>
+                              </MDBox>
                             </MDBox>
                             <MDBox display="flex" alignItems="center" gap={0.5}>
+                              <MDBox display={{ xs: "flex", md: "none" }} alignItems="center">
+                                <IconButton
+                                  size="small"
+                                  aria-label={`Move ${courseModule.title} up`}
+                                  disabled={saving || moduleIndex === 0}
+                                  onClick={() => moveModuleOrder(courseModule.id, -1)}
+                                >
+                                  <Icon>keyboard_arrow_up</Icon>
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  aria-label={`Move ${courseModule.title} down`}
+                                  disabled={saving || moduleIndex === modules.length - 1}
+                                  onClick={() => moveModuleOrder(courseModule.id, 1)}
+                                >
+                                  <Icon>keyboard_arrow_down</Icon>
+                                </IconButton>
+                              </MDBox>
                               <Chip
                                 size="small"
                                 label={courseModule.is_published ? "Published" : "Hidden"}
@@ -2903,24 +2975,108 @@ function CourseBuilder() {
                                   No activities yet.
                                 </MDTypography>
                               ) : (
-                                courseModule.activities.map((activity) => (
+                                courseModule.activities.map((activity, activityIndex) => (
                                   <MDBox
                                     key={activity.id}
+                                    draggable={!saving}
+                                    onDragStart={(event) => {
+                                      event.stopPropagation();
+                                      setDraggingOrderItem({
+                                        type: "activity",
+                                        moduleId: courseModule.id,
+                                        id: activity.id,
+                                      });
+                                    }}
+                                    onDragEnd={(event) => {
+                                      event.stopPropagation();
+                                      setDraggingOrderItem(null);
+                                    }}
+                                    onDragOver={(event) => {
+                                      if (
+                                        draggingOrderItem?.type === "activity" &&
+                                        Number(draggingOrderItem.moduleId) ===
+                                          Number(courseModule.id)
+                                      ) {
+                                        event.preventDefault();
+                                      }
+                                    }}
+                                    onDrop={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      if (
+                                        draggingOrderItem?.type === "activity" &&
+                                        Number(draggingOrderItem.moduleId) ===
+                                          Number(courseModule.id)
+                                      ) {
+                                        reorderActivities(
+                                          courseModule,
+                                          draggingOrderItem.id,
+                                          activity.id
+                                        );
+                                      }
+                                      setDraggingOrderItem(null);
+                                    }}
                                     display="flex"
                                     alignItems="center"
                                     justifyContent="space-between"
                                     py={0.75}
                                     borderTop="1px solid #eef0f2"
+                                    sx={{
+                                      bgcolor:
+                                        draggingOrderItem?.type === "activity" &&
+                                        Number(draggingOrderItem.id) === Number(activity.id)
+                                          ? "#f8fafc"
+                                          : "transparent",
+                                    }}
                                   >
-                                    <MDBox minWidth={0}>
-                                      <MDTypography variant="caption" fontWeight="medium">
-                                        {activity.title}
-                                      </MDTypography>
-                                      <MDTypography variant="caption" color="text" display="block">
-                                        {activity.activity_type} | {activity.points || 0} marks
-                                      </MDTypography>
+                                    <MDBox
+                                      display="flex"
+                                      alignItems="center"
+                                      gap={0.75}
+                                      minWidth={0}
+                                    >
+                                      <Icon color="disabled" sx={{ cursor: "grab", fontSize: 18 }}>
+                                        drag_indicator
+                                      </Icon>
+                                      <MDBox minWidth={0}>
+                                        <MDTypography variant="caption" fontWeight="medium">
+                                          {activity.title}
+                                        </MDTypography>
+                                        <MDTypography
+                                          variant="caption"
+                                          color="text"
+                                          display="block"
+                                        >
+                                          {activity.activity_type} | {activity.points || 0} marks
+                                        </MDTypography>
+                                      </MDBox>
                                     </MDBox>
                                     <MDBox display="flex" alignItems="center" gap={0.25}>
+                                      <MDBox display={{ xs: "flex", md: "none" }}>
+                                        <IconButton
+                                          size="small"
+                                          aria-label={`Move ${activity.title} up`}
+                                          disabled={saving || activityIndex === 0}
+                                          onClick={() =>
+                                            moveActivityOrder(courseModule, activity.id, -1)
+                                          }
+                                        >
+                                          <Icon>keyboard_arrow_up</Icon>
+                                        </IconButton>
+                                        <IconButton
+                                          size="small"
+                                          aria-label={`Move ${activity.title} down`}
+                                          disabled={
+                                            saving ||
+                                            activityIndex === courseModule.activities.length - 1
+                                          }
+                                          onClick={() =>
+                                            moveActivityOrder(courseModule, activity.id, 1)
+                                          }
+                                        >
+                                          <Icon>keyboard_arrow_down</Icon>
+                                        </IconButton>
+                                      </MDBox>
                                       {!isTemplate && (
                                         <IconButton
                                           size="small"
@@ -3043,7 +3199,7 @@ function CourseBuilder() {
                           Edit Module
                         </MDTypography>
                         <Grid container spacing={1.5} mt={0.5}>
-                          <Grid item xs={12} md={5}>
+                          <Grid item xs={12} md={7}>
                             <MDInput
                               label="Module title"
                               fullWidth
@@ -3052,20 +3208,6 @@ function CourseBuilder() {
                                 setModuleEditForm({
                                   ...moduleEditForm,
                                   title: event.target.value,
-                                })
-                              }
-                            />
-                          </Grid>
-                          <Grid item xs={12} md={2}>
-                            <MDInput
-                              label="Position"
-                              type="number"
-                              fullWidth
-                              value={moduleEditForm.position}
-                              onChange={(event) =>
-                                setModuleEditForm({
-                                  ...moduleEditForm,
-                                  position: Number(event.target.value || 1),
                                 })
                               }
                             />
@@ -3154,7 +3296,7 @@ function CourseBuilder() {
                           Edit Activity
                         </MDTypography>
                         <Grid container spacing={1.5} mt={0.5}>
-                          <Grid item xs={12} md={5}>
+                          <Grid item xs={12} md={7}>
                             <MDInput
                               label="Activity title"
                               fullWidth
@@ -3188,7 +3330,7 @@ function CourseBuilder() {
                               ))}
                             </MDInput>
                           </Grid>
-                          <Grid item xs={6} md={2}>
+                          <Grid item xs={12} md={2}>
                             <MDInput
                               label="Marks"
                               type="number"
@@ -3198,20 +3340,6 @@ function CourseBuilder() {
                                 setActivityEditForm({
                                   ...activityEditForm,
                                   points: event.target.value,
-                                })
-                              }
-                            />
-                          </Grid>
-                          <Grid item xs={6} md={2}>
-                            <MDInput
-                              label="Position"
-                              type="number"
-                              fullWidth
-                              value={activityEditForm.position}
-                              onChange={(event) =>
-                                setActivityEditForm({
-                                  ...activityEditForm,
-                                  position: event.target.value,
                                 })
                               }
                             />
