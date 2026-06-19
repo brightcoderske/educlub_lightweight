@@ -175,6 +175,21 @@ async function deleteTemplateActivity(req, res) {
   }
 }
 
+async function reorderTemplateActivities(req, res) {
+  try {
+    const activities = await courseTemplatesService.reorderTemplateActivities(
+      req.params.moduleId,
+      req.body.activity_ids,
+    );
+    res.json(activities);
+  } catch (error) {
+    console.error("Reorder template activities error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to reorder activities" });
+  }
+}
+
 async function adoptTemplate(req, res) {
   try {
     const course = await courseTemplatesService.adoptTemplate(
@@ -204,5 +219,6 @@ module.exports = {
   createTemplateActivity,
   updateTemplateActivity,
   deleteTemplateActivity,
+  reorderTemplateActivities,
   adoptTemplate,
 };

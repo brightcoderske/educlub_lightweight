@@ -479,6 +479,22 @@ async function deleteActivity(req, res) {
   }
 }
 
+async function reorderActivities(req, res) {
+  try {
+    const activities = await coursesService.reorderActivities(
+      req.params.moduleId,
+      req.user,
+      req.body.activity_ids,
+    );
+    res.json(activities);
+  } catch (error) {
+    console.error("Reorder learning activities error:", error);
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to reorder activities" });
+  }
+}
+
 async function syncSchoolCourse(req, res) {
   try {
     const course = await coursesService.syncSchoolCourse(
@@ -635,6 +651,7 @@ module.exports = {
   createActivity,
   updateActivity,
   deleteActivity,
+  reorderActivities,
   syncSchoolCourse,
   rollbackSchoolCourse,
   createAvailabilityOverride,

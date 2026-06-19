@@ -410,6 +410,57 @@ async function deleteTemplateActivity(activityId) {
   if (templateId) await bumpTemplateVersion(templateId);
 }
 
+async function reorderTemplateActivities(moduleId, activityIds = []) {
+  const templateId = await getTemplateIdForModule(moduleId);
+  if (!templateId) throw new Error("Module not found.");
+
+  const orderedIds = (Array.isArray(activityIds) ? activityIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  if (!orderedIds.length) throw new Error("Activity order is required.");
+
+  const existing = await query(
+    `SELECT id
+     FROM course_template_activities
+     WHERE template_module_id = $1::integer
+       AND id = ANY($2::integer[])`,
+    [moduleId, orderedIds],
+  );
+  if (existing.rows.length !== orderedIds.length) {
+    throw new Error("Activity order contains an item outside this module.");
+  }
+
+  await query(
+    `UPDATE course_template_activities
+     SET position = -100000 - position
+     WHERE template_module_id = $1::integer
+       AND id = ANY($2::integer[])`,
+    [moduleId, orderedIds],
+  );
+
+  for (const [index, activityId] of orderedIds.entries()) {
+    await query(
+      `UPDATE course_template_activities
+       SET position = $1::integer,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE template_module_id = $2::integer
+         AND id = $3::integer`,
+      [index + 1, moduleId, activityId],
+    );
+  }
+
+  await bumpTemplateVersion(templateId);
+
+  const result = await query(
+    `SELECT *
+     FROM course_template_activities
+     WHERE template_module_id = $1::integer
+     ORDER BY position`,
+    [moduleId],
+  );
+  return result.rows;
+}
+
 async function copyActivities(templateModuleId, schoolModuleId) {
   const activities = await query(
     `SELECT *
@@ -762,6 +813,7 @@ module.exports = {
   createTemplateActivity,
   updateTemplateActivity,
   deleteTemplateActivity,
+  reorderTemplateActivities,
   adoptTemplate,
   getSchoolCourse,
   syncSchoolCourse,

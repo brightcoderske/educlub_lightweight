@@ -63,6 +63,12 @@ router.post(
   controller.createTemplateActivity,
 );
 router.put(
+  "/modules/:moduleId/activities/order",
+  authenticateToken,
+  isSystemAdmin,
+  controller.reorderTemplateActivities,
+);
+router.put(
   "/activities/:activityId",
   authenticateToken,
   isSystemAdmin,

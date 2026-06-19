@@ -184,3 +184,16 @@ test("course knowledge-check editor exposes question removal", () => {
   expect(source).toContain("const removeQuestion = (index) =>");
   expect(source).toContain("Remove Question");
 });
+
+test("activity drag and drop stores the dragged activity in dataTransfer", () => {
+  const source = require("fs").readFileSync(
+    require("path").resolve(__dirname, "../layouts/course-builder/index.js"),
+    "utf8"
+  );
+
+  expect(source).toContain("event.dataTransfer.setData");
+  expect(source).toContain("event.dataTransfer.getData");
+  expect(source).toContain('"application/educlub-activity"');
+  expect(source).toContain("/activities/order");
+  expect(source).toContain("activity_ids: orderedActivities.map");
+});

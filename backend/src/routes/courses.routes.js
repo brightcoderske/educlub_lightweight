@@ -169,6 +169,12 @@ router.post(
   coursesController.createActivity,
 );
 router.put(
+  "/modules/:moduleId/activities/order",
+  authenticateToken,
+  canManageCourse,
+  coursesController.reorderActivities,
+);
+router.put(
   "/activities/:activityId",
   authenticateToken,
   canManageCourse,

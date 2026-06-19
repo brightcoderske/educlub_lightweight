@@ -2542,8 +2542,9 @@ function CourseBuilder() {
   };
 
   const applyActivityOrder = async (courseModule, orderedActivities) => {
+    const originalActivities = courseModule.activities || [];
     const changedActivities = orderedActivities.filter((activity) => {
-      const original = (courseModule.activities || []).find(
+      const original = originalActivities.find(
         (item) => Number(item.id) === Number(activity.id)
       );
       return Number(original?.position) !== Number(activity.position);
@@ -2566,29 +2567,39 @@ function CourseBuilder() {
     setError("");
     setMessage("");
     try {
-      await Promise.all(
-        changedActivities.map((activity) => {
-          const endpoint = isTemplate
-            ? `/course-templates/activities/${activity.id}`
-            : `/courses/activities/${activity.id}`;
-          return apiClient.put(endpoint, {
-            title: activity.title,
-            activity_type: activity.activity_type,
-            content: activity.content || {},
-            points: Number(activity.points || 0),
-            position: Number(activity.position),
-            is_required: activity.is_required !== false,
-            availability_mode: activity.availability_mode || "required",
-            completion_rule: activity.completion_rule || "manual",
-            pass_score: activity.pass_score || null,
-            is_published: activity.is_published !== false,
-          });
-        })
+      const endpoint = isTemplate
+        ? `/course-templates/modules/${courseModule.id}/activities/order`
+        : `/courses/modules/${courseModule.id}/activities/order`;
+      const savedActivities = await apiClient.put(endpoint, {
+        activity_ids: orderedActivities.map((activity) => activity.id),
+      });
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              modules: (current.modules || []).map((moduleItem) =>
+                Number(moduleItem.id) === Number(courseModule.id)
+                  ? { ...moduleItem, activities: savedActivities }
+                  : moduleItem
+              ),
+            }
+          : current
       );
       setMessage("Activity order saved.");
     } catch (err) {
       setError(err.message || "Could not save activity order.");
-      await loadBuilder();
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              modules: (current.modules || []).map((moduleItem) =>
+                Number(moduleItem.id) === Number(courseModule.id)
+                  ? { ...moduleItem, activities: originalActivities }
+                  : moduleItem
+              ),
+            }
+          : current
+      );
     } finally {
       setSaving(false);
     }
@@ -2969,11 +2980,18 @@ function CourseBuilder() {
                                     draggable={!saving}
                                     onDragStart={(event) => {
                                       event.stopPropagation();
-                                      setDraggingOrderItem({
+                                      const dragPayload = {
                                         type: "activity",
                                         moduleId: courseModule.id,
                                         id: activity.id,
-                                      });
+                                      };
+                                      event.dataTransfer.effectAllowed = "move";
+                                      event.dataTransfer.setData(
+                                        "application/educlub-activity",
+                                        JSON.stringify(dragPayload)
+                                      );
+                                      event.dataTransfer.setData("text/plain", activity.title || "");
+                                      setDraggingOrderItem(dragPayload);
                                     }}
                                     onDragEnd={(event) => {
                                       event.stopPropagation();
@@ -2981,24 +2999,34 @@ function CourseBuilder() {
                                     }}
                                     onDragOver={(event) => {
                                       if (
-                                        draggingOrderItem?.type === "activity" &&
-                                        Number(draggingOrderItem.moduleId) ===
-                                          Number(courseModule.id)
+                                        event.dataTransfer.types.includes(
+                                          "application/educlub-activity"
+                                        ) ||
+                                        (draggingOrderItem?.type === "activity" &&
+                                          Number(draggingOrderItem.moduleId) ===
+                                            Number(courseModule.id))
                                       ) {
                                         event.preventDefault();
+                                        event.dataTransfer.dropEffect = "move";
                                       }
                                     }}
                                     onDrop={(event) => {
                                       event.preventDefault();
                                       event.stopPropagation();
+                                      const transferred = event.dataTransfer.getData(
+                                        "application/educlub-activity"
+                                      );
+                                      const droppedActivity = transferred
+                                        ? JSON.parse(transferred)
+                                        : draggingOrderItem;
                                       if (
-                                        draggingOrderItem?.type === "activity" &&
-                                        Number(draggingOrderItem.moduleId) ===
+                                        droppedActivity?.type === "activity" &&
+                                        Number(droppedActivity.moduleId) ===
                                           Number(courseModule.id)
                                       ) {
                                         reorderActivities(
                                           courseModule,
-                                          draggingOrderItem.id,
+                                          droppedActivity.id,
                                           activity.id
                                         );
                                       }

@@ -1617,6 +1617,64 @@ async function deleteActivity(activityId, user = {}) {
   await bumpSchoolCourseVersion(courseId);
 }
 
+async function reorderActivities(moduleId, user = {}, activityIds = []) {
+  const moduleCourse = await query(
+    "SELECT course_id FROM course_modules WHERE id = $1",
+    [moduleId],
+  );
+  const courseId = moduleCourse.rows[0]?.course_id;
+  if (!courseId) throw new Error("Module not found.");
+
+  const allowed = await assertCourseManageAccess(courseId, user);
+  if (!allowed) throw new Error("You cannot reorder activities in this module.");
+
+  const orderedIds = (Array.isArray(activityIds) ? activityIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  if (!orderedIds.length) throw new Error("Activity order is required.");
+
+  const existing = await query(
+    `SELECT id
+     FROM learning_activities
+     WHERE module_id = $1::integer
+       AND id = ANY($2::integer[])`,
+    [moduleId, orderedIds],
+  );
+  if (existing.rows.length !== orderedIds.length) {
+    throw new Error("Activity order contains an item outside this module.");
+  }
+
+  await query(
+    `UPDATE learning_activities
+     SET position = -100000 - position
+     WHERE module_id = $1::integer
+       AND id = ANY($2::integer[])`,
+    [moduleId, orderedIds],
+  );
+
+  for (const [index, activityId] of orderedIds.entries()) {
+    await query(
+      `UPDATE learning_activities
+       SET position = $1::integer,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE module_id = $2::integer
+         AND id = $3::integer`,
+      [index + 1, moduleId, activityId],
+    );
+  }
+
+  await bumpSchoolCourseVersion(courseId);
+
+  const result = await query(
+    `SELECT *
+     FROM learning_activities
+     WHERE module_id = $1::integer
+     ORDER BY position`,
+    [moduleId],
+  );
+  return result.rows;
+}
+
 async function createAvailabilityOverride(courseId, user = {}, data = {}) {
   const allowed = await assertCourseManageAccess(courseId, user);
   if (!allowed || !isSchoolStaff(user)) {
@@ -1754,6 +1812,7 @@ module.exports = {
   createManagedActivity,
   updateActivity,
   deleteActivity,
+  reorderActivities,
   getActivityDiscussion,
   addDiscussionReply,
   submitActivityWork,
