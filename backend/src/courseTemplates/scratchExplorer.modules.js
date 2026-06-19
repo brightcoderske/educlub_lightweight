@@ -8,6 +8,7 @@ const q = (prompt, options, answer, reason) => ({
 });
 
 const module1RichHtml = require("./scratchExplorer.module1RichHtml");
+const module4RichHtml = require("./scratchExplorer.module4RichHtml");
 
 module.exports = [
   {
@@ -150,6 +151,7 @@ module.exports = [
       q("What should happen before a fresh drawing test?", ["clear pen marks", "delete Scratch", "hide all sprites", "change the computer clock"], "clear pen marks", "old marks would make results difficult to compare."),
       q("What is symmetry?", ["balanced matching parts", "a random score", "a spoken answer", "one keyboard key"], "balanced matching parts", "symmetry describes correspondence across a line or around a point."),
     ],
+    rich_html: module4RichHtml,
   },
   {
     title: "Module 5 - Maze Mission",

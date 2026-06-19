@@ -113,6 +113,30 @@ test("new pathway provides sixty project choices, thirty discussions, and 150 qu
     total + module.activities[7].content.questions.length, 0), 150);
 });
 
+test("Scratch Explorer Module 4 has rich visual learning for every activity", () => {
+  const explorer = validateTemplateDefinition(
+    require("../src/courseTemplates/scratchExplorer.template"),
+  );
+  const module4 = explorer.modules.find((module) =>
+    module.title.includes("Module 4"),
+  );
+
+  assert.ok(module4, "Module 4 should exist");
+  assert.deepEqual(
+    module4.activities.map((activity) => activity.content.purpose),
+    PURPOSES,
+  );
+  for (const activity of module4.activities) {
+    assert.ok(
+      activity.content.rich_html?.length >= 1200,
+      `${activity.title} needs rich visual HTML`,
+    );
+  }
+  assert.match(module4.activities[5].content.rich_html, /Pattern and Mandala Studio/);
+  assert.match(module4.activities[5].content.rich_html, /Digital Textile or Tile/);
+  assert.match(module4.activities[7].content.rich_html, /Knowledge Check/);
+});
+
 test("AI learning includes safeguards and a Scratch-only alternative", () => {
   const aiModules = templates
     .slice(1)
