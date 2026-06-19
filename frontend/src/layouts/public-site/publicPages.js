@@ -33,16 +33,7 @@ function section(title, body, points = []) {
   return { title, body, points };
 }
 
-function coursePage({
-  title,
-  description,
-  h1,
-  intro,
-  keywords,
-  outcomes,
-  projects,
-  related,
-}) {
+function coursePage({ title, description, h1, intro, keywords, outcomes, projects, related }) {
   return {
     type: "course",
     title,
@@ -57,12 +48,12 @@ function coursePage({
       section(
         "What learners build",
         "Learners move from guided practice to independent projects. Activities combine explanation, experimentation, discussion, quizzes, reflection and practical challenges.",
-        outcomes,
+        outcomes
       ),
       section(
         "Project-based, progressive learning",
         "Each module builds on earlier skills while leaving room for personal ideas. Learners can revisit examples, try extension challenges and explain the choices they made.",
-        projects,
+        projects
       ),
     ],
     related,
@@ -84,19 +75,22 @@ function coursePage({
 export const PUBLIC_PAGES = {
   "/": {
     type: "home",
-    title: "eduClub Kenya | Online Courses, STEM Skills and Learning Tools for Kids",
+    title: "eduClub Kenya | Free Typing Tutor, Online Courses and STEM Skills for Kids",
     description:
-      "eduClub is a Kenyan learning platform where children build digital skills through progressive courses, practical projects, typing, quizzes, competitions and school-supported learning.",
-    h1: "Practical digital skills, STEM learning and online challenges for curious kids",
+      "eduClub is a Kenyan learning platform where children build digital skills through a free typing tutor, progressive courses, practical projects, quizzes, competitions and school-supported learning.",
+    h1: "Free typing tutor, digital skills and online challenges for curious kids",
     eyebrow: "Learn. Build. Practise. Compete.",
     intro:
-      "eduClub gives families and schools one focused place for coding classes for kids in Kenya, typing practice for students and STEM courses for children. Learners build computer confidence through progressive courses, real projects, quizzes and engaging challenges.",
+      "eduClub gives families and schools one focused place for coding classes for kids in Kenya, free typing practice for students and STEM courses for children. Learners build computer confidence through My Typing Tutor, progressive courses, real projects, quizzes and engaging challenges.",
     keywords: [
       "online courses for kids Kenya",
       "STEM courses for kids Kenya",
       "digital skills for children Kenya",
       "online learning platform Kenya",
       "future skills for children",
+      "free typing tutor for kids",
+      "typing practice for kids",
+      "online typing tutor for schools",
       "coding classes for kids kenya",
       "typing practice for students kenya",
       "stem courses for children kenya",
@@ -114,9 +108,9 @@ export const PUBLIC_PAGES = {
         [
           "Scratch, Python, web and mobile app development",
           "Artificial intelligence and responsible prompt engineering",
-          "Typing, computer literacy, online safety and productivity",
+          "Free typing tutor, computer literacy, online safety and productivity",
           "Data analysis, computational thinking and learning-to-learn",
-        ],
+        ]
       ),
       section(
         "Designed for active learning",
@@ -125,7 +119,7 @@ export const PUBLIC_PAGES = {
           "Progressive pathways for beginners and growing creators",
           "Project-based STEM and STEAM learning",
           "School visibility, learner progress and competitions",
-        ],
+        ]
       ),
     ],
     related: ["/courses", "/typing", "/competitions", "/holiday-bootcamps", "/for-schools"],
@@ -170,7 +164,7 @@ export const PUBLIC_PAGES = {
           "Creative coding and software development",
           "AI literacy, data thinking and responsible technology",
           "Digital foundations, typing and independent learning",
-        ],
+        ]
       ),
       section(
         "More than a collection of videos",
@@ -179,7 +173,7 @@ export const PUBLIC_PAGES = {
           "Real projects and challenges",
           "Quizzes with explanations",
           "Reflection and learner choice",
-        ],
+        ]
       ),
     ],
     related: [
@@ -204,8 +198,18 @@ export const PUBLIC_PAGES = {
       "coding games for children",
       "project based Scratch course",
     ],
-    outcomes: ["Sequence instructions", "Debug projects", "Use variables and decisions", "Design interactive stories and games"],
-    projects: ["Animated stories", "STEM simulations", "Educational games", "Community problem-solving projects"],
+    outcomes: [
+      "Sequence instructions",
+      "Debug projects",
+      "Use variables and decisions",
+      "Design interactive stories and games",
+    ],
+    projects: [
+      "Animated stories",
+      "STEM simulations",
+      "Educational games",
+      "Community problem-solving projects",
+    ],
     related: ["/courses/python-programming", "/holiday-bootcamps", "/competitions"],
   }),
   "/courses/python-programming": coursePage({
@@ -221,9 +225,23 @@ export const PUBLIC_PAGES = {
       "learn coding online Kenya",
       "beginner programming course students",
     ],
-    outcomes: ["Read and write Python", "Break problems into steps", "Test and debug code", "Create reusable functions"],
-    projects: ["Quiz programs", "Number games", "Useful calculators", "Data and automation mini-projects"],
-    related: ["/courses/scratch-coding", "/courses/data-analysis", "/courses/artificial-intelligence"],
+    outcomes: [
+      "Read and write Python",
+      "Break problems into steps",
+      "Test and debug code",
+      "Create reusable functions",
+    ],
+    projects: [
+      "Quiz programs",
+      "Number games",
+      "Useful calculators",
+      "Data and automation mini-projects",
+    ],
+    related: [
+      "/courses/scratch-coding",
+      "/courses/data-analysis",
+      "/courses/artificial-intelligence",
+    ],
   }),
   "/courses/web-development": coursePage({
     title: "Web Development Classes for Kids and Teens in Kenya | eduClub",
@@ -238,9 +256,23 @@ export const PUBLIC_PAGES = {
       "website design course for teens",
       "coding projects for learners",
     ],
-    outcomes: ["Structure accessible pages", "Create responsive styles", "Add JavaScript interaction", "Test across screen sizes"],
-    projects: ["Personal portfolio", "School information site", "Interactive quiz", "Community campaign website"],
-    related: ["/courses/mobile-app-development", "/courses/python-programming", "/holiday-bootcamps"],
+    outcomes: [
+      "Structure accessible pages",
+      "Create responsive styles",
+      "Add JavaScript interaction",
+      "Test across screen sizes",
+    ],
+    projects: [
+      "Personal portfolio",
+      "School information site",
+      "Interactive quiz",
+      "Community campaign website",
+    ],
+    related: [
+      "/courses/mobile-app-development",
+      "/courses/python-programming",
+      "/holiday-bootcamps",
+    ],
   }),
   "/courses/mobile-app-development": coursePage({
     title: "Mobile App Development for Young Learners in Kenya | eduClub",
@@ -255,9 +287,18 @@ export const PUBLIC_PAGES = {
       "mobile coding course teens",
       "young app developers Kenya",
     ],
-    outcomes: ["Plan user journeys", "Design clear interfaces", "Build app logic", "Test and improve prototypes"],
+    outcomes: [
+      "Plan user journeys",
+      "Design clear interfaces",
+      "Build app logic",
+      "Test and improve prototypes",
+    ],
     projects: ["Study planner", "Healthy habits app", "Local guide", "School or community helper"],
-    related: ["/courses/web-development", "/courses/artificial-intelligence", "/courses/data-analysis"],
+    related: [
+      "/courses/web-development",
+      "/courses/artificial-intelligence",
+      "/courses/data-analysis",
+    ],
   }),
   "/courses/data-analysis": coursePage({
     title: "Data Analysis and Spreadsheet Skills for Students in Kenya | eduClub",
@@ -272,9 +313,23 @@ export const PUBLIC_PAGES = {
       "data literacy for kids",
       "Excel learning for students Kenya",
     ],
-    outcomes: ["Organise clean data", "Use spreadsheet formulas", "Choose suitable charts", "Explain findings responsibly"],
-    projects: ["Class survey", "Weather patterns", "Reading or activity tracker", "Community data story"],
-    related: ["/courses/python-programming", "/courses/artificial-intelligence", "/courses/digital-literacy"],
+    outcomes: [
+      "Organise clean data",
+      "Use spreadsheet formulas",
+      "Choose suitable charts",
+      "Explain findings responsibly",
+    ],
+    projects: [
+      "Class survey",
+      "Weather patterns",
+      "Reading or activity tracker",
+      "Community data story",
+    ],
+    related: [
+      "/courses/python-programming",
+      "/courses/artificial-intelligence",
+      "/courses/digital-literacy",
+    ],
   }),
   "/courses/artificial-intelligence": coursePage({
     title: "Artificial Intelligence Course for Kids in Kenya | Safe AI Literacy | eduClub",
@@ -289,9 +344,23 @@ export const PUBLIC_PAGES = {
       "safe AI learning children",
       "future technology skills Kenya",
     ],
-    outcomes: ["Explain basic AI ideas", "Recognise limitations and bias", "Protect personal information", "Verify AI-assisted work"],
-    projects: ["AI decision audit", "Responsible use guide", "Human-versus-AI comparison", "AI-assisted creative plan"],
-    related: ["/courses/prompt-engineering", "/courses/data-analysis", "/courses/learning-to-learn"],
+    outcomes: [
+      "Explain basic AI ideas",
+      "Recognise limitations and bias",
+      "Protect personal information",
+      "Verify AI-assisted work",
+    ],
+    projects: [
+      "AI decision audit",
+      "Responsible use guide",
+      "Human-versus-AI comparison",
+      "AI-assisted creative plan",
+    ],
+    related: [
+      "/courses/prompt-engineering",
+      "/courses/data-analysis",
+      "/courses/learning-to-learn",
+    ],
   }),
   "/courses/prompt-engineering": coursePage({
     title: "Prompt Engineering for Students in Kenya | Responsible AI Skills | eduClub",
@@ -306,9 +375,23 @@ export const PUBLIC_PAGES = {
       "generative AI skills learners",
       "responsible AI use schools",
     ],
-    outcomes: ["Write clear prompts", "Use context and constraints", "Compare and improve outputs", "Check facts and protect privacy"],
-    projects: ["Study-support prompt", "Creative brief", "Output quality checklist", "Responsible classroom prompt guide"],
-    related: ["/courses/artificial-intelligence", "/courses/learning-to-learn", "/courses/digital-literacy"],
+    outcomes: [
+      "Write clear prompts",
+      "Use context and constraints",
+      "Compare and improve outputs",
+      "Check facts and protect privacy",
+    ],
+    projects: [
+      "Study-support prompt",
+      "Creative brief",
+      "Output quality checklist",
+      "Responsible classroom prompt guide",
+    ],
+    related: [
+      "/courses/artificial-intelligence",
+      "/courses/learning-to-learn",
+      "/courses/digital-literacy",
+    ],
   }),
   "/courses/digital-literacy": coursePage({
     title: "Digital Literacy and Computer Skills for Kids in Kenya | eduClub",
@@ -323,8 +406,18 @@ export const PUBLIC_PAGES = {
       "computer literacy classes Kenya",
       "online safety course children",
     ],
-    outcomes: ["Manage files and devices", "Create useful documents", "Research and communicate online", "Protect accounts and privacy"],
-    projects: ["Digital safety poster", "Research presentation", "Organised project folder", "Responsible communication guide"],
+    outcomes: [
+      "Manage files and devices",
+      "Create useful documents",
+      "Research and communicate online",
+      "Protect accounts and privacy",
+    ],
+    projects: [
+      "Digital safety poster",
+      "Research presentation",
+      "Organised project folder",
+      "Responsible communication guide",
+    ],
     related: ["/typing", "/courses/learning-to-learn", "/courses/web-development"],
   }),
   "/courses/learning-to-learn": coursePage({
@@ -340,25 +433,78 @@ export const PUBLIC_PAGES = {
       "self directed learning kids",
       "problem solving skills students",
     ],
-    outcomes: ["Set practical goals", "Choose study strategies", "Use feedback well", "Reflect and adapt"],
-    projects: ["Personal learning plan", "Study experiment", "Research challenge", "Progress reflection portfolio"],
+    outcomes: [
+      "Set practical goals",
+      "Choose study strategies",
+      "Use feedback well",
+      "Reflect and adapt",
+    ],
+    projects: [
+      "Personal learning plan",
+      "Study experiment",
+      "Research challenge",
+      "Progress reflection portfolio",
+    ],
     related: ["/courses/digital-literacy", "/courses/artificial-intelligence", "/quizzes"],
   }),
   "/typing": {
     type: "service",
-    title: "Typing Practice and Touch Typing for Kids in Kenya | eduClub",
+    title: "Free Typing Tutor for Kids and Schools in Kenya | eduClub",
     description:
-      "Children improve typing speed, accuracy and keyboard confidence through structured practice, quizzes, progress tracking and engaging typing competitions.",
-    h1: "Typing practice that builds speed, accuracy and confidence for schoolwork",
-    eyebrow: "Keyboard skills for modern learning",
+      "Free typing tutor for kids and schools with beginner typing lessons, touch typing practice, keyboard confidence, saved progress, speed goals, accuracy tracking and typing competitions.",
+    h1: "Free typing tutor for kids that saves progress and builds keyboard confidence",
+    eyebrow: "My Typing Tutor",
     intro:
-      "Typing practice for students in Kenya builds a foundation for digital learning, coding and communication. eduClub gives learners regular opportunities to practise correct technique, measure progress and apply keyboard skills in friendly challenges.",
-    keywords: ["typing practice for kids Kenya", "typing practice for students kenya", "touch typing lessons students", "typing competition Kenya", "keyboard skills children"],
+      "Typing practice for students in Kenya builds a foundation for digital learning, coding and communication. My Typing Tutor gives learners beginner-friendly keyboard lessons, growing levels, speed and accuracy goals, saved progress and friendly challenges inside eduClub.",
+    keywords: [
+      "free typing tutor for kids",
+      "typing practice for kids",
+      "online typing tutor for schools",
+      "typing practice for kids Kenya",
+      "typing practice for students kenya",
+      "touch typing lessons for students",
+      "keyboard practice for children",
+      "typing lessons for kids",
+      "learn typing online for kids",
+      "typing speed and accuracy practice",
+      "typing tutor Kenya",
+      "typing competition Kenya",
+      "keyboard skills children",
+    ],
     primaryCta: registerCta,
     secondaryCta: { label: "See Competitions", path: "/competitions" },
     sections: [
-      section("Build dependable keyboard habits", "Learners focus on accuracy before speed and improve through consistent, age-appropriate practice.", ["Home-row awareness", "Accuracy and rhythm", "Speed goals", "Progress reflection"]),
-      section("Useful for learners and schools", "Typing supports assignments, research, coding and computer-based assessment.", ["Individual practice", "School challenges", "Friendly competitions"]),
+      section(
+        "Build dependable keyboard habits",
+        "Learners focus on accuracy before speed and improve through consistent, age-appropriate practice that grows from short beginner drills to longer typing challenges.",
+        [
+          "Home-row awareness",
+          "Finger placement",
+          "Accuracy and rhythm",
+          "Speed goals",
+          "Progress reflection",
+        ]
+      ),
+      section(
+        "Progress that follows the learner",
+        "Typing attempts are saved for registered learners, so children can continue from where they stopped and schools can notice growth without heavy extra setup.",
+        [
+          "Saved practice progress",
+          "Net WPM and accuracy",
+          "Level progression",
+          "Teacher visibility",
+        ]
+      ),
+      section(
+        "Useful for learners and schools",
+        "Typing supports assignments, research, coding and computer-based assessment while giving schools a lightweight way to build real keyboard confidence.",
+        [
+          "Individual practice",
+          "School challenges",
+          "Friendly competitions",
+          "Digital literacy support",
+        ]
+      ),
     ],
     related: ["/competitions", "/quizzes", "/courses/digital-literacy"],
     faqs: [],
@@ -372,12 +518,25 @@ export const PUBLIC_PAGES = {
     eyebrow: "Practise, check and improve",
     intro:
       "Quizzes should support learning, not merely produce a score. eduClub activities use questions, hints and explanations to help learners notice what they understand and what deserves another attempt.",
-    keywords: ["educational quizzes for children Kenya", "online quizzes for students", "revision challenges kids", "STEM quiz Kenya"],
+    keywords: [
+      "educational quizzes for children Kenya",
+      "online quizzes for students",
+      "revision challenges kids",
+      "STEM quiz Kenya",
+    ],
     primaryCta: registerCta,
     secondaryCta: coursesCta,
     sections: [
-      section("Assessment for learning", "Learners answer, review explanations and retry where mastery matters.", ["Immediate feedback", "Hints and explanations", "Progressive challenge"]),
-      section("Varied question formats", "Activities can check recall, reasoning, ordering, matching and practical understanding.", ["Multiple choice", "Short answers", "Ordering and matching"]),
+      section(
+        "Assessment for learning",
+        "Learners answer, review explanations and retry where mastery matters.",
+        ["Immediate feedback", "Hints and explanations", "Progressive challenge"]
+      ),
+      section(
+        "Varied question formats",
+        "Activities can check recall, reasoning, ordering, matching and practical understanding.",
+        ["Multiple choice", "Short answers", "Ordering and matching"]
+      ),
     ],
     related: ["/courses", "/competitions", "/typing"],
     faqs: [],
@@ -391,12 +550,25 @@ export const PUBLIC_PAGES = {
     eyebrow: "Challenge skills, celebrate progress",
     intro:
       "eduClub competitions give learners a reason to practise and apply skills. Events can support typing, coding, maths, science and STEM while keeping rules, eligibility and results clear for participants and schools.",
-    keywords: ["school competitions Kenya", "typing competition students Kenya", "coding competitions for students", "STEM competition Kenya"],
+    keywords: [
+      "school competitions Kenya",
+      "typing competition students Kenya",
+      "coding competitions for students",
+      "STEM competition Kenya",
+    ],
     primaryCta: registerCta,
     secondaryCta: schoolsCta,
     sections: [
-      section("Skills worth practising", "Competition themes connect to useful learning rather than random clicks.", ["Typing speed and accuracy", "Coding and problem solving", "Maths, science and STEM"]),
-      section("Participation with clarity", "Open competitions display their requirements, timing and results inside the learner platform.", ["Learner dashboard", "Progress and position", "School participation"]),
+      section(
+        "Skills worth practising",
+        "Competition themes connect to useful learning rather than random clicks.",
+        ["Typing speed and accuracy", "Coding and problem solving", "Maths, science and STEM"]
+      ),
+      section(
+        "Participation with clarity",
+        "Open competitions display their requirements, timing and results inside the learner platform.",
+        ["Learner dashboard", "Progress and position", "School participation"]
+      ),
     ],
     related: ["/typing", "/quizzes", "/holiday-bootcamps"],
     faqs: [],
@@ -410,12 +582,25 @@ export const PUBLIC_PAGES = {
     eyebrow: "School-break learning",
     intro:
       "Holiday programmes create focused time for children to explore technology, collaborate and complete practical projects. Themes may include Scratch, Python, websites, AI literacy, digital creativity and STEM problem solving.",
-    keywords: ["holiday coding bootcamp Kenya", "holiday tech bootcamp Nairobi", "STEM holiday camp kids Kenya", "school holiday computer classes"],
+    keywords: [
+      "holiday coding bootcamp Kenya",
+      "holiday tech bootcamp Nairobi",
+      "STEM holiday camp kids Kenya",
+      "school holiday computer classes",
+    ],
     primaryCta: { label: "Ask About the Next Bootcamp", path: "/contact" },
     secondaryCta: coursesCta,
     sections: [
-      section("Built around projects", "Bootcamp learners work toward visible outcomes they can demonstrate and explain.", ["Coding projects", "Creative technology", "Team challenges", "Project showcase"]),
-      section("Dates confirmed before enrolment", "Contact eduClub for the next available programme, venue, age group and delivery format.", ["Online or supported delivery", "Age-appropriate groups", "Clear programme details"]),
+      section(
+        "Built around projects",
+        "Bootcamp learners work toward visible outcomes they can demonstrate and explain.",
+        ["Coding projects", "Creative technology", "Team challenges", "Project showcase"]
+      ),
+      section(
+        "Dates confirmed before enrolment",
+        "Contact eduClub for the next available programme, venue, age group and delivery format.",
+        ["Online or supported delivery", "Age-appropriate groups", "Clear programme details"]
+      ),
     ],
     related: ["/courses/scratch-coding", "/courses/python-programming", "/contact"],
     faqs: [],
@@ -429,12 +614,26 @@ export const PUBLIC_PAGES = {
     eyebrow: "For schools, clubs and learning organisations",
     intro:
       "Schools and academies can use eduClub to organise computer club activities in Kenya, allocate progressive courses, monitor learner activity and add competitions to digital-skills programmes. The platform supports school control while giving learners a focused experience.",
-    keywords: ["LMS for schools in Kenya", "learning management system Kenya", "coding curriculum schools Kenya", "online learning tools Kenyan schools", "computer club activities kenya"],
+    keywords: [
+      "LMS for schools in Kenya",
+      "learning management system Kenya",
+      "coding curriculum schools Kenya",
+      "online learning tools Kenyan schools",
+      "computer club activities kenya",
+    ],
     primaryCta: { label: "Talk to eduClub for Schools", path: "/contact" },
     secondaryCta: coursesCta,
     sections: [
-      section("One place for delivery and visibility", "School teams can manage learners, course access, activities, progress and reporting.", ["Course allocation", "Learner progress", "Teacher oversight", "Competitions and reports"]),
-      section("Progressive future-skills content", "Use ready course templates or support school-specific learning plans.", ["Scratch and coding", "Digital literacy", "AI and data", "Typing and quizzes"]),
+      section(
+        "One place for delivery and visibility",
+        "School teams can manage learners, course access, activities, progress and reporting.",
+        ["Course allocation", "Learner progress", "Teacher oversight", "Competitions and reports"]
+      ),
+      section(
+        "Progressive future-skills content",
+        "Use ready course templates or support school-specific learning plans.",
+        ["Scratch and coding", "Digital literacy", "AI and data", "Typing and quizzes"]
+      ),
     ],
     related: ["/courses", "/competitions", "/contact"],
     faqs: [],
@@ -448,12 +647,25 @@ export const PUBLIC_PAGES = {
     eyebrow: "About eduClub",
     intro:
       "eduClub is a learning platform built around practical participation. We believe children learn technology best when they create, test, discuss, reflect and improve rather than simply consuming information.",
-    keywords: ["eduClub Kenya", "future skills education Kenya", "project based learning children", "digital education organisation Kenya"],
+    keywords: [
+      "eduClub Kenya",
+      "future skills education Kenya",
+      "project based learning children",
+      "digital education organisation Kenya",
+    ],
     primaryCta: coursesCta,
     secondaryCta: { label: "Contact eduClub", path: "/contact" },
     sections: [
-      section("Our learning approach", "Content combines progressive instruction with learner choice and real projects.", ["STEM and STEAM thinking", "Projects and challenges", "Reflection and feedback"]),
-      section("Responsible technology learning", "Safety, privacy, verification and thoughtful technology use are part of future readiness.", ["Parent consent", "AI literacy", "Digital citizenship"]),
+      section(
+        "Our learning approach",
+        "Content combines progressive instruction with learner choice and real projects.",
+        ["STEM and STEAM thinking", "Projects and challenges", "Reflection and feedback"]
+      ),
+      section(
+        "Responsible technology learning",
+        "Safety, privacy, verification and thoughtful technology use are part of future readiness.",
+        ["Parent consent", "AI literacy", "Digital citizenship"]
+      ),
     ],
     related: ["/courses", "/for-schools", "/contact"],
     faqs: [],
@@ -467,12 +679,25 @@ export const PUBLIC_PAGES = {
     eyebrow: "We are ready to help",
     intro:
       "Choose the contact method that works for you. Tell us whether you are asking as a learner, parent, school, academy or programme partner so we can respond with the most useful next step.",
-    keywords: ["contact eduClub Kenya", "coding courses enquiry Kenya", "school LMS enquiry", "STEM programme contact Kenya"],
+    keywords: [
+      "contact eduClub Kenya",
+      "coding courses enquiry Kenya",
+      "school LMS enquiry",
+      "STEM programme contact Kenya",
+    ],
     primaryCta: { label: "Email Support", path: SITE_CONTACT.emailHref },
     secondaryCta: { label: "WhatsApp eduClub", path: SITE_CONTACT.whatsappHref },
     sections: [
-      section("Learners and parents", "Ask about registration, course access, competitions, typing or future holiday programmes.", [SITE_CONTACT.email, SITE_CONTACT.phoneInternational]),
-      section("Schools and academies", "Ask about LMS setup, curriculum pathways, learner tracking, competitions and partnership delivery.", ["School demonstrations", "Programme planning", "Platform support"]),
+      section(
+        "Learners and parents",
+        "Ask about registration, course access, competitions, typing or future holiday programmes.",
+        [SITE_CONTACT.email, SITE_CONTACT.phoneInternational]
+      ),
+      section(
+        "Schools and academies",
+        "Ask about LMS setup, curriculum pathways, learner tracking, competitions and partnership delivery.",
+        ["School demonstrations", "Programme planning", "Platform support"]
+      ),
     ],
     related: ["/register", "/for-schools", "/holiday-bootcamps"],
     faqs: [],
@@ -486,12 +711,25 @@ export const PUBLIC_PAGES = {
     eyebrow: "Privacy and child data",
     intro:
       "eduClub handles information needed to provide accounts, learning, course access, competitions, progress and support. Child-focused services require particular care, clear guardian involvement and appropriate school controls.",
-    keywords: ["eduClub privacy", "learner data privacy Kenya", "child online learning privacy", "school LMS data protection"],
+    keywords: [
+      "eduClub privacy",
+      "learner data privacy Kenya",
+      "child online learning privacy",
+      "school LMS data protection",
+    ],
     primaryCta: { label: "Contact Privacy Support", path: SITE_CONTACT.emailHref },
     secondaryCta: { label: "Read User Agreement", path: "/user-agreement" },
     sections: [
-      section("Information and purpose", "Registration, guardian, school, learning and technical information is used to operate and protect the service.", ["Account creation", "Learning progress", "Competitions", "Security and support"]),
-      section("Choices and questions", "Users and guardians may contact eduClub about access, correction, consent or appropriate account handling.", ["Guardian consent", "School administration", "Support requests"]),
+      section(
+        "Information and purpose",
+        "Registration, guardian, school, learning and technical information is used to operate and protect the service.",
+        ["Account creation", "Learning progress", "Competitions", "Security and support"]
+      ),
+      section(
+        "Choices and questions",
+        "Users and guardians may contact eduClub about access, correction, consent or appropriate account handling.",
+        ["Guardian consent", "School administration", "Support requests"]
+      ),
     ],
     related: ["/user-agreement", "/contact", "/register"],
     faqs: [],
@@ -505,12 +743,25 @@ export const PUBLIC_PAGES = {
     eyebrow: "Platform terms",
     intro:
       "Using eduClub means respecting other learners, protecting account details, submitting appropriate work and following course, school and competition rules. Guardians and schools support children in using the platform responsibly.",
-    keywords: ["eduClub user agreement", "online learning acceptable use", "learner platform rules", "school LMS terms"],
+    keywords: [
+      "eduClub user agreement",
+      "online learning acceptable use",
+      "learner platform rules",
+      "school LMS terms",
+    ],
     primaryCta: { label: "Register a Learner", path: "/register" },
     secondaryCta: { label: "Contact Support", path: "/contact" },
     sections: [
-      section("Responsible participation", "Users must provide appropriate information, protect accounts and avoid harmful, dishonest or disruptive behaviour.", ["Respectful communication", "Original work", "Account security", "Competition fairness"]),
-      section("Learning and availability", "Course allocation, schedules and programme availability may be controlled by schools or confirmed separately by eduClub.", ["No guaranteed placement", "Published programme details", "Reasonable platform changes"]),
+      section(
+        "Responsible participation",
+        "Users must provide appropriate information, protect accounts and avoid harmful, dishonest or disruptive behaviour.",
+        ["Respectful communication", "Original work", "Account security", "Competition fairness"]
+      ),
+      section(
+        "Learning and availability",
+        "Course allocation, schedules and programme availability may be controlled by schools or confirmed separately by eduClub.",
+        ["No guaranteed placement", "Published programme details", "Reasonable platform changes"]
+      ),
     ],
     related: ["/privacy", "/contact", "/register"],
     faqs: [],
@@ -530,7 +781,7 @@ export const PUBLIC_ALIASES = {
 };
 
 export const COURSE_PATHS = PUBLIC_PAGE_PATHS.filter(
-  (path) => PUBLIC_PAGES[path].type === "course",
+  (path) => PUBLIC_PAGES[path].type === "course"
 );
 
 export function getPublicPage(pathname) {

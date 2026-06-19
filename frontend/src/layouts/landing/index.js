@@ -40,6 +40,8 @@ const grades = Array.from({ length: 12 }, (_, index) => String(index + 1));
 
 const searchPhrases = [
   "online LMS for kids",
+  "free typing tutor for kids",
+  "typing practice for schools",
   "digital skills for children",
   "monthly national learner competitions",
   "typing competitions for students",
@@ -48,6 +50,11 @@ const searchPhrases = [
 ];
 
 const benefits = [
+  {
+    icon: "keyboard",
+    title: "Free Typing Tutor",
+    text: "My Typing Tutor helps children practise keyboard skills, grow speed and accuracy, and save progress inside their learner account.",
+  },
   {
     icon: "workspace_premium",
     title: "National Monthly Competitions",
@@ -156,11 +163,11 @@ function RegistrationLanding() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-    const title = "eduClub LMS | Digital Skills, Online Learning and Monthly Competitions for Kids";
+    const title = "eduClub LMS | Free Typing Tutor, Digital Skills and Online Learning for Kids";
     const description =
-      "eduClub is a safe online learning platform for kids with digital literacy courses, learner dashboards, typing competitions, maths challenges, science and STEM competitions, secure course access and parent consent.";
+      "eduClub is a safe online learning platform for kids with a free typing tutor, digital literacy courses, learner dashboards, typing practice, quizzes, maths challenges, science and STEM competitions, secure course access and parent consent.";
     const keywords =
-      "LMS for kids, learn online for kids, digital skills for children, digital literacy courses, monthly competitions, typing competition, maths competition, STEM competition, science competition, online learning platform for schools, learner dashboard, online courses for children";
+      "free typing tutor for kids, typing practice for kids, online typing tutor for schools, touch typing lessons for students, keyboard practice for children, LMS for kids, learn online for kids, digital skills for children, digital literacy courses, monthly competitions, typing competition, maths competition, STEM competition, science competition, online learning platform for schools, learner dashboard, online courses for children";
     const canonicalUrl = `${window.location.origin}${pathname === "/register" ? "/register" : "/"}`;
 
     document.title = title;
@@ -588,7 +595,7 @@ function RegistrationLanding() {
               fontWeight="bold"
               sx={{ maxWidth: 820, lineHeight: 1.05 }}
             >
-              Online learning and national competitions for curious kids.
+              Free typing tutor, online learning and competitions for curious kids.
             </MDTypography>
             <MDTypography
               variant="h5"
@@ -597,13 +604,15 @@ function RegistrationLanding() {
               lineHeight={1.5}
               sx={{ maxWidth: 760 }}
             >
-              eduClub helps learners build digital literacy, practise school-friendly online
-              courses, and join monthly typing, maths, science and STEM competitions from one safe
-              LMS dashboard.
+              eduClub helps learners practise typing, build digital literacy, follow school-friendly
+              online courses, and join monthly typing, maths, science and STEM competitions from one
+              safe LMS dashboard.
             </MDTypography>
             <MDBox display="flex" flexWrap="wrap" gap={1.2} mt={3}>
               {[
                 `${courseCount}+ Digital literacy courses`,
+                "Free typing tutor",
+                "Saved typing progress",
                 "Monthly typing competitions",
                 "Maths competitions",
                 "Science and STEM competitions",
@@ -655,6 +664,7 @@ function RegistrationLanding() {
               <Grid container spacing={1.2} mt={1}>
                 {[
                   "Register safely",
+                  "Practise typing",
                   "Enrol in open competitions",
                   "Learn online",
                   "Compete monthly",
@@ -677,7 +687,7 @@ function RegistrationLanding() {
               </Grid>
               <MDTypography variant="body2" color="white" lineHeight={1.6} mt={2}>
                 Built for schools, parents and learners who want a focused online learning platform
-                with secure course access, progress visibility, competition enrolment and digital
+                with secure course access, typing tutor progress, competition enrolment and digital
                 skills that children can practise every week.
               </MDTypography>
             </MDBox>
@@ -719,10 +729,11 @@ function RegistrationLanding() {
               A kids learning platform made for skill, confidence and healthy competition.
             </MDTypography>
             <MDTypography variant="body1" color="text" lineHeight={1.8} mt={2}>
-              eduClub combines an LMS for schools, online courses for kids, digital literacy
-              learning, secure course access, learner progress, parent consent and national monthly
-              competitions. Learners can register, join open competitions, pay where required, open
-              course activities and return to eduClub to see performance and position.
+              eduClub combines an LMS for schools, a free typing tutor for kids, online courses,
+              digital literacy learning, secure course access, learner progress, parent consent and
+              national monthly competitions. Learners can register, practise keyboard skills, join
+              open competitions, pay where required, open course activities and return to eduClub to
+              see performance and position.
             </MDTypography>
             <MDBox display="flex" flexWrap="wrap" gap={1} mt={2}>
               {searchPhrases.map((phrase) => (
@@ -743,7 +754,7 @@ function RegistrationLanding() {
                 {[
                   "Safe learner registration with guardian consent.",
                   "Open competitions available without school course allocation.",
-                  "Digital skills, typing, maths, science and STEM in one dashboard.",
+                  "Typing practice, digital skills, maths, science and STEM in one dashboard.",
                   "Learning access with eduClub progress and reports.",
                 ].map((item) => (
                   <MDBox key={item} display="flex" alignItems="flex-start" mt={2}>
