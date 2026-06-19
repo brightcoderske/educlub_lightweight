@@ -714,6 +714,22 @@ CREATE TABLE IF NOT EXISTS typing_attempts (
   UNIQUE(typing_lesson_id, learner_id, attempt_number)
 );
 
+CREATE TABLE IF NOT EXISTS typing_practice_attempts (
+  id SERIAL PRIMARY KEY,
+  learner_id INTEGER REFERENCES learners(id) ON DELETE CASCADE,
+  track_key VARCHAR(80) NOT NULL,
+  level_number INTEGER NOT NULL CHECK (level_number > 0),
+  activity_key VARCHAR(120) NOT NULL,
+  activity_title VARCHAR(255) NOT NULL,
+  raw_wpm NUMERIC(8, 2) DEFAULT 0,
+  net_wpm NUMERIC(8, 2) DEFAULT 0,
+  accuracy NUMERIC(5, 2) DEFAULT 0,
+  mistakes INTEGER DEFAULT 0,
+  duration_seconds INTEGER DEFAULT 0,
+  passed BOOLEAN DEFAULT FALSE,
+  submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS quiz_tests (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
@@ -1100,6 +1116,8 @@ CREATE INDEX IF NOT EXISTS idx_typing_tests_period ON typing_tests(academic_year
 CREATE INDEX IF NOT EXISTS idx_typing_tests_status ON typing_tests(is_published, is_open, deadline_at);
 CREATE INDEX IF NOT EXISTS idx_typing_lessons_test_order ON typing_lessons(typing_test_id, lesson_order);
 CREATE INDEX IF NOT EXISTS idx_typing_attempts_lookup ON typing_attempts(typing_test_id, typing_lesson_id, learner_id, attempt_number);
+CREATE INDEX IF NOT EXISTS idx_typing_practice_attempts_learner ON typing_practice_attempts(learner_id, submitted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_typing_practice_attempts_activity ON typing_practice_attempts(learner_id, track_key, level_number, activity_key);
 CREATE INDEX IF NOT EXISTS idx_quiz_tests_period ON quiz_tests(academic_year, term, week_number, quiz_type);
 CREATE INDEX IF NOT EXISTS idx_quiz_tests_status ON quiz_tests(is_published, is_open, quiz_type);
 CREATE INDEX IF NOT EXISTS idx_quiz_tests_competition ON quiz_tests(competition_id, quiz_type);
@@ -1231,6 +1249,7 @@ ALTER TABLE weekly_leaderboards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE typing_tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE typing_lessons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE typing_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE typing_practice_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quiz_tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quiz_test_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quiz_test_attempts ENABLE ROW LEVEL SECURITY;
@@ -2457,6 +2476,36 @@ CREATE POLICY typing_attempts_role_access ON typing_attempts
 
 DROP POLICY IF EXISTS typing_attempts_learner_insert ON typing_attempts;
 CREATE POLICY typing_attempts_learner_insert ON typing_attempts
+  FOR INSERT
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'learner'
+    AND EXISTS (
+      SELECT 1 FROM learners l
+      WHERE l.id = learner_id
+        AND l.user_id = (SELECT public.educlub_user_id())
+    )
+  );
+
+DROP POLICY IF EXISTS typing_practice_attempts_role_access ON typing_practice_attempts;
+CREATE POLICY typing_practice_attempts_role_access ON typing_practice_attempts
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR EXISTS (
+      SELECT 1 FROM learners l
+      WHERE l.id = learner_id
+        AND (
+          l.user_id = (SELECT public.educlub_user_id())
+          OR (
+            (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+            AND l.school_id = (SELECT public.educlub_school_id())
+          )
+        )
+    )
+  );
+
+DROP POLICY IF EXISTS typing_practice_attempts_learner_insert ON typing_practice_attempts;
+CREATE POLICY typing_practice_attempts_learner_insert ON typing_practice_attempts
   FOR INSERT
   WITH CHECK (
     (SELECT public.educlub_role()) = 'learner'

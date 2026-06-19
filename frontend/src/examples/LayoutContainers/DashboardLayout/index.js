@@ -31,6 +31,10 @@ function DashboardLayout({ children }) {
   const [controller, dispatch] = useMaterialUIController();
   const { miniSidenav } = controller;
   const { pathname } = useLocation();
+  const focusLearning =
+    pathname.startsWith("/learner/my-typing-tutor") ||
+    pathname.includes("/preview") ||
+    pathname.includes("/learn");
 
   useEffect(() => {
     setLayout(dispatch, "dashboard");
@@ -48,6 +52,9 @@ function DashboardLayout({ children }) {
 
         [breakpoints.up("xl")]: {
           marginLeft: miniSidenav ? pxToRem(120) : pxToRem(274),
+          ...(focusLearning && {
+            marginLeft: pxToRem(28),
+          }),
           transition: transitions.create(["margin-left", "margin-right"], {
             easing: transitions.easing.easeInOut,
             duration: transitions.duration.standard,

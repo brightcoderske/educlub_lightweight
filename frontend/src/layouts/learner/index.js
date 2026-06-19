@@ -328,6 +328,15 @@ function LearnerDashboard() {
               <MDButton
                 variant="gradient"
                 color="info"
+                startIcon={<Icon fontSize="small">keyboard</Icon>}
+                onClick={() => navigate("/learner/my-typing-tutor")}
+                sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
+              >
+                Typing Tutor
+              </MDButton>
+              <MDButton
+                variant="gradient"
+                color="info"
                 onClick={() => navigate("/learner/profile")}
                 sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
               >
@@ -406,6 +415,35 @@ function LearnerDashboard() {
                 }}
               />
             </MDBox>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Card>
+              <MDBox p={{ xs: 1.5, sm: 3 }}>
+                <Grid container spacing={1.5} alignItems="center">
+                  <Grid item xs={12} md={8}>
+                    <MDTypography variant="h6" fontWeight="bold">
+                      My Typing Tutor
+                    </MDTypography>
+                    <MDTypography variant="body2" color="text">
+                      Practise keyboard skills anytime. This is separate from report-card typing
+                      assessments.
+                    </MDTypography>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <MDButton
+                      fullWidth
+                      variant="gradient"
+                      color="dark"
+                      startIcon={<Icon>keyboard</Icon>}
+                      onClick={() => navigate("/learner/my-typing-tutor")}
+                    >
+                      Start Typing Practice
+                    </MDButton>
+                  </Grid>
+                </Grid>
+              </MDBox>
+            </Card>
           </Grid>
 
           <Grid item xs={12}>

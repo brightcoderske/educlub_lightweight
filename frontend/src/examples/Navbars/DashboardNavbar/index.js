@@ -53,8 +53,9 @@ import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getRoleLabel, getUserDisplayName, getUserInitials } from "lib/userDisplay";
 
-function DashboardNavbar({ absolute, light, isMini }) {
+function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
   const [navbarType, setNavbarType] = useState();
+  const [hiddenOnScroll, setHiddenOnScroll] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [feedbackUnread, setFeedbackUnread] = useState(0);
   const [notificationAnchor, setNotificationAnchor] = useState(null);
@@ -89,6 +90,21 @@ function DashboardNavbar({ absolute, light, isMini }) {
     // Remove event listener on cleanup
     return () => window.removeEventListener("scroll", handleTransparentNavbar);
   }, [dispatch, fixedNavbar]);
+
+  useEffect(() => {
+    if (!autoHideOnScroll) {
+      setHiddenOnScroll(false);
+      return undefined;
+    }
+
+    function handleHiddenNavbar() {
+      setHiddenOnScroll(window.scrollY > 48);
+    }
+
+    window.addEventListener("scroll", handleHiddenNavbar, { passive: true });
+    handleHiddenNavbar();
+    return () => window.removeEventListener("scroll", handleHiddenNavbar);
+  }, [autoHideOnScroll]);
 
   const handleMiniSidenav = () => setMiniSidenav(dispatch, !miniSidenav);
 
@@ -177,7 +193,18 @@ function DashboardNavbar({ absolute, light, isMini }) {
     <AppBar
       position={absolute ? "absolute" : navbarType}
       color="inherit"
-      sx={(theme) => navbar(theme, { transparentNavbar, absolute, light, darkMode })}
+      sx={(theme) => ({
+        ...navbar(theme, { transparentNavbar, absolute, light, darkMode }),
+        ...(autoHideOnScroll && {
+          transition: theme.transitions.create(["transform", "opacity"], {
+            easing: theme.transitions.easing.easeInOut,
+            duration: theme.transitions.duration.shorter,
+          }),
+          transform: hiddenOnScroll ? "translateY(-120%)" : "translateY(0)",
+          opacity: hiddenOnScroll ? 0 : 1,
+          pointerEvents: hiddenOnScroll ? "none" : "auto",
+        }),
+      })}
     >
       <Toolbar sx={(theme) => navbarContainer(theme)}>
         <MDBox color="inherit" mb={{ xs: 1, md: 0 }} sx={(theme) => navbarRow(theme, { isMini })}>
@@ -322,6 +349,7 @@ DashboardNavbar.defaultProps = {
   absolute: false,
   light: false,
   isMini: false,
+  autoHideOnScroll: false,
 };
 
 // Typechecking props for the DashboardNavbar
@@ -329,6 +357,7 @@ DashboardNavbar.propTypes = {
   absolute: PropTypes.bool,
   light: PropTypes.bool,
   isMini: PropTypes.bool,
+  autoHideOnScroll: PropTypes.bool,
 };
 
 export default DashboardNavbar;

@@ -19,7 +19,7 @@ import { styled } from "@mui/material/styles";
 
 export default styled(Drawer)(({ theme, ownerState }) => {
   const { palette, boxShadows, transitions, breakpoints, functions } = theme;
-  const { transparentSidenav, whiteSidenav, miniSidenav, darkMode } = ownerState;
+  const { transparentSidenav, whiteSidenav, miniSidenav, darkMode, focusLearning } = ownerState;
 
   const sidebarWidth = 250;
   const { transparent, gradients, white, background } = palette;
@@ -87,6 +87,19 @@ export default styled(Drawer)(({ theme, ownerState }) => {
       border: "none",
 
       ...(miniSidenav ? drawerCloseStyles() : drawerOpenStyles()),
+      ...(focusLearning && {
+        [breakpoints.up("xl")]: {
+          width: sidebarWidth,
+          transform: `translateX(${pxToRem(-232)})`,
+          transition: transitions.create("transform", {
+            easing: transitions.easing.easeInOut,
+            duration: transitions.duration.shorter,
+          }),
+          "&:hover": {
+            transform: "translateX(0)",
+          },
+        },
+      }),
     },
   };
 });

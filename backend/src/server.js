@@ -12,7 +12,9 @@ const {
   permissionsPolicy,
   securityHeaders,
 } = require("./middleware/security.middleware");
-const { importBuiltInTemplates } = require("./services/builtInTemplates.service");
+const {
+  importBuiltInTemplates,
+} = require("./services/builtInTemplates.service");
 
 // Import routes
 const authRoutes = require("./routes/auth.routes");
@@ -33,6 +35,7 @@ const publicRoutes = require("./routes/public.routes");
 const feedbackRoutes = require("./routes/feedback.routes");
 const weeklyLearningRoutes = require("./routes/weeklyLearning.routes");
 const typingRoutes = require("./routes/typing.routes");
+const typingPracticeRoutes = require("./routes/typingPractice.routes");
 const quizTestsRoutes = require("./routes/quizTests.routes");
 const teacherAssignmentsRoutes = require("./routes/teacherAssignments.routes");
 const teacherDashboardRoutes = require("./routes/teacherDashboard.routes");
@@ -153,6 +156,7 @@ app.use("/api/public", publicRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/weekly-learning", weeklyLearningRoutes);
 app.use("/api/typing", typingRoutes);
+app.use("/api/typing-practice", typingPracticeRoutes);
 app.use("/api/quiz-tests", quizTestsRoutes);
 app.use("/api/teacher-assignments", teacherAssignmentsRoutes);
 app.use("/api/teacher-dashboard", teacherDashboardRoutes);
@@ -174,12 +178,19 @@ if (env.nodeEnv !== "test") {
       app.listen(PORT, () => {
         console.log(`eduClub Backend Server running on port ${PORT}`);
         console.log(`Environment: ${env.nodeEnv}`);
-        console.log(`Database URL: ${env.databaseUrl ? "configured" : "not configured"}`);
-        console.log(`Standalone LMS: ${env.standaloneLmsEnabled ? "enabled" : "disabled"}`);
+        console.log(
+          `Database URL: ${env.databaseUrl ? "configured" : "not configured"}`,
+        );
+        console.log(
+          `Standalone LMS: ${env.standaloneLmsEnabled ? "enabled" : "disabled"}`,
+        );
       });
     })
     .catch((error) => {
-      console.error("Built-in template import failed; server was not started:", error);
+      console.error(
+        "Built-in template import failed; server was not started:",
+        error,
+      );
       process.exitCode = 1;
     });
 }

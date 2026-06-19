@@ -50,6 +50,10 @@ function Sidenav({ brand, brandName, routes, ...rest }) {
   const [controller, dispatch] = useMaterialUIController();
   const { miniSidenav, transparentSidenav, whiteSidenav, darkMode } = controller;
   const location = useLocation();
+  const focusLearning =
+    location.pathname.startsWith("/learner/my-typing-tutor") ||
+    location.pathname.includes("/preview") ||
+    location.pathname.includes("/learn");
 
   let textColor = "white";
 
@@ -136,45 +140,68 @@ function Sidenav({ brand, brandName, routes, ...rest }) {
   });
 
   return (
-    <SidenavRoot
-      {...rest}
-      variant="permanent"
-      ownerState={{ transparentSidenav, whiteSidenav, miniSidenav, darkMode }}
-    >
-      <MDBox pt={3} pb={1} px={4} textAlign="center">
+    <>
+      {focusLearning && (
         <MDBox
-          display={{ xs: "block", xl: "none" }}
-          position="absolute"
-          top={0}
-          right={0}
-          p={1.625}
-          onClick={closeSidenav}
-          sx={{ cursor: "pointer" }}
+          display={{ xs: "none", xl: "grid" }}
+          position="fixed"
+          top={18}
+          left={6}
+          width={38}
+          height={38}
+          borderRadius="md"
+          zIndex={1301}
+          sx={{
+            placeItems: "center",
+            bgcolor: "#111827",
+            color: "#ffffff",
+            boxShadow: "0 8px 20px rgba(17,24,39,0.25)",
+            pointerEvents: "none",
+          }}
         >
-          <MDTypography variant="h6" color="secondary">
-            <Icon sx={{ fontWeight: "bold" }}>close</Icon>
-          </MDTypography>
+          <Icon>menu_open</Icon>
         </MDBox>
-        <MDBox component={NavLink} to="/" display="flex" alignItems="center">
-          {brand && <MDBox component="img" src={brand} alt="Brand" width="2rem" />}
+      )}
+      <SidenavRoot
+        {...rest}
+        variant="permanent"
+        ownerState={{ transparentSidenav, whiteSidenav, miniSidenav, darkMode, focusLearning }}
+      >
+        <MDBox pt={3} pb={1} px={4} textAlign="center">
           <MDBox
-            width={!brandName && "100%"}
-            sx={(theme) => sidenavLogoLabel(theme, { miniSidenav })}
+            display={{ xs: "block", xl: "none" }}
+            position="absolute"
+            top={0}
+            right={0}
+            p={1.625}
+            onClick={closeSidenav}
+            sx={{ cursor: "pointer" }}
           >
-            <MDTypography component="h6" variant="button" fontWeight="medium" color={textColor}>
-              {brandName}
+            <MDTypography variant="h6" color="secondary">
+              <Icon sx={{ fontWeight: "bold" }}>close</Icon>
             </MDTypography>
           </MDBox>
+          <MDBox component={NavLink} to="/" display="flex" alignItems="center">
+            {brand && <MDBox component="img" src={brand} alt="Brand" width="2rem" />}
+            <MDBox
+              width={!brandName && "100%"}
+              sx={(theme) => sidenavLogoLabel(theme, { miniSidenav })}
+            >
+              <MDTypography component="h6" variant="button" fontWeight="medium" color={textColor}>
+                {brandName}
+              </MDTypography>
+            </MDBox>
+          </MDBox>
         </MDBox>
-      </MDBox>
-      <Divider
-        light={
-          (!darkMode && !whiteSidenav && !transparentSidenav) ||
-          (darkMode && !transparentSidenav && whiteSidenav)
-        }
-      />
-      <List>{renderRoutes}</List>
-    </SidenavRoot>
+        <Divider
+          light={
+            (!darkMode && !whiteSidenav && !transparentSidenav) ||
+            (darkMode && !transparentSidenav && whiteSidenav)
+          }
+        />
+        <List>{renderRoutes}</List>
+      </SidenavRoot>
+    </>
   );
 }
 

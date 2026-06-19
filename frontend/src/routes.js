@@ -25,9 +25,11 @@ import SchoolAdminCertificates from "layouts/school-admin/certificates";
 import SchoolSettings from "layouts/school-admin/settings";
 import SchoolAdminCompetitions from "layouts/school-admin/competitions";
 import SchoolAdminProgress from "layouts/school-admin/progress";
+import TypingTutorReport from "layouts/school-admin/typing-tutor";
 import LearnerDashboard from "layouts/learner";
 import LearnerCertificates from "layouts/learner/certificates";
 import LearnerCompetitions from "layouts/learner/competitions";
+import MyTypingTutor from "layouts/learner/typing-tutor";
 import CourseOverview from "layouts/learner/course-overview";
 import ModuleLearn from "layouts/learner/module-learn";
 import LearnerProgress from "layouts/learner/progress";
@@ -305,6 +307,15 @@ const routes = [
   },
   {
     type: "collapse",
+    name: "Typing Tutor",
+    key: "school-admin-typing-tutor",
+    icon: <Icon fontSize="small">keyboard_alt</Icon>,
+    route: "/school-admin/typing-tutor",
+    component: <TypingTutorReport />,
+    roles: ["school_admin", "teacher"],
+  },
+  {
+    type: "collapse",
     name: "Allocations",
     key: "school-admin-allocations",
     icon: <Icon fontSize="small">assignment_ind</Icon>,
@@ -384,6 +395,15 @@ const routes = [
     icon: <Icon fontSize="small">emoji_events</Icon>,
     route: "/learner/competitions",
     component: <LearnerCompetitions />,
+    roles: ["learner"],
+  },
+  {
+    type: "collapse",
+    name: "My Typing Tutor",
+    key: "learner-typing-tutor",
+    icon: <Icon fontSize="small">keyboard_alt</Icon>,
+    route: "/learner/my-typing-tutor",
+    component: <MyTypingTutor />,
     roles: ["learner"],
   },
   {
