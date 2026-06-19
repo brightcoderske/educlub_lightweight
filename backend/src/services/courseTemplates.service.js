@@ -152,7 +152,7 @@ async function createTemplate(data = {}) {
       JSON.stringify(data.learning_objectives || []),
       data.certificate_enabled === true,
       normalizeCourseCategory(data.course_category),
-      data.is_active !== false,
+      data.is_active === true,
     ],
   );
   return result.rows[0];

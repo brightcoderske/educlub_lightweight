@@ -22,6 +22,13 @@ import App from "App";
 import { MaterialUIControllerProvider } from "context";
 
 const container = document.getElementById("app");
+
+if (container.dataset.seoSnapshot) {
+  container.innerHTML = "";
+  container.style.visibility = "";
+  delete container.dataset.seoSnapshot;
+}
+
 const root = createRoot(container);
 
 root.render(

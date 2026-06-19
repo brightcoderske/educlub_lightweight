@@ -114,7 +114,12 @@ function AdminResourcePage({
   const handleChange = (name, value, type) => {
     setForm((current) => ({
       ...current,
-      [name]: type === "number" && value !== "" ? Number(value) : value,
+      [name]:
+        type === "number" && value !== ""
+          ? Number(value)
+          : type === "boolean"
+          ? value === "true"
+          : value,
     }));
   };
 
@@ -158,17 +163,37 @@ function AdminResourcePage({
                 {createLabel}
               </MDTypography>
               <Grid container spacing={2}>
-                {formFields.map((field) => (
-                  <Grid item xs={12} md={field.fullWidth ? 12 : 6} key={field.name}>
-                    <MDInput
-                      label={field.label}
-                      type={field.type || "text"}
-                      fullWidth
-                      value={form[field.name] || ""}
-                      onChange={(event) => handleChange(field.name, event.target.value, field.type)}
-                    />
-                  </Grid>
-                ))}
+                {formFields.map((field) => {
+                  const hasDefault = Object.prototype.hasOwnProperty.call(field, "defaultValue");
+                  const value =
+                    form[field.name] !== undefined
+                      ? form[field.name]
+                      : hasDefault
+                      ? field.defaultValue
+                      : "";
+                  return (
+                    <Grid item xs={12} md={field.fullWidth ? 12 : 6} key={field.name}>
+                      <MDInput
+                        select={Boolean(field.options)}
+                        label={field.label}
+                        type={field.options ? undefined : field.type || "text"}
+                        fullWidth
+                        value={String(value)}
+                        SelectProps={field.options ? { native: true } : undefined}
+                        InputLabelProps={field.options ? { shrink: true } : undefined}
+                        onChange={(event) =>
+                          handleChange(field.name, event.target.value, field.type)
+                        }
+                      >
+                        {field.options?.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </MDInput>
+                    </Grid>
+                  );
+                })}
               </Grid>
               {error && (
                 <MDTypography variant="caption" color="error" display="block" mt={2}>

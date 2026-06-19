@@ -354,6 +354,7 @@ function RegistrationLanding() {
             label="Grade *"
             value={form.grade}
             SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
             onChange={(e) => setField("grade", e.target.value)}
           >
             <option value="">Choose grade</option>
@@ -371,6 +372,7 @@ function RegistrationLanding() {
             label="School *"
             value={form.school_id}
             SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
             onChange={(e) => setField("school_id", e.target.value)}
           >
             <option value="">
@@ -392,6 +394,7 @@ function RegistrationLanding() {
             label="Academic term *"
             value={form.term_id}
             SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
             onChange={(e) => setField("term_id", e.target.value)}
           >
             <option value="">{terms.length ? "Choose term" : "No academic terms available"}</option>

@@ -90,7 +90,7 @@ function buildSnapshotHtml(template, route, page) {
   );
   html = html.replace(
     '<div id="app"></div>',
-    `<div id="app">${staticContent}</div><script type="application/ld+json">${JSON.stringify(
+    `<div id="app" data-seo-snapshot="true" style="visibility:hidden">${staticContent}</div><script type="application/ld+json">${JSON.stringify(
       schema,
     )}</script>`,
   );

@@ -37,6 +37,16 @@ function SystemAdminCourses() {
         { name: "code", label: "Course code" },
         { name: "target_level", label: "Target grade or level" },
         { name: "estimated_weeks", label: "Estimated weeks", type: "number" },
+        {
+          name: "is_active",
+          label: "Publishing status",
+          type: "boolean",
+          defaultValue: false,
+          options: [
+            { value: false, label: "Draft - visible only to system admin" },
+            { value: true, label: "Published - schools can adopt" },
+          ],
+        },
         { name: "description", label: "Description", fullWidth: true },
       ]}
       createLabel="Create Course"

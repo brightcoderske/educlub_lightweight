@@ -168,9 +168,10 @@ test("direct registration URLs open the learner registration dialog", () => {
   );
   expect(landingSource).toContain('pathname === "/register"');
   expect(landingSource).toContain("setRegistrationOpen(true)");
+  expect(landingSource).toContain('InputLabelProps={{ shrink: true }}');
 });
 
-test("SEO generator creates crawlable snapshots and a production sitemap", () => {
+test("SEO generator creates hidden crawlable snapshots and a production sitemap", () => {
   const page = PUBLIC_PAGES["/courses/python-programming"];
   const html = buildSnapshotHtml(
     "<html><head><title>Old</title></head><body><div id=\"app\"></div></body></html>",
@@ -180,6 +181,7 @@ test("SEO generator creates crawlable snapshots and a production sitemap", () =>
   expect(html).toContain(page.title);
   expect(html).toContain(page.h1);
   expect(html).toContain("data-seo-snapshot");
+  expect(html).toContain('style="visibility:hidden"');
   expect(html).toContain("educlub-first-paint");
   expect(html).toContain('rel="canonical" href="https://www.educlub.co.ke/courses/python-programming"');
   expect(html).not.toContain(">Old</title>");
@@ -188,4 +190,11 @@ test("SEO generator creates crawlable snapshots and a production sitemap", () =>
   expect(sitemap).toContain("<loc>https://www.educlub.co.ke/courses/python-programming</loc>");
   expect(sitemap).not.toContain("your-frontend-domain.com");
   expect(sitemap).not.toContain("/authentication/");
+});
+
+test("React boot clears hidden SEO snapshots before rendering", () => {
+  const source = readFileSync(resolve(__dirname, "../index.js"), "utf8");
+  expect(source).toContain('container.dataset.seoSnapshot');
+  expect(source).toContain('container.innerHTML = ""');
+  expect(source).toContain('container.style.visibility = ""');
 });
