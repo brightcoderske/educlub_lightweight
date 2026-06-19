@@ -174,3 +174,13 @@ test("updates the saved activity locally without reloading the whole builder", (
   expect(updated.modules[0].activities[1]).toBe(data.modules[0].activities[1]);
   expect(updated.template.version).toBe(4);
 });
+
+test("course knowledge-check editor exposes question removal", () => {
+  const source = require("fs").readFileSync(
+    require("path").resolve(__dirname, "../layouts/course-builder/index.js"),
+    "utf8"
+  );
+
+  expect(source).toContain("const removeQuestion = (index) =>");
+  expect(source).toContain("Remove Question");
+});

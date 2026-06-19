@@ -995,6 +995,18 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
     }));
   };
 
+  const removeQuestion = (index) => {
+    setForm((current) => ({
+      ...current,
+      questions: current.questions
+        .filter((_, questionIndex) => questionIndex !== index)
+        .map((question, questionIndex) => ({
+          ...question,
+          position: questionIndex + 1,
+        })),
+    }));
+  };
+
   const importCsv = () => {
     const imported = questionsFromCsv(csvText);
     if (!imported.length) return;
@@ -1333,6 +1345,16 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
                             updateQuestion(index, { position: event.target.value })
                           }
                         />
+                      </Grid>
+                      <Grid item xs={12} md={2} display="flex" alignItems="center">
+                        <MDButton
+                          variant="text"
+                          color="error"
+                          size="small"
+                          onClick={() => removeQuestion(index)}
+                        >
+                          <Icon>delete</Icon>&nbsp; Remove Question
+                        </MDButton>
                       </Grid>
                       <Grid item xs={12}>
                         <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
