@@ -90,6 +90,48 @@ export function executableBlockHtml({ source = "", title = "Executable web code"
   )}</pre><span style="color:#475569">Learners select Run to reveal the output.</span></div><p><br></p>`;
 }
 
+export function cleanImportedHtml(html = "") {
+  const parser = new DOMParser();
+  const document = parser.parseFromString(String(html || ""), "text/html");
+  const hasScript = document.querySelector("script");
+  if (hasScript) {
+    return executableBlockHtml({
+      source: html,
+      title: "Imported sandboxed interaction",
+    });
+  }
+
+  const styleHtml = Array.from(document.head?.querySelectorAll("style") || [])
+    .map((element) => element.outerHTML)
+    .join("");
+  const importedRoot = document.body || document;
+
+  importedRoot.querySelectorAll("iframe,object,embed,form").forEach((element) => {
+    element.remove();
+  });
+  importedRoot.querySelectorAll("*").forEach((element) => {
+    Array.from(element.attributes).forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      const rawValue = attribute.value || "";
+      const compactValue = rawValue.replace(/[\u0000-\u001F\u007F\s]+/g, "");
+      if (name.startsWith("on") || name === "srcdoc") {
+        element.removeAttribute(attribute.name);
+      } else if (["href", "src"].includes(name) && /^javascript:/i.test(compactValue)) {
+        element.removeAttribute(attribute.name);
+      } else if (name === "style") {
+        element.setAttribute(
+          "style",
+          rawValue
+            .replace(/expression\s*\([^)]*\)/gi, "")
+            .replace(/url\s*\(\s*(['"]?)javascript:[^)]+\)/gi, "")
+        );
+      }
+    });
+  });
+
+  return `${styleHtml}${importedRoot.innerHTML}`.trim();
+}
+
 export function displayCodeBlockHtml({ code = "", language = "text", title = "" }) {
   return `<pre data-display-code="true" data-code-language="${escapeHtml(
     language

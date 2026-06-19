@@ -24,7 +24,9 @@ console.log("Ready");
 
 function previewDocument(source) {
   const { html, css, js } = splitExecutableSource(source);
-  return `<!doctype html><html><head><style>${css}</style></head><body>${html}<script>${js}<\/script></body></html>`;
+  const policy =
+    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:\">";
+  return `<!doctype html><html><head>${policy}<style>${css}</style></head><body>${html}<script>${js}<\/script></body></html>`;
 }
 
 function ExecutableCodeDialog({ open, initialValues, onClose, onSave }) {
@@ -47,7 +49,7 @@ function ExecutableCodeDialog({ open, initialValues, onClose, onSave }) {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>Executable HTML, CSS and JavaScript</DialogTitle>
+      <DialogTitle>Sandboxed HTML, CSS and JavaScript</DialogTitle>
       <DialogContent>
         <MDInput
           label="Block title"
@@ -59,7 +61,8 @@ function ExecutableCodeDialog({ open, initialValues, onClose, onSave }) {
         <Grid container spacing={2}>
           <Grid item xs={12} md={showPreview ? 7 : 12}>
             <MDTypography variant="caption" color="text">
-              Keep HTML, CSS in &lt;style&gt;, and JavaScript in &lt;script&gt; together.
+              Runs only inside an isolated iframe. It cannot access eduClub login data, the
+              dashboard page, forms, popups, or external network requests.
             </MDTypography>
             <MDInput
               multiline
@@ -85,7 +88,7 @@ function ExecutableCodeDialog({ open, initialValues, onClose, onSave }) {
               </MDTypography>
               <MDBox
                 component="iframe"
-                title="Executable code preview"
+                title="Sandboxed code preview"
                 sandbox="allow-scripts"
                 srcDoc={preview}
                 width="100%"
@@ -102,7 +105,7 @@ function ExecutableCodeDialog({ open, initialValues, onClose, onSave }) {
           Cancel
         </MDButton>
         <MDButton color="dark" onClick={() => setShowPreview((current) => !current)}>
-          {showPreview ? "Hide preview" : "Run preview"}
+          {showPreview ? "Hide preview" : "Run sandbox preview"}
         </MDButton>
         <MDButton color="info" onClick={save} disabled={!source.trim()}>
           Save block

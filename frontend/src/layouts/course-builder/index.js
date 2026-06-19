@@ -39,7 +39,7 @@ import ExecutableCodeDialog from "./dialogs/ExecutableCodeDialog";
 import HintDialog from "./dialogs/HintDialog";
 import InteractiveBlockDialog from "./dialogs/InteractiveBlockDialog";
 import ResourceDialog from "./dialogs/ResourceDialog";
-import { executableSourceFromPayload } from "./dialogs/authoringUtils";
+import { cleanImportedHtml, executableSourceFromPayload } from "./dialogs/authoringUtils";
 
 const activityTypes = [
   "lesson",
@@ -275,40 +275,6 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
 
   const emitChange = () => {
     onChange(serializeEditor());
-  };
-
-  const cleanImportedHtml = (html = "") => {
-    const parser = new DOMParser();
-    const document = parser.parseFromString(String(html || ""), "text/html");
-    const styleHtml = Array.from(document.head?.querySelectorAll("style") || [])
-      .map((element) => element.outerHTML)
-      .join("");
-    const importedRoot = document.body || document;
-
-    importedRoot.querySelectorAll("script,iframe,object,embed,form").forEach((element) => {
-      element.remove();
-    });
-    importedRoot.querySelectorAll("*").forEach((element) => {
-      Array.from(element.attributes).forEach((attribute) => {
-        const name = attribute.name.toLowerCase();
-        const rawValue = attribute.value || "";
-        const compactValue = rawValue.replace(/[\u0000-\u001F\u007F\s]+/g, "");
-        if (name.startsWith("on") || name === "srcdoc") {
-          element.removeAttribute(attribute.name);
-        } else if (["href", "src"].includes(name) && /^javascript:/i.test(compactValue)) {
-          element.removeAttribute(attribute.name);
-        } else if (name === "style") {
-          element.setAttribute(
-            "style",
-            rawValue
-              .replace(/expression\s*\([^)]*\)/gi, "")
-              .replace(/url\s*\(\s*(['"]?)javascript:[^)]+\)/gi, "")
-          );
-        }
-      });
-    });
-
-    return `${styleHtml}${importedRoot.innerHTML}`.trim();
   };
 
   const importHtmlFile = async (event) => {
@@ -715,7 +681,7 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         <IconButton title="Insert code example" onClick={() => openDisplayCodeDialog()}>
           <Icon>data_object</Icon>
         </IconButton>
-        <IconButton title="Insert executable code" onClick={() => openExecutableDialog()}>
+        <IconButton title="Insert sandboxed interactive HTML/JS" onClick={() => openExecutableDialog()}>
           <Icon>play_circle</Icon>
         </IconButton>
         <IconButton title="Insert collapsible hint" onClick={() => openHintDialog()}>

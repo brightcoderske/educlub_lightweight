@@ -3,6 +3,7 @@ import {
   displayCodeBlockHtml,
   executableBlockHtml,
   executableSourceFromPayload,
+  cleanImportedHtml,
   hintBlockHtml,
   interactiveBlockHtml,
   resourceHtml,
@@ -56,6 +57,36 @@ test("rich text hints are collapsible and safely escaped", () => {
   expect(html).toContain("<details");
   expect(html).toContain("&lt;main&gt;");
   expect(html).toContain("&quot;heading&quot;");
+});
+
+test("imported HTML with JavaScript becomes a sandboxed executable block", () => {
+  const html = cleanImportedHtml(`
+    <style>button { color: teal; }</style>
+    <button onclick="window.parent.document.body.innerHTML = ''">Click</button>
+    <script>document.body.dataset.clicked = 'yes';</script>
+  `);
+  const encoded = html.match(/data-executable-code="([^"]+)"/)[1];
+  const payload = JSON.parse(decodeURIComponent(encoded));
+
+  expect(html).toContain("Imported sandboxed interaction");
+  expect(html).toContain('contenteditable="false"');
+  expect(payload.html).toContain("<button");
+  expect(payload.html).toContain("Click");
+  expect(payload.css).toContain("color: teal");
+  expect(payload.js).toContain("dataset.clicked");
+  expect(html).not.toContain("<script>");
+  expect(html).toContain("&lt;script&gt;");
+});
+
+test("ordinary imported HTML is sanitized without enabling JavaScript", () => {
+  const html = cleanImportedHtml(
+    `<h2 onclick="steal()">Lesson</h2><a href="javascript:alert(1)">bad</a><iframe srcdoc="<p>x</p>"></iframe>`
+  );
+
+  expect(html).toContain("<h2>Lesson</h2>");
+  expect(html).not.toContain("onclick");
+  expect(html).not.toContain("javascript:");
+  expect(html).not.toContain("<iframe");
 });
 
 test("interactive rich-content blocks preserve editable prompts and answers", () => {

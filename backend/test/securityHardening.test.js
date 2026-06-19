@@ -62,11 +62,19 @@ test("file submission policy rejects dangerous extension spoofing", () => {
 });
 
 test("rich HTML sanitizer strips scriptable content but keeps eduClub blocks", () => {
+  const encodedSandbox = encodeURIComponent(
+    JSON.stringify({
+      html: "<button>Run</button>",
+      css: "button { color: teal; }",
+      js: "document.body.dataset.ready = '1';",
+    }),
+  );
   const html = sanitizeRichHtml(
     `<div data-interactive-block="flash_card" data-block-title="Card" onclick="steal()">
        <button data-interactive-toggle="true">Show answer</button>
        <div data-interactive-answer="true">Answer</div>
      </div>
+     <div data-executable-code="${encodedSandbox}" data-code-title="Sandboxed demo"></div>
      <img src="javascript:alert(1)" onerror="steal()">
      <a href="javascript:alert(1)">Bad</a>
      <script>alert(1)</script>`,
@@ -74,6 +82,8 @@ test("rich HTML sanitizer strips scriptable content but keeps eduClub blocks", (
 
   assert.match(html, /data-interactive-block="flash_card"/);
   assert.match(html, /data-interactive-toggle="true"/);
+  assert.match(html, /data-executable-code="/);
+  assert.match(html, /data-code-title="Sandboxed demo"/);
   assert.doesNotMatch(html, /<script/i);
   assert.doesNotMatch(html, /onclick/i);
   assert.doesNotMatch(html, /onerror/i);
