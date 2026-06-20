@@ -26,6 +26,7 @@ import { useAuth } from "context/AuthContext";
 import LearnerDetailModal from "components/LearnerDetailModal";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 const emptyForm = {
   first_name: "",
@@ -60,8 +61,15 @@ function SchoolAdminLearners() {
   const [selectedLearnerId, setSelectedLearnerId] = useState(null);
   const [graduationCandidate, setGraduationCandidate] = useState(null);
 
-  const loadLearners = async () => {
-    setLoading(true);
+  const cacheKey = `school-admin:${user?.schoolId}:learners`;
+
+  const loadLearners = async (background = false) => {
+    const cached = getCachedPage(cacheKey)?.value;
+    if (cached && !background) {
+      setLearners(cached.learners || []);
+      setSchool(cached.school || null);
+    }
+    setLoading(!cached && !background);
     setError("");
     try {
       const [response, schoolRes] = await Promise.all([
@@ -70,6 +78,7 @@ function SchoolAdminLearners() {
       ]);
       setLearners(response);
       setSchool(schoolRes);
+      setCachedPage(cacheKey, { learners: response, school: schoolRes });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -84,7 +93,7 @@ function SchoolAdminLearners() {
     try {
       await apiClient.put(`/learners/${graduationCandidate.id}/graduate`, {});
       setGraduationCandidate(null);
-      await loadLearners();
+      await loadLearners(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -94,7 +103,7 @@ function SchoolAdminLearners() {
 
   useEffect(() => {
     if (isSchoolAdmin() && user?.schoolId) {
-      loadLearners();
+      loadLearners(Boolean(getCachedPage(cacheKey)));
     }
   }, [user?.schoolId]);
 
@@ -118,7 +127,7 @@ function SchoolAdminLearners() {
     try {
       await apiClient.post("/learners", form);
       setForm(emptyForm);
-      await loadLearners();
+      await loadLearners(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -136,7 +145,7 @@ function SchoolAdminLearners() {
       };
       delete payload.learner_id;
       await apiClient.post("/learners/promote", payload);
-      await loadLearners();
+      await loadLearners(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -202,7 +211,7 @@ function SchoolAdminLearners() {
           result.errors?.length ? ` ${result.errors.length} rows need review.` : ""
         }`
       );
-      await loadLearners();
+      await loadLearners(true);
     } catch (err) {
       setError(
         err.message ||

@@ -1,4 +1,5 @@
 const { query } = require("../config");
+const academicService = require("../services/academic.service");
 const notificationsService = require("../services/notifications.service");
 const teacherAssignmentsService = require("../services/teacherAssignments.service");
 
@@ -7,7 +8,32 @@ function isSchoolScopedStaff(user = {}) {
 }
 
 function allocationErrorStatus(error) {
+  if (error.status) return error.status;
   return /not assigned|cannot|outside/i.test(error.message || "") ? 403 : 500;
+}
+
+async function assertActiveAllocationTerm(term, academicYear) {
+  const activeTerm = await academicService.getActiveTerm("regular");
+  if (!activeTerm) {
+    const error = new Error("No active academic term is available for allocation.");
+    error.status = 400;
+    throw error;
+  }
+
+  const activeAcademicYear =
+    activeTerm.academic_year ||
+    new Date(activeTerm.start_date || Date.now()).getFullYear();
+
+  if (
+    String(term || "") !== String(activeTerm.name || "") ||
+    String(academicYear || "") !== String(activeAcademicYear || "")
+  ) {
+    const error = new Error(
+      `Allocate courses only in the active term: ${activeTerm.name} ${activeAcademicYear}.`
+    );
+    error.status = 400;
+    throw error;
+  }
 }
 
 async function getAllAllocations(req, res) {
@@ -132,6 +158,8 @@ async function createAllocation(req, res) {
           .json({ error: "Allocate learners to your school's adopted course version." });
       }
     }
+
+    await assertActiveAllocationTerm(term, academic_year);
 
     const result = await query(
       `INSERT INTO course_allocations (learner_id, course_id, term, academic_year)
@@ -272,6 +300,8 @@ async function updateAllocation(req, res) {
       }
     }
 
+    await assertActiveAllocationTerm(term, academic_year);
+
     const result = await query(
       `UPDATE course_allocations
        SET learner_id = $1, course_id = $2, term = $3, academic_year = $4, status = $5
@@ -345,6 +375,8 @@ async function bulkAllocate(req, res) {
     if (!schoolId) {
       return res.status(400).json({ error: "School is required" });
     }
+
+    await assertActiveAllocationTerm(term, academic_year);
 
     const courseResult = await query(
       "SELECT id FROM courses WHERE id = $1 AND school_id = $2 AND is_active = true",

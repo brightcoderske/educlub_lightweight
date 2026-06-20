@@ -27,6 +27,7 @@ import Footer from "examples/Footer";
 import DashboardIdentity from "components/DashboardIdentity";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 function Courses() {
   const { user, isSchoolAdmin } = useAuth();
@@ -39,13 +40,21 @@ function Courses() {
   const [assignments, setAssignments] = useState([]);
   const [assignmentCourse, setAssignmentCourse] = useState(null);
   const [teacherUserId, setTeacherUserId] = useState("");
+  const cacheKey = `school-admin:${user?.schoolId || user?.userId}:courses`;
 
   useEffect(() => {
-    fetchCourses();
-  }, []);
+    fetchCourses(Boolean(getCachedPage(cacheKey)));
+  }, [cacheKey]);
 
-  const fetchCourses = async () => {
-    setLoading(true);
+  const fetchCourses = async (background = false) => {
+    const cached = getCachedPage(cacheKey)?.value;
+    if (cached && !background) {
+      setCourses(cached.courses || []);
+      setTemplates(cached.templates || []);
+      setTeachers(cached.teachers || []);
+      setAssignments(cached.assignments || []);
+    }
+    setLoading(!cached && !background);
     setError("");
     try {
       const response = await apiClient.get("/courses");
@@ -59,8 +68,20 @@ function Courses() {
         setTemplates(templateResponse);
         setTeachers(teacherResponse);
         setAssignments(assignmentResponse);
+        setCachedPage(cacheKey, {
+          courses: response,
+          templates: templateResponse,
+          teachers: teacherResponse,
+          assignments: assignmentResponse,
+        });
       } else {
         setTemplates([]);
+        setCachedPage(cacheKey, {
+          courses: response,
+          templates: [],
+          teachers: [],
+          assignments: [],
+        });
       }
     } catch (err) {
       setError("Failed to fetch courses");
@@ -86,7 +107,7 @@ function Courses() {
     setError("");
     try {
       const course = await apiClient.post(`/course-templates/${template.id}/adopt`, {});
-      await fetchCourses();
+      await fetchCourses(true);
       navigate(`/school-admin/courses/${course.id}/builder`);
     } catch (err) {
       setError(err.message);
@@ -103,7 +124,7 @@ function Courses() {
       });
       setAssignmentCourse(null);
       setTeacherUserId("");
-      await fetchCourses();
+      await fetchCourses(true);
     } catch (err) {
       setError(err.message);
     }
@@ -112,7 +133,8 @@ function Courses() {
   const deallocateTeacher = async (assignmentId) => {
     try {
       await apiClient.delete(`/teacher-assignments/${assignmentId}`);
-      await fetchCourses();
+      setAssignments((current) => current.filter((assignment) => assignment.id !== assignmentId));
+      fetchCourses(true);
     } catch (err) {
       setError(err.message);
     }

@@ -15,7 +15,6 @@ import MDInput from "components/MDInput";
 import eduClubLogo from "assets/images/brand/educlub-logo.png";
 import heroImage from "assets/images/bg-sign-up-cover.jpeg";
 import { apiClient } from "lib/api";
-import { useAuth } from "context/AuthContext";
 import { passwordIssues, registrationIssues } from "./registrationValidation";
 
 const initialForm = {
@@ -151,7 +150,6 @@ function upsertLink(rel, href) {
 function RegistrationLanding() {
   const navigate = useNavigate();
   const { pathname, hash } = useLocation();
-  const { login } = useAuth();
   const [schools, setSchools] = useState([]);
   const [terms, setTerms] = useState([]);
   const [form, setForm] = useState(initialForm);
@@ -320,8 +318,10 @@ function RegistrationLanding() {
     setSubmitting(true);
     try {
       await apiClient.post("/public/register/learner", form);
-      setMessage("Registration complete. Opening your learner dashboard...");
-      await login(form.email, form.password);
+      setMessage("Welcome to eduClub. Registration complete. Redirecting to login...");
+      setRegistrationOpen(false);
+      setForm(initialForm);
+      setTimeout(() => navigate("/authentication/sign-in"), 1200);
     } catch (err) {
       setError(err.message || "Registration failed.");
     } finally {

@@ -19,6 +19,7 @@ import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import LearnerDetailModal from "components/LearnerDetailModal";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 const emptyForm = {
   school: null,
@@ -26,6 +27,8 @@ const emptyForm = {
   second_name: "",
   third_name: "",
 };
+
+const CACHE_KEY = "system-admin:learners";
 
 function SystemAdminLearners() {
   const { isSystemAdmin } = useAuth();
@@ -40,8 +43,13 @@ function SystemAdminLearners() {
   const [search, setSearch] = useState("");
   const [schoolFilter, setSchoolFilter] = useState(null);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (background = false) => {
+    const cached = getCachedPage(CACHE_KEY)?.value;
+    if (cached && !background) {
+      setSchools(cached.schools || []);
+      setLearners(cached.learners || []);
+    }
+    setLoading(!cached && !background);
     setError("");
     try {
       const [schoolsRes, learnersRes] = await Promise.all([
@@ -50,6 +58,7 @@ function SystemAdminLearners() {
       ]);
       setSchools(schoolsRes);
       setLearners(learnersRes);
+      setCachedPage(CACHE_KEY, { schools: schoolsRes, learners: learnersRes });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -58,7 +67,7 @@ function SystemAdminLearners() {
   };
 
   useEffect(() => {
-    if (isSystemAdmin()) loadData();
+    if (isSystemAdmin()) loadData(Boolean(getCachedPage(CACHE_KEY)));
   }, []);
 
   const handleCreate = async () => {
@@ -74,7 +83,7 @@ function SystemAdminLearners() {
       });
       setMessage(`Learner created. Username: ${result.username}`);
       setForm(emptyForm);
-      await loadData();
+      await loadData(true);
     } catch (err) {
       setError(err.message);
     } finally {

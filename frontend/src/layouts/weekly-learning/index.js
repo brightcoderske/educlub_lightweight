@@ -183,6 +183,8 @@ function WeeklyLearning() {
   const [savingQuizAttemptId, setSavingQuizAttemptId] = useState(null);
   const quizStartedAtRef = useRef(null);
   const quizSubmitRef = useRef(null);
+  const typingSubmitRef = useRef(null);
+  const typingAttemptSubmittingRef = useRef(false);
   const [bulkForm, setBulkForm] = useState({
     grade: "",
     stream: "",
@@ -225,8 +227,10 @@ function WeeklyLearning() {
     );
   }, [quizAttemptReview?.attempts, quizReviewFilters]);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (background = false) => {
+    const hasVisibleData =
+      category === "weekly_typing" ? typingTests.length > 0 : quizTests.length > 0;
+    setLoading(!background && !hasVisibleData);
     setError("");
     try {
       if (category === "weekly_typing") {
@@ -347,8 +351,7 @@ function WeeklyLearning() {
       }
 
       if (isLearner()) {
-        const learnerAllocations = await apiClient.get(`/allocations?category=${category}`);
-        setAllocations(learnerAllocations);
+        setAllocations([]);
       } else if (isSchoolAdmin()) {
         const [learnerRows, allocationRows, schoolRes] = await Promise.all([
           apiClient.get(`/learners?school_id=${user?.schoolId}`),
@@ -421,6 +424,7 @@ function WeeklyLearning() {
         setLessonLocked(true);
         setHasStartedTyping(false);
         setStartedAt(null);
+        setTimeout(() => typingSubmitRef.current?.(), 0);
       }
     }, 500);
     return () => clearInterval(timer);
@@ -1097,6 +1101,8 @@ function WeeklyLearning() {
   const submitTypingAttempt = async () => {
     const lesson = currentLesson();
     if (!lesson) return;
+    if (typingAttemptSubmittingRef.current) return;
+    typingAttemptSubmittingRef.current = true;
     try {
       setAdvancingLesson(true);
       const elapsed = effectiveElapsedSeconds();
@@ -1115,11 +1121,15 @@ function WeeklyLearning() {
         setLessonComplete(false);
         setLessonLocked(false);
         setAdvancingLesson(false);
+        typingAttemptSubmittingRef.current = false;
       } else {
         setMessage("Typing assessment completed. Your weekly typing score has been recorded.");
         setCompletionSummary({ netWpm: typingStats().netWpm });
         setAdvancingLesson(false);
-        await loadData();
+        typingAttemptSubmittingRef.current = false;
+        if (!isLearner()) {
+          loadData(true);
+        }
         setTimeout(() => {
           setActiveTest(null);
           setHasStartedTyping(false);
@@ -1131,9 +1141,12 @@ function WeeklyLearning() {
       }
     } catch (err) {
       setAdvancingLesson(false);
+      typingAttemptSubmittingRef.current = false;
       setError(err.message || "Could not submit typing attempt.");
     }
   };
+
+  typingSubmitRef.current = submitTypingAttempt;
 
   const typingStats = () => {
     const passage = currentLesson()?.passage || "";

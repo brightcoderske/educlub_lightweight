@@ -13,6 +13,7 @@ import Footer from "examples/Footer";
 import ComplexStatisticsCard from "examples/Cards/StatisticsCards/ComplexStatisticsCard";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 function SchoolAdminDashboard() {
   const { user, isSchoolAdmin } = useAuth();
@@ -29,6 +30,7 @@ function SchoolAdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [recentActivity, setRecentActivity] = useState([]);
   const [currentTerm, setCurrentTerm] = useState(null);
+  const cacheKey = `school-admin:${user?.schoolId}:dashboard`;
 
   useEffect(() => {
     if (!isSchoolAdmin()) {
@@ -36,6 +38,13 @@ function SchoolAdminDashboard() {
     }
 
     const fetchData = async () => {
+      const cached = getCachedPage(cacheKey)?.value;
+      if (cached) {
+        setStats(cached.stats || stats);
+        setRecentActivity(cached.recentActivity || []);
+        setCurrentTerm(cached.currentTerm || null);
+        setLoading(false);
+      }
       try {
         const [learnersRes, allocationsRes, certificatesRes, coursesRes, termsRes] =
           await Promise.all([
@@ -62,7 +71,7 @@ function SchoolAdminDashboard() {
           .catch(() => null);
         setCurrentTerm(todayTerm);
 
-        setStats({
+        const nextStats = {
           learners: learnersRes.length || 0,
           allocated: allocationsRes.length || 0,
           completed: allocationsRes.filter((a) => a.status === "completed").length || 0,
@@ -80,9 +89,15 @@ function SchoolAdminDashboard() {
                 )
               : 0),
           syncedAllocations: completionSummary?.synced_allocations || 0,
-        });
+        };
 
+        setStats(nextStats);
         setRecentActivity(allocationsRes.slice(0, 5));
+        setCachedPage(cacheKey, {
+          stats: nextStats,
+          recentActivity: allocationsRes.slice(0, 5),
+          currentTerm: todayTerm,
+        });
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
       } finally {

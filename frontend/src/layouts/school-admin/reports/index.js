@@ -13,6 +13,7 @@ import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import API_BASE_URL from "lib/apiBase";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 const feedbackTemplates = [
   "Excellent effort, {learnerName}. Keep building on this strong progress.",
@@ -45,9 +46,15 @@ function Reports() {
   const [feedbackTemplate, setFeedbackTemplate] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
   const isStaff = isSchoolAdmin() || user?.role === "teacher";
+  const optionsCacheKey = `school-admin:${user?.schoolId}:reports-options`;
 
   useEffect(() => {
     const loadOptions = async () => {
+      const cached = getCachedPage(optionsCacheKey)?.value;
+      if (cached) {
+        setLearners(cached.learners || []);
+        setTerms(cached.terms || []);
+      }
       try {
         const [learnersRes, termsRes] = await Promise.all([
           apiClient.get(`/learners?school_id=${user?.schoolId}`),
@@ -55,6 +62,7 @@ function Reports() {
         ]);
         setLearners(learnersRes);
         setTerms(termsRes);
+        setCachedPage(optionsCacheKey, { learners: learnersRes, terms: termsRes });
         const activeTerm = termsRes.find((item) => item.is_active) || termsRes[0];
         if (activeTerm) {
           setTerm(activeTerm.name);

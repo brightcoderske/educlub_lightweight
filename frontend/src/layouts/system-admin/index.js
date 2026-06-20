@@ -12,6 +12,9 @@ import MDTypography from "components/MDTypography";
 import AdminFeedbackPanel from "components/AdminFeedbackPanel";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
+
+const CACHE_KEY = "system-admin:dashboard";
 
 function SystemAdminDashboard() {
   const { user, isSystemAdmin } = useAuth();
@@ -36,6 +39,12 @@ function SystemAdminDashboard() {
 
     // Fetch statistics
     const fetchStats = async () => {
+      const cached = getCachedPage(CACHE_KEY)?.value;
+      if (cached) {
+        setStats(cached.stats || stats);
+        setCurrentTerm(cached.currentTerm || null);
+        setMfaPolicy(cached.mfaPolicy || mfaPolicy);
+      }
       try {
         const [
           schoolsRes,
@@ -58,16 +67,22 @@ function SystemAdminDashboard() {
           })),
         ]);
 
-        setStats({
+        const nextStats = {
           schools: schoolsRes.length || 0,
           learners: learnersRes.length || 0,
           courses: coursesRes.length || 0,
           schoolAdmins: schoolAdminsRes.length || 0,
           pastTerms:
             termsRes.filter((termItem) => new Date(termItem.end_date) < new Date()).length || 0,
-        });
+        };
+        setStats(nextStats);
         setCurrentTerm(currentTermRes);
         setMfaPolicy(mfaPolicyRes);
+        setCachedPage(CACHE_KEY, {
+          stats: nextStats,
+          currentTerm: currentTermRes,
+          mfaPolicy: mfaPolicyRes,
+        });
       } catch (error) {
         console.error("Failed to fetch stats:", error);
       }

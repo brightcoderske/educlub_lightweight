@@ -166,12 +166,15 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
   };
 
   const markNotificationRead = async (notification) => {
+    setNotifications((current) => current.filter((item) => item.id !== notification.id));
     try {
       await apiClient.put(`/notifications/${notification.id}/read`, {});
-      setNotifications((current) =>
-        current.map((item) => (item.id === notification.id ? { ...item, is_read: true } : item))
-      );
     } catch (error) {
+      setNotifications((current) =>
+        current.some((item) => item.id === notification.id)
+          ? current
+          : [notification, ...current].slice(0, 10)
+      );
       console.error("Failed to update notification:", error);
     }
   };

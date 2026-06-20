@@ -14,6 +14,9 @@ import Footer from "examples/Footer";
 import ComplexStatisticsCard from "examples/Cards/StatisticsCards/ComplexStatisticsCard";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
+
+const CACHE_KEY = "teacher-dashboard";
 
 function TeacherDashboard() {
   const { user, isTeacher } = useAuth();
@@ -27,9 +30,18 @@ function TeacherDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const cached = getCachedPage(CACHE_KEY)?.value;
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+    }
+
     apiClient
       .get("/teacher-dashboard")
-      .then(setData)
+      .then((response) => {
+        setData(response);
+        setCachedPage(CACHE_KEY, response);
+      })
       .catch((error) => console.error("Teacher dashboard:", error))
       .finally(() => setLoading(false));
   }, []);

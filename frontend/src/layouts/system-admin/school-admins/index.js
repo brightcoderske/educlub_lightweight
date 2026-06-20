@@ -18,6 +18,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 const emptyForm = {
   school: null,
@@ -26,6 +27,8 @@ const emptyForm = {
   email: "",
   phone: "",
 };
+
+const CACHE_KEY = "system-admin:school-staff";
 
 function SystemAdminSchoolAdmins() {
   const { isSystemAdmin } = useAuth();
@@ -38,8 +41,13 @@ function SystemAdminSchoolAdmins() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (background = false) => {
+    const cached = getCachedPage(CACHE_KEY)?.value;
+    if (cached && !background) {
+      setSchools(cached.schools || []);
+      setAdmins(cached.admins || []);
+    }
+    setLoading(!cached && !background);
     setError("");
     try {
       const [schoolsRes, adminsRes, teachersRes] = await Promise.all([
@@ -47,10 +55,12 @@ function SystemAdminSchoolAdmins() {
         apiClient.get("/users?role=school_admin"),
         apiClient.get("/users?role=teacher"),
       ]);
-      setSchools(schoolsRes);
-      setAdmins(
-        [...adminsRes, ...teachersRes].sort((a, b) => a.full_name.localeCompare(b.full_name))
+      const nextAdmins = [...adminsRes, ...teachersRes].sort((a, b) =>
+        a.full_name.localeCompare(b.full_name)
       );
+      setSchools(schoolsRes);
+      setAdmins(nextAdmins);
+      setCachedPage(CACHE_KEY, { schools: schoolsRes, admins: nextAdmins });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -59,7 +69,7 @@ function SystemAdminSchoolAdmins() {
   };
 
   useEffect(() => {
-    if (isSystemAdmin()) loadData();
+    if (isSystemAdmin()) loadData(Boolean(getCachedPage(CACHE_KEY)));
   }, []);
 
   const handleCreate = async () => {
@@ -81,7 +91,7 @@ function SystemAdminSchoolAdmins() {
       );
       setForm(emptyForm);
       setEditingId(null);
-      await loadData();
+      await loadData(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -115,7 +125,7 @@ function SystemAdminSchoolAdmins() {
       setMessage("School Admin updated.");
       setForm(emptyForm);
       setEditingId(null);
-      await loadData();
+      await loadData(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -129,8 +139,9 @@ function SystemAdminSchoolAdmins() {
     setMessage("");
     try {
       await apiClient.delete(`/users/${adminId}`);
+      setAdmins((current) => current.filter((admin) => admin.id !== adminId));
       setMessage("School Admin account deleted.");
-      await loadData();
+      loadData(true);
     } catch (err) {
       setError(err.message);
     } finally {

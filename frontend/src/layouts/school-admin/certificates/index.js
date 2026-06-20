@@ -17,19 +17,26 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 function SchoolAdminCertificates() {
   const { user, isSchoolAdmin } = useAuth();
   const [certificates, setCertificates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const cacheKey = `school-admin:${user?.schoolId}:certificates`;
 
-  const loadCertificates = async () => {
-    setLoading(true);
+  const loadCertificates = async (background = false) => {
+    const cached = getCachedPage(cacheKey)?.value;
+    if (cached && !background) {
+      setCertificates(cached);
+    }
+    setLoading(!cached && !background);
     setError("");
     try {
       const response = await apiClient.get(`/certificates?school_id=${user?.schoolId}`);
       setCertificates(response);
+      setCachedPage(cacheKey, response);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -39,7 +46,7 @@ function SchoolAdminCertificates() {
 
   useEffect(() => {
     if (isSchoolAdmin() && user?.schoolId) {
-      loadCertificates();
+      loadCertificates(Boolean(getCachedPage(cacheKey)));
     }
   }, [user?.schoolId]);
 
@@ -47,7 +54,14 @@ function SchoolAdminCertificates() {
     setError("");
     try {
       await apiClient.put(`/certificates/${id}/approve`, {});
-      await loadCertificates();
+      setCertificates((current) =>
+        current.map((certificate) =>
+          certificate.id === id
+            ? { ...certificate, status: "approved", approved_at: new Date().toISOString() }
+            : certificate
+        )
+      );
+      loadCertificates(true);
     } catch (err) {
       setError(err.message);
     }

@@ -20,6 +20,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 const emptyForm = {
   name: "",
@@ -29,6 +30,8 @@ const emptyForm = {
   address: "",
   logo_url: "",
 };
+
+const CACHE_KEY = "system-admin:schools";
 
 function cleanText(value) {
   if (typeof value !== "string") return "";
@@ -52,11 +55,17 @@ function SystemAdminSchools() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const loadSchools = async () => {
-    setLoading(true);
+  const loadSchools = async (background = false) => {
+    const cached = getCachedPage(CACHE_KEY)?.value;
+    if (cached && !background) {
+      setSchools(cached);
+    }
+    setLoading(!cached && !background);
     setError("");
     try {
-      setSchools(await apiClient.get("/schools"));
+      const response = await apiClient.get("/schools");
+      setSchools(response);
+      setCachedPage(CACHE_KEY, response);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -65,7 +74,7 @@ function SystemAdminSchools() {
   };
 
   useEffect(() => {
-    loadSchools();
+    loadSchools(Boolean(getCachedPage(CACHE_KEY)));
   }, []);
 
   const uploadLogo = async (file) => {
@@ -92,7 +101,7 @@ function SystemAdminSchools() {
       await apiClient.post("/schools", form);
       setForm(emptyForm);
       setEditingId(null);
-      await loadSchools();
+      await loadSchools(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -107,7 +116,7 @@ function SystemAdminSchools() {
       await apiClient.put(`/schools/${editingId}`, form);
       setForm(emptyForm);
       setEditingId(null);
-      await loadSchools();
+      await loadSchools(true);
     } catch (err) {
       setError(err.message);
     } finally {

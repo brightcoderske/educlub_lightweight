@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 import Table from "@mui/material/Table";
@@ -19,6 +19,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 function SchoolAdminAllocations() {
   const { user, isSchoolAdmin } = useAuth();
@@ -26,6 +27,9 @@ function SchoolAdminAllocations() {
   const [courses, setCourses] = useState([]);
   const [allocations, setAllocations] = useState([]);
   const [school, setSchool] = useState(null);
+  const [currentTerm, setCurrentTerm] = useState(null);
+  const [allocationSearch, setAllocationSearch] = useState("");
+  const [expandedGroup, setExpandedGroup] = useState("");
   const [form, setForm] = useState({
     learner_id: "",
     grade: "",
@@ -45,12 +49,34 @@ function SchoolAdminAllocations() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const cacheKey = `school-admin:${user?.schoolId}:allocations`;
 
-  const loadData = async () => {
-    setLoading(true);
+  const activeTermName = currentTerm?.name || "Term 1";
+  const activeAcademicYear =
+    currentTerm?.academic_year ||
+    new Date(currentTerm?.start_date || Date.now()).getFullYear();
+
+  const applyActiveTerm = (term) => {
+    if (!term?.name) return;
+    const year = term.academic_year || new Date(term.start_date || Date.now()).getFullYear();
+    setForm((current) => ({ ...current, term: term.name, academic_year: year }));
+    setBulkForm((current) => ({ ...current, term: term.name, academic_year: year }));
+  };
+
+  const loadData = async (background = false) => {
+    const cached = getCachedPage(cacheKey)?.value;
+    if (cached && !background) {
+      setLearners(cached.learners || []);
+      setCourses(cached.courses || []);
+      setAllocations(cached.allocations || []);
+      setSchool(cached.school || null);
+      setCurrentTerm(cached.currentTerm || null);
+      applyActiveTerm(cached.currentTerm);
+    }
+    setLoading(!cached && !background);
     setError("");
     try {
-      const [learnersRes, coursesRes, allocationsRes] = await Promise.all([
+      const [learnersRes, coursesRes, allocationsRes, currentTermRes] = await Promise.all([
         apiClient.get(
           `/learners?school_id=${user?.schoolId}${
             user?.role === "teacher" ? "&scope=allocation_picker" : ""
@@ -58,6 +84,7 @@ function SchoolAdminAllocations() {
         ),
         apiClient.get("/courses?category=general"),
         apiClient.get(`/allocations?school_id=${user?.schoolId}`),
+        apiClient.get("/academic/terms/current").catch(() => null),
       ]);
       const schoolRes = user?.schoolId
         ? await apiClient.get(`/schools/${user.schoolId}`).catch(() => null)
@@ -66,6 +93,15 @@ function SchoolAdminAllocations() {
       setCourses(coursesRes);
       setAllocations(allocationsRes);
       setSchool(schoolRes);
+      setCurrentTerm(currentTermRes);
+      applyActiveTerm(currentTermRes);
+      setCachedPage(cacheKey, {
+        learners: learnersRes,
+        courses: coursesRes,
+        allocations: allocationsRes,
+        school: schoolRes,
+        currentTerm: currentTermRes,
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -75,7 +111,7 @@ function SchoolAdminAllocations() {
 
   useEffect(() => {
     if (isSchoolAdmin() && user?.schoolId) {
-      loadData();
+      loadData(Boolean(getCachedPage(cacheKey)));
     }
   }, [user?.schoolId]);
 
@@ -84,9 +120,13 @@ function SchoolAdminAllocations() {
     setError("");
     setMessage("");
     try {
-      await apiClient.post("/allocations", form);
+      await apiClient.post("/allocations", {
+        ...form,
+        term: activeTermName,
+        academic_year: activeAcademicYear,
+      });
       setMessage("Learner allocated to the course.");
-      await loadData();
+      await loadData(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -99,9 +139,13 @@ function SchoolAdminAllocations() {
     setError("");
     setMessage("");
     try {
-      const result = await apiClient.post("/allocations/bulk", bulkForm);
+      const result = await apiClient.post("/allocations/bulk", {
+        ...bulkForm,
+        term: activeTermName,
+        academic_year: activeAcademicYear,
+      });
       setMessage(result.message);
-      await loadData();
+      await loadData(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -115,8 +159,9 @@ function SchoolAdminAllocations() {
     setMessage("");
     try {
       await apiClient.delete(`/allocations/${allocation.id}`);
+      setAllocations((current) => current.filter((item) => item.id !== allocation.id));
       setMessage("Allocation removed.");
-      await loadData();
+      loadData(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -131,8 +176,45 @@ function SchoolAdminAllocations() {
     ? school.grades_config
     : Array.from({ length: 12 }, (_, index) => `Grade ${index + 1}`);
   const streams = school?.streams_config?.length ? school.streams_config : learnerStreams;
-  const terms = ["Term 1", "Term 2", "Term 3"];
-  const academicYears = Array.from({ length: 5 }, (_, index) => new Date().getFullYear() + index);
+  const groupedAllocations = useMemo(() => {
+    const groups = new Map();
+    allocations.forEach((allocation) => {
+      const key = [
+        allocation.course_id,
+        allocation.academic_year || "",
+        allocation.term || "",
+      ].join("|");
+      const current =
+        groups.get(key) || {
+          key,
+          course_id: allocation.course_id,
+          course_name: allocation.course_name,
+          term: allocation.term,
+          academic_year: allocation.academic_year,
+          learners: [],
+          active: 0,
+          completed: 0,
+        };
+      current.learners.push(allocation);
+      if (allocation.status === "completed") current.completed += 1;
+      if (allocation.status !== "completed") current.active += 1;
+      groups.set(key, current);
+    });
+    const search = allocationSearch.trim().toLowerCase();
+    return [...groups.values()]
+      .filter((group) => {
+        if (!search) return true;
+        return `${group.course_name} ${group.term} ${group.academic_year}`
+          .toLowerCase()
+          .includes(search);
+      })
+      .sort((a, b) =>
+        `${a.course_name} ${a.academic_year} ${a.term}`.localeCompare(
+          `${b.course_name} ${b.academic_year} ${b.term}`
+        )
+      );
+  }, [allocationSearch, allocations]);
+
   const learnerOptions = learners.filter((learner) => {
     const gradeMatches = !form.grade || learner.grade === form.grade;
     const streamMatches = !form.stream || learner.stream === form.stream;
@@ -242,14 +324,10 @@ function SchoolAdminAllocations() {
                       label="Term"
                       fullWidth
                       value={form.term}
-                      onChange={(event) => setForm({ ...form, term: event.target.value })}
+                      disabled
                       SelectProps={{ native: true }}
                     >
-                      {terms.map((term) => (
-                        <option key={term} value={term}>
-                          {term}
-                        </option>
-                      ))}
+                      <option value={activeTermName}>{activeTermName}</option>
                     </MDInput>
                   </Grid>
                   <Grid item xs={6}>
@@ -258,14 +336,10 @@ function SchoolAdminAllocations() {
                       label="Academic Year"
                       fullWidth
                       value={form.academic_year}
-                      onChange={(event) => setForm({ ...form, academic_year: event.target.value })}
+                      disabled
                       SelectProps={{ native: true }}
                     >
-                      {academicYears.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
+                      <option value={activeAcademicYear}>{activeAcademicYear}</option>
                     </MDInput>
                   </Grid>
                 </Grid>
@@ -350,14 +424,10 @@ function SchoolAdminAllocations() {
                       label="Term"
                       fullWidth
                       value={bulkForm.term}
-                      onChange={(event) => setBulkForm({ ...bulkForm, term: event.target.value })}
+                      disabled
                       SelectProps={{ native: true }}
                     >
-                      {terms.map((term) => (
-                        <option key={term} value={term}>
-                          {term}
-                        </option>
-                      ))}
+                      <option value={activeTermName}>{activeTermName}</option>
                     </MDInput>
                   </Grid>
                   <Grid item xs={6}>
@@ -366,16 +436,10 @@ function SchoolAdminAllocations() {
                       label="Academic Year"
                       fullWidth
                       value={bulkForm.academic_year}
-                      onChange={(event) =>
-                        setBulkForm({ ...bulkForm, academic_year: event.target.value })
-                      }
+                      disabled
                       SelectProps={{ native: true }}
                     >
-                      {academicYears.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
+                      <option value={activeAcademicYear}>{activeAcademicYear}</option>
                     </MDInput>
                   </Grid>
                 </Grid>
@@ -400,6 +464,16 @@ function SchoolAdminAllocations() {
                 <MDTypography variant="h5" mb={2}>
                   Current Allocations
                 </MDTypography>
+                <Grid container spacing={2} mb={2}>
+                  <Grid item xs={12} md={6}>
+                    <MDInput
+                      label="Search course, term, or year"
+                      fullWidth
+                      value={allocationSearch}
+                      onChange={(event) => setAllocationSearch(event.target.value)}
+                    />
+                  </Grid>
+                </Grid>
                 {error && (
                   <MDTypography variant="caption" color="error" display="block" mb={2}>
                     {error}
@@ -412,7 +486,7 @@ function SchoolAdminAllocations() {
                 )}
                 {loading ? (
                   <MDTypography variant="body2">Loading allocations...</MDTypography>
-                ) : allocations.length === 0 ? (
+                ) : groupedAllocations.length === 0 ? (
                   <MDTypography variant="body2" color="text">
                     No allocations yet.
                   </MDTypography>
@@ -421,36 +495,72 @@ function SchoolAdminAllocations() {
                     <Table>
                       <TableHead sx={{ display: "table-header-group" }}>
                         <TableRow>
-                          <TableCell>Learner</TableCell>
-                          <TableCell>Grade</TableCell>
                           <TableCell>Course</TableCell>
+                          <TableCell>Year</TableCell>
                           <TableCell>Term</TableCell>
+                          <TableCell>Learners</TableCell>
                           <TableCell>Status</TableCell>
                           <TableCell align="center">Action</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {allocations.map((allocation) => (
-                          <TableRow key={allocation.id}>
-                            <TableCell>{allocation.learner_name}</TableCell>
-                            <TableCell>{allocation.grade || "-"}</TableCell>
-                            <TableCell>{allocation.course_name}</TableCell>
-                            <TableCell>{allocation.term || "-"}</TableCell>
-                            <TableCell>
-                              <Chip label={allocation.status} color="info" size="small" />
-                            </TableCell>
-                            <TableCell align="center">
-                              <MDButton
-                                variant="text"
-                                color="error"
-                                size="small"
-                                disabled={saving}
-                                onClick={() => deallocate(allocation)}
-                              >
-                                Deallocate
-                              </MDButton>
-                            </TableCell>
-                          </TableRow>
+                        {groupedAllocations.map((group) => (
+                          <Fragment key={group.key}>
+                            <TableRow>
+                              <TableCell>{group.course_name}</TableCell>
+                              <TableCell>{group.academic_year || "-"}</TableCell>
+                              <TableCell>{group.term || "-"}</TableCell>
+                              <TableCell>{group.learners.length}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={`${group.active} active, ${group.completed} done`}
+                                  color={group.active ? "info" : "success"}
+                                  size="small"
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <MDButton
+                                  variant="text"
+                                  color="info"
+                                  size="small"
+                                  onClick={() =>
+                                    setExpandedGroup(expandedGroup === group.key ? "" : group.key)
+                                  }
+                                >
+                                  {expandedGroup === group.key ? "Hide learners" : "View learners"}
+                                </MDButton>
+                              </TableCell>
+                            </TableRow>
+                            {expandedGroup === group.key &&
+                              group.learners.map((allocation) => (
+                                <TableRow key={allocation.id}>
+                                  <TableCell sx={{ pl: 4 }}>
+                                    {allocation.learner_name}
+                                    <MDTypography variant="caption" color="text" display="block">
+                                      {allocation.grade || "No grade"}{" "}
+                                      {allocation.stream ? `(${allocation.stream})` : ""}
+                                    </MDTypography>
+                                  </TableCell>
+                                  <TableCell>{allocation.academic_year || "-"}</TableCell>
+                                  <TableCell>{allocation.term || "-"}</TableCell>
+                                  <TableCell>1</TableCell>
+                                  <TableCell>
+                                    <Chip label={allocation.status} color="info" size="small" />
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    <MDButton
+                                      variant="text"
+                                      color="error"
+                                      size="small"
+                                      disabled={saving}
+                                      onClick={() => deallocate(allocation)}
+                                    >
+                                      Deallocate
+                                    </MDButton>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                          </Fragment>
                         ))}
                       </TableBody>
                     </Table>

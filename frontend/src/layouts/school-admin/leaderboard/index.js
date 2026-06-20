@@ -16,6 +16,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 function Leaderboard() {
   const { user, isSchoolAdmin } = useAuth();
@@ -36,8 +37,14 @@ function Leaderboard() {
     return <MDBox>Access denied. School Admin only.</MDBox>;
   }
 
-  const fetchLeaderboard = async () => {
-    setLoading(true);
+  const fetchLeaderboard = async (background = false) => {
+    const cacheKey = `school-admin:${user?.schoolId}:leaderboard:${weekNumber}:${term}:${academicYear}:${category}`;
+    const cached = getCachedPage(cacheKey)?.value;
+    if (cached && !background) {
+      setLeaderboard(cached);
+      setShowAll(false);
+    }
+    setLoading(!cached && !background);
     setError("");
 
     try {
@@ -45,6 +52,7 @@ function Leaderboard() {
         `/leaderboard/weekly/${weekNumber}/${encodeURIComponent(term)}/${academicYear}/${category}`
       );
       setLeaderboard(data);
+      setCachedPage(cacheKey, data);
       setShowAll(false);
     } catch (err) {
       setError(err.message);
@@ -72,17 +80,24 @@ function Leaderboard() {
   };
 
   useEffect(() => {
-    fetchLeaderboard();
+    const cacheKey = `school-admin:${user?.schoolId}:leaderboard:${weekNumber}:${term}:${academicYear}:${category}`;
+    fetchLeaderboard(Boolean(getCachedPage(cacheKey)));
   }, [weekNumber, term, academicYear, category]);
 
   useEffect(() => {
     const loadTerms = async () => {
+      const cacheKey = `school-admin:${user?.schoolId}:leaderboard-terms`;
+      const cached = getCachedPage(cacheKey)?.value;
+      if (cached) {
+        setTerms(cached.terms || []);
+      }
       try {
         const [termsRes, currentTerm] = await Promise.all([
           apiClient.get("/academic/terms").catch(() => []),
           apiClient.get("/academic/terms/current").catch(() => null),
         ]);
         setTerms(Array.isArray(termsRes) ? termsRes : []);
+        setCachedPage(cacheKey, { terms: Array.isArray(termsRes) ? termsRes : [] });
         if (currentTerm?.name) {
           setTerm(currentTerm.name);
           setAcademicYear(

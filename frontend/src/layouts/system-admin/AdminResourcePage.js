@@ -18,6 +18,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 function formatCell(value) {
   if (value === null || value === undefined || value === "") return "-";
@@ -88,12 +89,20 @@ function AdminResourcePage({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const loadItems = async () => {
-    setLoading(true);
+  const cacheKey = `system-admin-resource:${endpoint}`;
+
+  const loadItems = async (background = false) => {
+    const cached = getCachedPage(cacheKey)?.value;
+    if (cached && !background) {
+      setItems(cached);
+    }
+    setLoading(!cached && !background);
     setError("");
     try {
       const response = await apiClient.get(endpoint);
-      setItems(Array.isArray(response) ? response : []);
+      const nextItems = Array.isArray(response) ? response : [];
+      setItems(nextItems);
+      setCachedPage(cacheKey, nextItems);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -105,11 +114,11 @@ function AdminResourcePage({
     if (authLoading) return;
 
     if (isSystemAdmin()) {
-      loadItems();
+      loadItems(Boolean(getCachedPage(cacheKey)));
     } else {
       setLoading(false);
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, endpoint]);
 
   const handleChange = (name, value, type) => {
     setForm((current) => ({
@@ -129,7 +138,7 @@ function AdminResourcePage({
     try {
       await apiClient.post(endpoint, form);
       setForm({});
-      await loadItems();
+      await loadItems(true);
     } catch (err) {
       setError(err.message);
     } finally {
