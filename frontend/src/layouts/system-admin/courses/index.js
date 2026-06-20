@@ -17,6 +17,8 @@ function SystemAdminCourses() {
         { key: "target_level", label: "Level" },
         { key: "estimated_weeks", label: "Weeks" },
         { key: "course_category", label: "Category" },
+        { key: "independent_price_amount", label: "Independent Price" },
+        { key: "independent_currency", label: "Currency" },
         { key: "version", label: "Version" },
         { key: "is_active", label: "Active" },
       ]}
@@ -37,6 +39,17 @@ function SystemAdminCourses() {
         { name: "code", label: "Course code" },
         { name: "target_level", label: "Target grade or level" },
         { name: "estimated_weeks", label: "Estimated weeks", type: "number" },
+        {
+          name: "independent_price_amount",
+          label: "Independent learner price",
+          type: "number",
+          defaultValue: 0,
+        },
+        {
+          name: "independent_currency",
+          label: "Currency",
+          defaultValue: "KES",
+        },
         {
           name: "is_active",
           label: "Publishing status",

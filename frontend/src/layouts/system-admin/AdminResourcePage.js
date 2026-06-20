@@ -85,6 +85,7 @@ function AdminResourcePage({
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({});
+  const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -132,12 +133,34 @@ function AdminResourcePage({
     }));
   };
 
+  const resetForm = () => {
+    setForm({});
+    setEditingId(null);
+  };
+
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setForm(
+      formFields.reduce((record, field) => {
+        record[field.name] =
+          item[field.name] !== undefined && item[field.name] !== null
+            ? item[field.name]
+            : field.defaultValue ?? "";
+        return record;
+      }, {})
+    );
+  };
+
   const handleCreate = async () => {
     setSaving(true);
     setError("");
     try {
-      await apiClient.post(endpoint, form);
-      setForm({});
+      if (editingId) {
+        await apiClient.put(`${endpoint}/${editingId}`, form);
+      } else {
+        await apiClient.post(endpoint, form);
+      }
+      resetForm();
       await loadItems(true);
     } catch (err) {
       setError(err.message);
@@ -211,8 +234,13 @@ function AdminResourcePage({
               )}
               <MDBox mt={3}>
                 <MDButton variant="gradient" color="info" onClick={handleCreate} disabled={saving}>
-                  {saving ? "Saving..." : createLabel}
+                  {saving ? "Saving..." : editingId ? "Save Changes" : createLabel}
                 </MDButton>
+                {editingId && (
+                  <MDButton variant="text" color="secondary" onClick={resetForm} sx={{ ml: 1 }}>
+                    Cancel
+                  </MDButton>
+                )}
               </MDBox>
             </MDBox>
           </Card>
@@ -244,7 +272,9 @@ function AdminResourcePage({
                           {column.label}
                         </TableCell>
                       ))}
-                      {actions.length > 0 && <TableCell align="center">Actions</TableCell>}
+                      {(actions.length > 0 || formFields.length > 0) && (
+                        <TableCell align="center">Actions</TableCell>
+                      )}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -255,9 +285,19 @@ function AdminResourcePage({
                             {renderCell(item, column, navigate)}
                           </TableCell>
                         ))}
-                        {actions.length > 0 && (
+                        {(actions.length > 0 || formFields.length > 0) && (
                           <TableCell align="center">
                             <MDBox display="flex" gap={1} justifyContent="center" flexWrap="wrap">
+                              {formFields.length > 0 && (
+                                <MDButton
+                                  variant="outlined"
+                                  color="info"
+                                  size="small"
+                                  onClick={() => startEdit(item)}
+                                >
+                                  Edit
+                                </MDButton>
+                              )}
                               {actions.map((action) => (
                                 <MDButton
                                   key={action.label}

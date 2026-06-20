@@ -156,6 +156,9 @@ function CourseOverview() {
     }
   };
 
+  const independentPrice = Number(overview?.course?.independent_price_amount || 0);
+  const independentCurrency = overview?.course?.independent_currency || "KES";
+
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -213,6 +216,12 @@ function CourseOverview() {
                   First module and {overview.preview.extra_activity_limit} extra activities are
                   open. Pay to continue the full course with tutor guidance.
                 </MDTypography>
+                {independentPrice > 0 && (
+                  <MDTypography variant="caption" color="text" display="block">
+                    Course access: {independentCurrency}{" "}
+                    {independentPrice.toLocaleString()}
+                  </MDTypography>
+                )}
                 {paymentMessage && (
                   <MDTypography variant="caption" color="success" display="block">
                     {paymentMessage}

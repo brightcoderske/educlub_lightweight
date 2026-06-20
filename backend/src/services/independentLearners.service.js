@@ -65,7 +65,18 @@ async function ensureIndependentSchoolCourses() {
       role: "school_admin",
       schoolId: school.id,
     });
-    adopted.push(course);
+    const priced = await query(
+      `UPDATE courses c
+       SET independent_price_amount = COALESCE(t.independent_price_amount, c.independent_price_amount, 0),
+           independent_currency = COALESCE(NULLIF(t.independent_currency, ''), c.independent_currency, 'KES'),
+           updated_at = CURRENT_TIMESTAMP
+       FROM course_templates t
+       WHERE c.id = $1
+         AND t.id = c.template_id
+       RETURNING c.*`,
+      [course.id],
+    );
+    adopted.push(priced.rows[0] || course);
   }
   return { school, courses: adopted };
 }

@@ -182,6 +182,8 @@ CREATE TABLE IF NOT EXISTS course_templates (
   estimated_weeks INTEGER,
   learning_objectives JSONB DEFAULT '[]'::jsonb,
   certificate_enabled BOOLEAN DEFAULT FALSE,
+  independent_price_amount NUMERIC(12, 2) DEFAULT 0,
+  independent_currency VARCHAR(10) DEFAULT 'KES',
   course_category VARCHAR(50) DEFAULT 'general'
     CHECK (course_category IN ('general', 'weekly_typing', 'weekly_quiz')),
   version INTEGER DEFAULT 1,
@@ -193,6 +195,9 @@ CREATE TABLE IF NOT EXISTS course_templates (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_course_templates_code
   ON course_templates(code)
   WHERE code IS NOT NULL;
+
+ALTER TABLE course_templates ADD COLUMN IF NOT EXISTS independent_price_amount NUMERIC(12, 2) DEFAULT 0;
+ALTER TABLE course_templates ADD COLUMN IF NOT EXISTS independent_currency VARCHAR(10) DEFAULT 'KES';
 
 CREATE TABLE IF NOT EXISTS course_template_modules (
   id SERIAL PRIMARY KEY,

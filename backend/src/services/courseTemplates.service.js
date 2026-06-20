@@ -138,9 +138,10 @@ async function createTemplate(data = {}) {
   const result = await query(
     `INSERT INTO course_templates (
        name, code, description, target_level, image_url, estimated_weeks,
-       learning_objectives, certificate_enabled, course_category, is_active
+       learning_objectives, certificate_enabled, independent_price_amount,
+       independent_currency, course_category, is_active
      )
-     VALUES ($1, NULLIF($2, ''), $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7, $8, $9, $10)
+     VALUES ($1, NULLIF($2, ''), $3, NULLIF($4, ''), NULLIF($5, ''), $6, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
     [
       data.name,
@@ -151,6 +152,8 @@ async function createTemplate(data = {}) {
       data.estimated_weeks || null,
       JSON.stringify(data.learning_objectives || []),
       data.certificate_enabled === true,
+      Number(data.independent_price_amount || 0),
+      data.independent_currency || "KES",
       normalizeCourseCategory(data.course_category),
       data.is_active === true,
     ],
@@ -169,11 +172,13 @@ async function updateTemplate(templateId, data = {}) {
          estimated_weeks = $6,
          learning_objectives = $7,
          certificate_enabled = $8,
-         course_category = $9,
-         is_active = $10,
+         independent_price_amount = $9,
+         independent_currency = $10,
+         course_category = $11,
+         is_active = $12,
          version = COALESCE(version, 1) + 1,
          updated_at = CURRENT_TIMESTAMP
-     WHERE id = $11
+     WHERE id = $13
      RETURNING *`,
     [
       data.name,
@@ -184,6 +189,8 @@ async function updateTemplate(templateId, data = {}) {
       data.estimated_weeks || null,
       JSON.stringify(data.learning_objectives || []),
       data.certificate_enabled === true,
+      Number(data.independent_price_amount || 0),
+      data.independent_currency || "KES",
       normalizeCourseCategory(data.course_category),
       data.is_active !== false,
       templateId,
@@ -520,9 +527,10 @@ async function adoptTemplate(templateId, user = {}) {
     `INSERT INTO courses (
        school_id, template_id, template_version, last_template_sync_at,
        school_version, name, code, description, target_level, image_url, estimated_weeks,
-       learning_objectives, certificate_enabled, course_category, is_active
+       learning_objectives, certificate_enabled, independent_price_amount,
+       independent_currency, course_category, is_active
      )
-     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
+     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true)
      RETURNING *`,
     [
       user.schoolId,
@@ -536,6 +544,8 @@ async function adoptTemplate(templateId, user = {}) {
       template.estimated_weeks,
       JSON.stringify(template.learning_objectives || []),
       template.certificate_enabled,
+      Number(template.independent_price_amount || 0),
+      template.independent_currency || "KES",
       template.course_category,
     ],
   );
