@@ -54,6 +54,26 @@ test("login failures use a generic response and audit attempts", () => {
   assert.doesNotMatch(loginFunction, /error: error\.message/);
 });
 
+test("manual independent course access is system-admin only and audited", () => {
+  const routes = fs.readFileSync(
+    path.join(__dirname, "../src/routes/allocations.routes.js"),
+    "utf8",
+  );
+  const controller = fs.readFileSync(
+    path.join(__dirname, "../src/controllers/allocations.controller.js"),
+    "utf8",
+  );
+
+  const routeStart = routes.indexOf('"/:id/manual-access"');
+  const routeEnd = routes.indexOf("module.exports", routeStart);
+  const manualRoute = routes.slice(routeStart, routeEnd);
+
+  assert.match(manualRoute, /requireRole\("system_admin"\)/);
+  assert.match(manualRoute, /grantManualAccess/);
+  assert.match(controller, /Payment reference is required for paid access/);
+  assert.match(controller, /manual_course_access_grant/);
+});
+
 test("file submission policy rejects dangerous extension spoofing", () => {
   assert.equal(isAllowedSubmissionFile("avatar.php", "image/png"), false);
   assert.equal(isAllowedSubmissionFile("installer.exe", "application/pdf"), false);

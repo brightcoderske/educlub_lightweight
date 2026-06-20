@@ -48,7 +48,9 @@ async function getAllAllocations(req, res) {
              l.grade,
              l.stream,
              c.name as course_name,
-             c.course_category
+             c.course_category,
+             c.independent_price_amount,
+             c.independent_currency
       FROM course_allocations a
       JOIN learners l ON a.learner_id = l.id
       JOIN courses c ON a.course_id = c.id
@@ -468,6 +470,60 @@ async function bulkAllocate(req, res) {
   }
 }
 
+async function grantManualAccess(req, res) {
+  try {
+    const { access_level = "grant", payment_reference, note } = req.body;
+    const allowedLevels = ["paid", "grant", "scholarship"];
+    if (!allowedLevels.includes(access_level)) {
+      return res.status(400).json({ error: "Choose paid, grant, or scholarship access." });
+    }
+    const cleanReference = String(payment_reference || "").trim();
+    const cleanNote = String(note || "").trim();
+    if (!cleanReference && access_level === "paid") {
+      return res.status(400).json({ error: "Payment reference is required for paid access." });
+    }
+    if (!cleanNote) {
+      return res.status(400).json({ error: "Add a short note for this manual access change." });
+    }
+
+    const result = await query(
+      `UPDATE course_allocations
+       SET access_level = $1,
+           paid_at = CASE WHEN $1 = 'paid' THEN COALESCE(paid_at, NOW()) ELSE paid_at END,
+           payment_reference = COALESCE(NULLIF($2, ''), payment_reference),
+           status = CASE WHEN status = 'inactive' THEN 'active' ELSE status END,
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [access_level, cleanReference, req.params.id],
+    );
+
+    const allocation = result.rows[0];
+    if (!allocation) {
+      return res.status(404).json({ error: "Allocation not found" });
+    }
+
+    await query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values)
+       VALUES ($1, 'manual_course_access_grant', 'course_allocation', $2, $3)`,
+      [
+        req.user.userId,
+        allocation.id,
+        JSON.stringify({
+          access_level,
+          payment_reference: cleanReference || null,
+          note: cleanNote,
+        }),
+      ],
+    );
+
+    res.json(allocation);
+  } catch (error) {
+    console.error("Manual allocation access error:", error);
+    res.status(400).json({ error: error.message || "Failed to grant manual access" });
+  }
+}
+
 module.exports = {
   getAllAllocations,
   createAllocation,
@@ -475,4 +531,5 @@ module.exports = {
   updateAllocation,
   deleteAllocation,
   bulkAllocate,
+  grantManualAccess,
 };

@@ -42,6 +42,12 @@ function SystemAdminLearners() {
   const [selectedLearnerId, setSelectedLearnerId] = useState(null);
   const [search, setSearch] = useState("");
   const [schoolFilter, setSchoolFilter] = useState(null);
+  const [supportLearner, setSupportLearner] = useState(null);
+  const [supportAllocations, setSupportAllocations] = useState([]);
+  const [supportDrafts, setSupportDrafts] = useState({});
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [supportMessage, setSupportMessage] = useState("");
+  const [supportError, setSupportError] = useState("");
 
   const loadData = async (background = false) => {
     const cached = getCachedPage(CACHE_KEY)?.value;
@@ -103,6 +109,67 @@ function SystemAdminLearners() {
       setMessage(result.message || "Password reset email sent.");
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const loadSupportAllocations = async (learner) => {
+    setSupportLearner(learner);
+    setSupportAllocations([]);
+    setSupportDrafts({});
+    setSupportMessage("");
+    setSupportError("");
+    if (!learner) return;
+    setSupportLoading(true);
+    try {
+      const allocations = await apiClient.get(`/allocations?learner_id=${learner.id}&category=all`);
+      setSupportAllocations(allocations);
+      setSupportDrafts(
+        allocations.reduce((acc, allocation) => {
+          acc[allocation.id] = {
+            access_level: "paid",
+            payment_reference: allocation.payment_reference || "",
+            note: "",
+          };
+          return acc;
+        }, {})
+      );
+    } catch (err) {
+      setSupportError(err.message);
+    } finally {
+      setSupportLoading(false);
+    }
+  };
+
+  const updateSupportDraft = (allocationId, field, value) => {
+    setSupportDrafts((current) => ({
+      ...current,
+      [allocationId]: {
+        ...(current[allocationId] || {
+          access_level: "paid",
+          payment_reference: "",
+          note: "",
+        }),
+        [field]: value,
+      },
+    }));
+  };
+
+  const grantManualAccess = async (allocation) => {
+    const draft = supportDrafts[allocation.id] || {};
+    setSupportError("");
+    setSupportMessage("");
+    try {
+      const updated = await apiClient.post(`/allocations/${allocation.id}/manual-access`, {
+        access_level: draft.access_level || "paid",
+        payment_reference: draft.payment_reference,
+        note: draft.note,
+      });
+      setSupportAllocations((current) =>
+        current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+      );
+      setSupportMessage(`${allocation.course_name} access updated for ${supportLearner?.full_name}.`);
+    } catch (err) {
+      setSupportError(err.message);
     }
   };
 
@@ -263,6 +330,141 @@ function SystemAdminLearners() {
                   </TableBody>
                 </Table>
               </TableContainer>
+            )}
+          </MDBox>
+        </Card>
+
+        <Card sx={{ mt: 3 }}>
+          <MDBox p={3}>
+            <MDTypography variant="h5" mb={1}>
+              Independent Learner Payment Support
+            </MDTypography>
+            <MDTypography variant="body2" color="text" mb={2}>
+              Use this only after confirming the payment in Flutterwave. The action unlocks the
+              existing course allocation and records an audit note.
+            </MDTypography>
+            <Grid container spacing={2} mb={2}>
+              <Grid item xs={12} md={7}>
+                <Autocomplete
+                  options={learners}
+                  getOptionLabel={(option) =>
+                    `${option.full_name} - ${option.username || option.email || "no login"}`
+                  }
+                  value={supportLearner}
+                  onChange={(_, value) => loadSupportAllocations(value)}
+                  renderInput={(params) => <MDInput {...params} label="Find learner" />}
+                />
+              </Grid>
+            </Grid>
+            {supportMessage && (
+              <MDTypography variant="caption" color="success" display="block" mb={2}>
+                {supportMessage}
+              </MDTypography>
+            )}
+            {supportError && (
+              <MDTypography variant="caption" color="error" display="block" mb={2}>
+                {supportError}
+              </MDTypography>
+            )}
+            {supportLoading ? (
+              <MDTypography variant="body2">Loading learner allocations...</MDTypography>
+            ) : supportLearner && supportAllocations.length === 0 ? (
+              <MDTypography variant="body2" color="text">
+                No course allocations found for this learner.
+              </MDTypography>
+            ) : supportLearner ? (
+              <TableContainer>
+                <Table>
+                  <TableHead sx={{ display: "table-header-group" }}>
+                    <TableRow>
+                      <TableCell>Course</TableCell>
+                      <TableCell>Access</TableCell>
+                      <TableCell>Price</TableCell>
+                      <TableCell>Grant as</TableCell>
+                      <TableCell>Reference</TableCell>
+                      <TableCell>Note</TableCell>
+                      <TableCell align="center">Action</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {supportAllocations.map((allocation) => {
+                      const draft = supportDrafts[allocation.id] || {};
+                      const currency = allocation.independent_currency || "KES";
+                      const amount = Number(allocation.independent_price_amount || 0);
+                      return (
+                        <TableRow key={allocation.id}>
+                          <TableCell>{allocation.course_name}</TableCell>
+                          <TableCell>{allocation.access_level || "paid"}</TableCell>
+                          <TableCell>
+                            {currency} {amount.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <MDInput
+                              select
+                              fullWidth
+                              value={draft.access_level || "paid"}
+                              onChange={(event) =>
+                                updateSupportDraft(
+                                  allocation.id,
+                                  "access_level",
+                                  event.target.value
+                                )
+                              }
+                              SelectProps={{ native: true }}
+                            >
+                              <option value="paid">Paid</option>
+                              <option value="grant">Admin Grant</option>
+                              <option value="scholarship">Scholarship</option>
+                            </MDInput>
+                          </TableCell>
+                          <TableCell>
+                            <MDInput
+                              fullWidth
+                              placeholder="Flutterwave ref"
+                              value={draft.payment_reference || ""}
+                              onChange={(event) =>
+                                updateSupportDraft(
+                                  allocation.id,
+                                  "payment_reference",
+                                  event.target.value
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <MDInput
+                              fullWidth
+                              placeholder="Reason / support note"
+                              value={draft.note || ""}
+                              onChange={(event) =>
+                                updateSupportDraft(allocation.id, "note", event.target.value)
+                              }
+                            />
+                          </TableCell>
+                          <TableCell align="center">
+                            <MDButton
+                              variant="gradient"
+                              color="success"
+                              size="small"
+                              onClick={() => grantManualAccess(allocation)}
+                              disabled={
+                                !draft.note ||
+                                (draft.access_level === "paid" && !draft.payment_reference)
+                              }
+                            >
+                              Unlock
+                            </MDButton>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <MDTypography variant="body2" color="text">
+                Choose a learner to review their course payment access.
+              </MDTypography>
             )}
           </MDBox>
         </Card>

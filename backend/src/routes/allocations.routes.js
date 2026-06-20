@@ -29,5 +29,11 @@ router.post(
   requireRole("system_admin", "school_admin", "teacher"),
   allocationsController.bulkAllocate
 );
+router.post(
+  "/:id/manual-access",
+  authenticateToken,
+  requireRole("system_admin"),
+  allocationsController.grantManualAccess
+);
 
 module.exports = router;
