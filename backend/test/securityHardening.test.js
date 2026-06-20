@@ -74,6 +74,32 @@ test("manual independent course access is system-admin only and audited", () => 
   assert.match(controller, /manual_course_access_grant/);
 });
 
+test("course payment webhook requires Flutterwave signature and reuses payment verification", () => {
+  const routes = fs.readFileSync(
+    path.join(__dirname, "../src/routes/courses.routes.js"),
+    "utf8",
+  );
+  const controller = fs.readFileSync(
+    path.join(__dirname, "../src/controllers/courses.controller.js"),
+    "utf8",
+  );
+  const service = fs.readFileSync(
+    path.join(__dirname, "../src/services/courses.service.js"),
+    "utf8",
+  );
+
+  const routeStart = routes.indexOf('"/payments/webhook"');
+  const routeEnd = routes.indexOf('"/activities/:activityId/discussion"', routeStart);
+  const webhookRoute = routes.slice(routeStart, routeEnd);
+
+  assert.match(webhookRoute, /flutterwaveCourseWebhook/);
+  assert.doesNotMatch(webhookRoute, /authenticateToken/);
+  assert.match(controller, /isValidWebhookSignature/);
+  assert.match(controller, /processCoursePaymentWebhook/);
+  assert.match(service, /processCoursePaymentWebhook/);
+  assert.match(service, /verifyCoursePayment\(\{ transactionId, txRef \}\)/);
+});
+
 test("file submission policy rejects dangerous extension spoofing", () => {
   assert.equal(isAllowedSubmissionFile("avatar.php", "image/png"), false);
   assert.equal(isAllowedSubmissionFile("installer.exe", "application/pdf"), false);

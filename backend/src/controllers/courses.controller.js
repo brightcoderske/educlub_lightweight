@@ -1,5 +1,6 @@
 const coursesService = require("../services/courses.service");
 const { writeModulePdf } = require("../services/modulePdf.service");
+const flutterwave = require("../services/flutterwave.service");
 const fs = require("fs");
 const path = require("path");
 
@@ -505,6 +506,26 @@ async function verifyCoursePayment(req, res) {
   }
 }
 
+async function flutterwaveCourseWebhook(req, res) {
+  try {
+    const validSignature = flutterwave.isValidWebhookSignature({
+      rawBody: req.rawBody,
+      signature: req.get("flutterwave-signature"),
+      legacyHash: req.get("verif-hash"),
+    });
+
+    if (!validSignature) {
+      return res.status(401).json({ error: "Invalid webhook signature" });
+    }
+
+    const result = await coursesService.processCoursePaymentWebhook(req.body);
+    res.json(result);
+  } catch (error) {
+    console.error("Flutterwave course webhook error:", error);
+    res.status(400).json({ error: error.message || "Failed to process course payment webhook" });
+  }
+}
+
 async function reorderActivities(req, res) {
   try {
     const activities = await coursesService.reorderActivities(
@@ -665,6 +686,7 @@ module.exports = {
   updateActivityProgress,
   startCoursePayment,
   verifyCoursePayment,
+  flutterwaveCourseWebhook,
   getActivityDiscussion,
   addDiscussionReply,
   submitQuiz,

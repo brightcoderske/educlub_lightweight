@@ -83,6 +83,10 @@ router.post(
   requireRole("learner"),
   coursesController.verifyCoursePayment,
 );
+router.post(
+  "/payments/webhook",
+  coursesController.flutterwaveCourseWebhook,
+);
 router.get(
   "/activities/:activityId/discussion",
   authenticateToken,

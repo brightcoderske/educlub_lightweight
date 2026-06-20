@@ -1267,6 +1267,51 @@ async function verifyCoursePayment({ transactionId, txRef }, user = {}) {
   return { status: "unlocked" };
 }
 
+function getWebhookTransaction(payload = {}) {
+  return payload.data || payload.event?.data || {};
+}
+
+async function processCoursePaymentWebhook(payload = {}) {
+  const eventType = payload.event || payload.type || "";
+  const transaction = getWebhookTransaction(payload);
+  const txRef = transaction.tx_ref || payload.tx_ref;
+  const transactionId = transaction.id || transaction.transaction_id;
+
+  if (eventType && eventType !== "charge.completed") {
+    return {
+      accepted: true,
+      ignored: true,
+      reason: "Webhook event is not a completed charge.",
+      eventType,
+    };
+  }
+  if (transaction.status && transaction.status !== "successful") {
+    return {
+      accepted: true,
+      ignored: true,
+      reason: "Webhook transaction is not successful.",
+      eventType,
+      txRef,
+    };
+  }
+  if (!txRef || !transactionId) {
+    return {
+      accepted: true,
+      ignored: true,
+      reason: "Webhook did not include a tx_ref and transaction id.",
+      eventType,
+    };
+  }
+
+  return {
+    accepted: true,
+    eventType,
+    txRef,
+    transactionId,
+    ...(await verifyCoursePayment({ transactionId, txRef })),
+  };
+}
+
 async function upsertActivityProgress(
   activityId,
   user = {},
@@ -2039,6 +2084,7 @@ module.exports = {
   getModuleLearning,
   startCoursePayment,
   verifyCoursePayment,
+  processCoursePaymentWebhook,
   upsertActivityProgress,
   createModule,
   createManagedModule,
