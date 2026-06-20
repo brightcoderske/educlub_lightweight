@@ -81,9 +81,15 @@ function SchoolAdminAllocations() {
           `/learners?school_id=${user?.schoolId}${
             user?.role === "teacher" ? "&scope=allocation_picker" : ""
           }`
-        ),
-        apiClient.get("/courses?category=general"),
-        apiClient.get(`/allocations?school_id=${user?.schoolId}`),
+        ).catch((err) => {
+          throw new Error(`Learners: ${err.message}`);
+        }),
+        apiClient.get("/courses?category=general").catch((err) => {
+          throw new Error(`Courses: ${err.message}`);
+        }),
+        apiClient.get(`/allocations?school_id=${user?.schoolId}`).catch((err) => {
+          throw new Error(`Allocations: ${err.message}`);
+        }),
         apiClient.get("/academic/terms/current").catch(() => null),
       ]);
       const schoolRes = user?.schoolId

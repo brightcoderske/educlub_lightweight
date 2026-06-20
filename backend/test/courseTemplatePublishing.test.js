@@ -31,7 +31,7 @@ test("new system course templates are drafts until explicitly published", async 
 
 test("school staff template lists are limited to published templates", async () => {
   const service = loadServiceWithQuery(async (sql) => {
-    assert.match(sql, /t\.is_active = true/);
+    assert.match(sql, /COALESCE\(t\.is_active, true\) = true/);
     return { rows: [] };
   });
 

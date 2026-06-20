@@ -5,18 +5,6 @@ const { ensureStartupSchema } = require("../src/services/startupSchema.service")
 
 async function main() {
   await ensureStartupSchema();
-  await pool.query(
-    "UPDATE courses SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''",
-  );
-  await pool.query(
-    "UPDATE course_templates SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''",
-  );
-  await pool.query(
-    `UPDATE schools
-     SET is_independent_school = TRUE
-     WHERE LOWER(code) = 'educlub-independent'
-        OR LOWER(name) LIKE '%independent learners%'`,
-  );
 
   const result = await pool.query(
     `SELECT table_name, column_name
@@ -27,12 +15,19 @@ async function main() {
          'school_id', 'course_category', 'template_id', 'template_version',
          'school_version', 'last_template_sync_at', 'independent_price_amount',
          'independent_currency', 'version', 'is_independent_school',
-         'access_level', 'preview_activity_limit', 'paid_at', 'payment_reference'
+         'is_active', 'access_level', 'preview_activity_limit', 'paid_at', 'payment_reference'
        )
      ORDER BY table_name, column_name`,
   );
 
   console.table(result.rows);
+  const orphaned = await pool.query(
+    `SELECT COUNT(*)::integer AS orphaned_courses
+     FROM courses
+     WHERE school_id IS NULL
+       AND COALESCE(course_category, 'general') = 'general'`,
+  );
+  console.table(orphaned.rows);
 }
 
 main()

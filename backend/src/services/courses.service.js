@@ -46,6 +46,7 @@ async function getAllCourses(filters = {}) {
   }
 
   let scopeSql = "";
+  let allocationJoinSql = "LEFT JOIN course_allocations a ON false";
   if (filters.user?.role === "school_admin") {
     params.push(filters.user.schoolId);
     scopeSql = ` AND c.school_id = $${params.length}`;
@@ -61,14 +62,16 @@ async function getAllCourses(filters = {}) {
       )`;
   } else if (filters.user?.role === "learner") {
     params.push(filters.user.userId);
-    scopeSql = ` AND EXISTS (
-      SELECT 1
-      FROM course_allocations a
-      JOIN learners l ON l.id = a.learner_id
-      WHERE a.course_id = c.id
-        AND l.user_id = $${params.length}
-        AND a.status IN ('active', 'in_progress', 'completed')
-    )`;
+    allocationJoinSql = `LEFT JOIN course_allocations a
+      ON a.course_id = c.id
+      AND a.status IN ('active', 'in_progress', 'completed')
+      AND EXISTS (
+        SELECT 1
+        FROM learners l
+        WHERE l.id = a.learner_id
+          AND l.user_id = $${params.length}
+      )`;
+    scopeSql = " AND a.id IS NOT NULL";
   } else if (filters.school_id) {
     params.push(filters.school_id);
     scopeSql = ` AND c.school_id = $${params.length}`;
@@ -88,6 +91,7 @@ async function getAllCourses(filters = {}) {
             a.payment_reference
      FROM courses c
      LEFT JOIN course_templates t ON t.id = c.template_id
+     ${allocationJoinSql}
      WHERE 1=1
        ${categorySql}
        ${scopeSql}

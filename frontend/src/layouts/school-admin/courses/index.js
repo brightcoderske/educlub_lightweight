@@ -60,11 +60,17 @@ function Courses() {
       const response = await apiClient.get("/courses");
       setCourses(response);
       if (user?.role === "school_admin") {
-        const [templateResponse, teacherResponse, assignmentResponse] = await Promise.all([
-          apiClient.get("/course-templates?category=general"),
-          apiClient.get("/users?role=teacher"),
-          apiClient.get("/teacher-assignments"),
-        ]);
+        const templateResponse = await apiClient
+          .get("/course-templates?category=general")
+          .catch((err) => {
+            throw new Error(`Templates: ${err.message}`);
+          });
+        const teacherResponse = await apiClient.get("/users?role=teacher").catch((err) => {
+          throw new Error(`Teachers: ${err.message}`);
+        });
+        const assignmentResponse = await apiClient.get("/teacher-assignments").catch((err) => {
+          throw new Error(`Teacher assignments: ${err.message}`);
+        });
         setTemplates(templateResponse);
         setTeachers(teacherResponse);
         setAssignments(assignmentResponse);
@@ -84,7 +90,7 @@ function Courses() {
         });
       }
     } catch (err) {
-      setError("Failed to fetch courses");
+      setError(err.message || "Failed to fetch courses");
       console.error(err);
     } finally {
       setLoading(false);

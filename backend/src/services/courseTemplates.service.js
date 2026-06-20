@@ -121,7 +121,7 @@ async function listTemplates(filters = {}, user = {}) {
   sql += " WHERE 1=1";
 
   if (!isSystemAdmin(user)) {
-    sql += " AND t.is_active = true";
+    sql += " AND COALESCE(t.is_active, true) = true";
   }
 
   if (filters.category && filters.category !== "all") {
