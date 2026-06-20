@@ -188,6 +188,22 @@ function SystemAdminLearners() {
 
     return matchesSearch && matchesSchool;
   });
+  const independentSchoolIds = new Set(
+    schools
+      .filter((school) => {
+        const name = String(school.name || "").toLowerCase();
+        const code = String(school.code || "").toLowerCase();
+        return (
+          school.is_independent_school === true ||
+          code === "educlub-independent" ||
+          name.includes("independent learners")
+        );
+      })
+      .map((school) => school.id)
+  );
+  const independentLearners = learners.filter((learner) =>
+    independentSchoolIds.has(learner.school_id)
+  );
 
   return (
     <DashboardLayout>
@@ -346,7 +362,7 @@ function SystemAdminLearners() {
             <Grid container spacing={2} mb={2}>
               <Grid item xs={12} md={7}>
                 <Autocomplete
-                  options={learners}
+                  options={independentLearners}
                   getOptionLabel={(option) =>
                     `${option.full_name} - ${option.username || option.email || "no login"}`
                   }

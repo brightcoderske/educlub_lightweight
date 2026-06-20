@@ -15,6 +15,7 @@ const {
 const {
   importBuiltInTemplates,
 } = require("./services/builtInTemplates.service");
+const { ensureStartupSchema } = require("./services/startupSchema.service");
 
 // Import routes
 const authRoutes = require("./routes/auth.routes");
@@ -170,7 +171,8 @@ app.use(errorHandler);
 const PORT = env.port;
 
 if (env.nodeEnv !== "test") {
-  importBuiltInTemplates()
+  ensureStartupSchema()
+    .then(() => importBuiltInTemplates())
     .then((result) => {
       console.log(
         `Built-in templates ready: ${result.imported} imported, ${result.skipped} preserved, ${result.modules} modules, ${result.activities} activities.`,
