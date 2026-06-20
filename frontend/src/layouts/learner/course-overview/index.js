@@ -20,6 +20,8 @@ import { apiClient } from "lib/api";
 import { activityLearningPath } from "../learningNavigation";
 import { moduleLearningPath } from "../previewNavigation";
 
+const SUPPORT_EMAIL = "support@educlub.co.ke";
+
 function statusColor(status) {
   if (["completed", "graded"].includes(status)) return "success";
   if (["started", "in_progress", "submitted"].includes(status)) return "warning";
@@ -36,6 +38,41 @@ function progressColor(value) {
   if (Number(value) >= 85) return "success";
   if (Number(value) >= 45) return "info";
   return "warning";
+}
+
+function paymentSupportDetails({ user, course, txRef, transactionId, amount, currency }) {
+  const learnerName = user?.fullName || user?.name || user?.full_name || "Learner";
+  const learnerEmail = user?.email || "registered email";
+  const courseName = course?.name || "Course";
+  const paymentReference = txRef || "Not available";
+  const lines = [
+    "Hello eduClub Support,",
+    "",
+    "I paid for a course but my access has not opened.",
+    "",
+    `Name: ${learnerName}`,
+    `Registered Email: ${learnerEmail}`,
+    `Course: ${courseName}`,
+    `Payment Reference: ${paymentReference}`,
+    transactionId ? `Flutterwave Transaction ID: ${transactionId}` : null,
+    amount ? `Amount: ${currency || "KES"} ${Number(amount).toLocaleString()}` : null,
+    `Date: ${new Date().toLocaleString()}`,
+    "",
+    "Please help confirm and unlock my course access.",
+    "",
+    "Thank you.",
+  ].filter(Boolean);
+
+  return {
+    subject: `Payment Support - ${courseName}`,
+    body: lines.join("\n"),
+  };
+}
+
+function supportMailto(details) {
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(details.subject)}&body=${encodeURIComponent(
+    details.body
+  )}`;
 }
 
 function CourseOverview() {
@@ -55,6 +92,8 @@ function CourseOverview() {
   const [downloadError, setDownloadError] = useState("");
   const [paying, setPaying] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");
+  const [paymentSupport, setPaymentSupport] = useState(null);
+  const [supportCopied, setSupportCopied] = useState(false);
 
   const loadOverview = async () => {
     setLoading(true);
@@ -83,6 +122,16 @@ function CourseOverview() {
     const txRef = searchParams.get("course_tx_ref");
     const transactionId = searchParams.get("transaction_id");
     if (!txRef || !transactionId || previewMode) return;
+    if (!overview?.course) return;
+
+    const supportDetails = paymentSupportDetails({
+      user,
+      course: overview?.course,
+      txRef,
+      transactionId,
+      amount: overview?.course?.independent_price_amount,
+      currency: overview?.course?.independent_currency,
+    });
 
     apiClient
       .post("/courses/payments/verify", {
@@ -91,11 +140,15 @@ function CourseOverview() {
       })
       .then(() => {
         setPaymentMessage("Payment verified. Course access unlocked.");
+        setPaymentSupport(null);
         setSearchParams({});
         loadOverview();
       })
-      .catch((err) => setError(err.message || "Could not verify course payment."));
-  }, [searchParams, previewMode, setSearchParams]);
+      .catch((err) => {
+        setPaymentSupport(supportDetails);
+        setError(err.message || "Could not verify course payment.");
+      });
+  }, [searchParams, previewMode, setSearchParams, overview?.course?.id]);
 
   const toggleModule = (moduleId) => {
     setOpenModules((current) => ({ ...current, [moduleId]: !current[moduleId] }));
@@ -134,6 +187,7 @@ function CourseOverview() {
     setPaying(true);
     setError("");
     setPaymentMessage("");
+    setPaymentSupport(null);
     try {
       const result = await apiClient.post(`/courses/${overview.course.id}/payments/start`, {});
       if (result.status === "already_unlocked") {
@@ -142,6 +196,14 @@ function CourseOverview() {
         await loadOverview();
         return;
       }
+      const supportDetails = paymentSupportDetails({
+        user,
+        course: overview.course,
+        txRef: result.txRef,
+        amount: independentPrice,
+        currency: independentCurrency,
+      });
+      setPaymentSupport(supportDetails);
       if (paymentWindow) {
         paymentWindow.location.href = result.paymentLink;
         setPaymentMessage("Payment opened in a new tab. Return here after payment to continue.");
@@ -153,6 +215,17 @@ function CourseOverview() {
       setError(err.message || "Could not start course payment.");
     } finally {
       setPaying(false);
+    }
+  };
+
+  const copySupportDetails = async () => {
+    if (!paymentSupport?.body) return;
+    try {
+      await navigator.clipboard.writeText(`${paymentSupport.subject}\n\n${paymentSupport.body}`);
+      setSupportCopied(true);
+      window.setTimeout(() => setSupportCopied(false), 2500);
+    } catch (err) {
+      setSupportCopied(false);
     }
   };
 
@@ -227,6 +300,29 @@ function CourseOverview() {
                     {paymentMessage}
                   </MDTypography>
                 )}
+                {paymentSupport && (
+                  <MDBox mt={1.5} display="flex" flexWrap="wrap" gap={1}>
+                    <MDButton
+                      component="a"
+                      href={supportMailto(paymentSupport)}
+                      variant="outlined"
+                      color="dark"
+                      size="small"
+                      startIcon={<Icon fontSize="small">support_agent</Icon>}
+                    >
+                      Contact Support
+                    </MDButton>
+                    <MDButton
+                      variant="text"
+                      color="dark"
+                      size="small"
+                      startIcon={<Icon fontSize="small">content_copy</Icon>}
+                      onClick={copySupportDetails}
+                    >
+                      {supportCopied ? "Copied" : "Copy Details"}
+                    </MDButton>
+                  </MDBox>
+                )}
               </MDBox>
               <MDButton
                 variant="gradient"
@@ -255,6 +351,27 @@ function CourseOverview() {
               <MDTypography variant="body2" color="error" fontWeight="medium">
                 {error}
               </MDTypography>
+              {paymentSupport && (
+                <MDBox mt={2} display="flex" flexWrap="wrap" gap={1}>
+                  <MDButton
+                    component="a"
+                    href={supportMailto(paymentSupport)}
+                    variant="gradient"
+                    color="info"
+                    startIcon={<Icon fontSize="small">support_agent</Icon>}
+                  >
+                    Contact Support
+                  </MDButton>
+                  <MDButton
+                    variant="outlined"
+                    color="dark"
+                    startIcon={<Icon fontSize="small">content_copy</Icon>}
+                    onClick={copySupportDetails}
+                  >
+                    {supportCopied ? "Copied" : "Copy Support Details"}
+                  </MDButton>
+                </MDBox>
+              )}
             </MDBox>
           </Card>
         ) : (
