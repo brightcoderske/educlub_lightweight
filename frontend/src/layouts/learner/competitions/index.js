@@ -171,19 +171,32 @@ function LearnerCompetitions() {
       return;
     }
 
+    const paymentWindow = !isFreeCompetition(selected)
+      ? window.open("", "_blank", "noopener,noreferrer")
+      : null;
+    if (paymentWindow) {
+      paymentWindow.document.write("Opening secure eduClub payment...");
+    }
+
     setLoading(true);
     setError("");
     try {
       const result = await apiClient.post(`/competitions/${selected.id}/enroll`, {});
       if (result.status === "payment_required") {
-        window.open(result.paymentLink, "_blank", "noopener,noreferrer");
-        setMessage("Payment opened in a new tab. Return here after payment to verify enrolment.");
+        if (paymentWindow) {
+          paymentWindow.location.href = result.paymentLink;
+          setMessage("Payment opened in a new tab. Return here after payment to verify enrolment.");
+        } else {
+          window.location.href = result.paymentLink;
+        }
       } else {
+        paymentWindow?.close();
         setMessage("You are enrolled. The competition is ready to open.");
       }
       setSelected(null);
       await loadCompetitions();
     } catch (err) {
+      paymentWindow?.close();
       setError(err.message || "Could not start enrolment.");
     } finally {
       setLoading(false);

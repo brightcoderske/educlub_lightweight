@@ -1,6 +1,10 @@
 const { query } = require("../config");
+const crypto = require("crypto");
+const env = require("../config/env");
 const { masteryUpdateSql } = require("./progressMastery");
 const courseTemplatesService = require("./courseTemplates.service");
+const flutterwave = require("./flutterwave.service");
+const independentLearnersService = require("./independentLearners.service");
 const {
   resolveModuleAvailability,
   annotateActivityAvailability,
@@ -76,7 +80,12 @@ async function getAllCourses(filters = {}) {
             (
               c.template_id IS NOT NULL
               AND COALESCE(c.template_version, 0) < COALESCE(t.version, 1)
-            ) AS update_available
+            ) AS update_available,
+            a.id AS allocation_id,
+            a.access_level,
+            a.preview_activity_limit,
+            a.paid_at,
+            a.payment_reference
      FROM courses c
      LEFT JOIN course_templates t ON t.id = c.template_id
      WHERE 1=1
@@ -99,6 +108,8 @@ async function createCourse(courseData) {
     estimated_weeks,
     learning_objectives,
     certificate_enabled,
+    independent_price_amount,
+    independent_currency,
     is_active,
   } = courseData;
   const courseCategory = normalizeCourseCategory(courseData.course_category);
@@ -107,10 +118,10 @@ async function createCourse(courseData) {
     `INSERT INTO courses (
        school_id, name, code, description, target_level, image_url,
        estimated_weeks, learning_objectives, certificate_enabled,
-       course_category, is_active
+       independent_price_amount, independent_currency, course_category, is_active
      )
      VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''), NULLIF($6, ''),
-             $7, $8, $9, $10, $11)
+             $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
     [
       school_id || null,
@@ -122,6 +133,8 @@ async function createCourse(courseData) {
       estimated_weeks || null,
       JSON.stringify(learning_objectives || []),
       certificate_enabled === true,
+      independent_price_amount || 0,
+      independent_currency || "KES",
       courseCategory,
       is_active !== false,
     ],
@@ -145,6 +158,8 @@ async function updateCourse(id, courseData) {
     estimated_weeks,
     learning_objectives,
     certificate_enabled,
+    independent_price_amount,
+    independent_currency,
     is_active,
   } = courseData;
   const courseCategory = normalizeCourseCategory(courseData.course_category);
@@ -160,10 +175,12 @@ async function updateCourse(id, courseData) {
          estimated_weeks = $7,
          learning_objectives = $8,
          certificate_enabled = $9,
-         course_category = $10,
-         is_active = $11,
+         independent_price_amount = $10,
+         independent_currency = $11,
+         course_category = $12,
+         is_active = $13,
          updated_at = CURRENT_TIMESTAMP
-     WHERE c.id = $12
+     WHERE c.id = $14
      RETURNING *`,
     [
       school_id || null,
@@ -175,6 +192,8 @@ async function updateCourse(id, courseData) {
       estimated_weeks || null,
       JSON.stringify(learning_objectives || []),
       certificate_enabled === true,
+      independent_price_amount || 0,
+      independent_currency || "KES",
       courseCategory,
       is_active !== false,
       id,
@@ -428,7 +447,12 @@ async function assertCourseAccess(courseId, user = {}) {
             (
               c.template_id IS NOT NULL
               AND COALESCE(c.template_version, 0) < COALESCE(t.version, 1)
-            ) AS update_available
+            ) AS update_available,
+            a.id AS allocation_id,
+            a.access_level,
+            a.preview_activity_limit,
+            a.paid_at,
+            a.payment_reference
      FROM courses c
      JOIN course_allocations a ON a.course_id = c.id
      LEFT JOIN course_templates t ON t.id = c.template_id
@@ -438,11 +462,85 @@ async function assertCourseAccess(courseId, user = {}) {
      LIMIT 1`,
     [courseId, learner.id],
   );
-  return { course: result.rows[0], learner };
+  const row = result.rows[0];
+  return {
+    course: row || null,
+    learner,
+    allocation: row
+      ? {
+          id: row.allocation_id,
+          allocation_id: row.allocation_id,
+          course_id: row.id,
+          learner_id: learner.id,
+          access_level: row.access_level || "paid",
+          preview_activity_limit: row.preview_activity_limit || 0,
+          paid_at: row.paid_at || null,
+          payment_reference: row.payment_reference || null,
+        }
+      : null,
+  };
+}
+
+function applyPreviewAccess(modules = [], allocation = null) {
+  if (!allocation || allocation.access_level !== "preview") {
+    return { modules, preview: null };
+  }
+
+  const extraLimit = Math.max(0, Number(allocation.preview_activity_limit || 0));
+  const firstModuleId = modules[0]?.id;
+  let extraUsed = 0;
+  let lockedActivities = 0;
+  const paywallReason = "Pay to continue this course and get guidance from eduClub tutors.";
+
+  const previewModules = modules.map((module) => {
+    let moduleHasOpenActivity = false;
+    const activities = module.activities.map((activity) => {
+      const baseUnlocked = activity.is_unlocked !== false;
+      const inFirstModule = Number(module.id) === Number(firstModuleId);
+      const allowedByPreview = inFirstModule || extraUsed < extraLimit;
+
+      if (!inFirstModule && baseUnlocked && allowedByPreview) extraUsed += 1;
+      if (baseUnlocked && allowedByPreview) {
+        moduleHasOpenActivity = true;
+        return activity;
+      }
+
+      lockedActivities += 1;
+      return {
+        ...activity,
+        is_unlocked: false,
+        requires_payment: baseUnlocked,
+        lock_reason: baseUnlocked
+          ? paywallReason
+          : activity.lock_reason || paywallReason,
+      };
+    });
+
+    const isModuleOpen = module.is_unlocked !== false && moduleHasOpenActivity;
+    return {
+      ...module,
+      activities,
+      is_unlocked: isModuleOpen,
+      requires_payment: activities.some((activity) => activity.requires_payment),
+      lock_reason: isModuleOpen ? module.lock_reason : paywallReason,
+    };
+  });
+
+  return {
+    modules: previewModules,
+    preview: {
+      access_level: "preview",
+      first_module_included: true,
+      extra_activity_limit: extraLimit,
+      extra_activities_remaining: Math.max(0, extraLimit - extraUsed),
+      locked_activities: lockedActivities,
+      paywall_message: paywallReason,
+    },
+  };
 }
 
 async function getCourseLearningOverview(courseId, user = {}) {
-  const { course, learner } = await assertCourseAccess(courseId, user);
+  const { course, learner, allocation } = await assertCourseAccess(courseId, user);
   if (!course) return null;
 
   const staffView = isStaff(user);
@@ -567,7 +665,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
     overrideRows = overrides.rows;
   }
 
-  const modules = [...moduleMap.values()].map((module) => {
+  const builtModules = [...moduleMap.values()].map((module) => {
     const moduleOverride = overrideRows.some(
       (item) =>
         Number(item.module_id) === Number(module.id) && !item.activity_id,
@@ -603,6 +701,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
     };
     return { ...decorated, ...moduleSummary(decorated) };
   });
+  const { modules, preview } = applyPreviewAccess(builtModules, allocation);
   const completedModules = modules.filter((module) => module.is_done).length;
   const totalActivities = modules.reduce(
     (sum, module) => sum + module.total_activities,
@@ -622,6 +721,8 @@ async function getCourseLearningOverview(courseId, user = {}) {
   return {
     course,
     learner,
+    allocation,
+    preview,
     modules,
     summary: {
       total_modules: modules.length,
@@ -1031,6 +1132,139 @@ async function getModuleLearning(courseId, moduleId, user = {}) {
     badge,
     feedback,
   };
+}
+
+async function startCoursePayment(courseId, user = {}) {
+  const { course, learner, allocation } = await assertCourseAccess(courseId, user);
+  if (!course || !learner || !allocation) {
+    throw new Error("Course is not available to this learner.");
+  }
+  if (allocation.access_level !== "preview") {
+    return { status: "already_unlocked", allocation };
+  }
+
+  const independent = await independentLearnersService.isIndependentSchool(
+    learner.school_id,
+  );
+  if (!independent) {
+    throw new Error("Course payments are only available for independent learners.");
+  }
+
+  const amount = Number(course.independent_price_amount || 0);
+  const currency = course.independent_currency || "KES";
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("This course does not have an access price configured yet.");
+  }
+  if (!flutterwave.isConfigured()) {
+    throw new Error("Payment is not configured yet. Contact the system administrator.");
+  }
+
+  const txRef = `educlub-course-${course.id}-${learner.id}-${crypto.randomUUID()}`;
+  const payment = await flutterwave.createPaymentLink({
+    txRef,
+    amount,
+    currency,
+    redirectUrl: `${env.frontendUrl}/learner/courses/${course.id}?course_tx_ref=${encodeURIComponent(
+      txRef,
+    )}`,
+    customer: {
+      email: learner.email || user.email,
+      name: learner.full_name || user.fullName || user.username,
+    },
+    metadata: {
+      paymentType: "course_access",
+      courseId: course.id,
+      courseName: course.name,
+      learnerId: learner.id,
+      allocationId: allocation.allocation_id,
+    },
+    title: "eduClub Course Access",
+    description: course.name,
+  });
+
+  await query(
+    `INSERT INTO course_payments (
+       course_id, learner_id, allocation_id, tx_ref, amount, currency,
+       status, payment_link, raw_response
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)`,
+    [
+      course.id,
+      learner.id,
+      allocation.allocation_id,
+      txRef,
+      amount,
+      currency,
+      payment.link,
+      JSON.stringify(payment.raw),
+    ],
+  );
+
+  return { status: "payment_required", paymentLink: payment.link, txRef };
+}
+
+async function verifyCoursePayment({ transactionId, txRef }, user = {}) {
+  if (!transactionId) throw new Error("Flutterwave transaction id is required.");
+  if (!txRef) throw new Error("Payment reference is required.");
+
+  const paymentResult = await query(
+    `SELECT cp.*, l.user_id AS learner_user_id
+     FROM course_payments cp
+     JOIN learners l ON l.id = cp.learner_id
+     WHERE cp.tx_ref = $1
+     LIMIT 1`,
+    [txRef],
+  );
+  const payment = paymentResult.rows[0];
+  if (!payment) throw new Error("Payment record not found.");
+  if (
+    user.role === "learner" &&
+    Number(payment.learner_user_id) !== Number(user.userId)
+  ) {
+    throw new Error("Payment is outside your learner account.");
+  }
+
+  if (payment.status === "successful") {
+    return { status: "unlocked", alreadyVerified: true };
+  }
+
+  const verification = await flutterwave.verifyTransaction(transactionId);
+  const data = verification.data || {};
+  const successful =
+    data.status === "successful" &&
+    data.tx_ref === payment.tx_ref &&
+    Number(data.amount) >= Number(payment.amount) &&
+    data.currency === payment.currency;
+
+  await query(
+    `UPDATE course_payments
+     SET status = $1,
+         provider_transaction_id = $2,
+         raw_response = $3,
+         verified_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $4`,
+    [
+      successful ? "successful" : "failed",
+      String(transactionId),
+      JSON.stringify(verification),
+      payment.id,
+    ],
+  );
+
+  if (!successful) throw new Error("Payment could not be verified.");
+
+  await query(
+    `UPDATE course_allocations
+     SET access_level = 'paid',
+         paid_at = COALESCE(paid_at, NOW()),
+         payment_reference = $1,
+         status = CASE WHEN status = 'inactive' THEN 'active' ELSE status END
+     WHERE id = $2`,
+    [payment.tx_ref, payment.allocation_id],
+  );
+
+  return { status: "unlocked" };
 }
 
 async function upsertActivityProgress(
@@ -1803,6 +2037,8 @@ module.exports = {
   normalizeCourseCategory,
   getCourseLearningOverview,
   getModuleLearning,
+  startCoursePayment,
+  verifyCoursePayment,
   upsertActivityProgress,
   createModule,
   createManagedModule,

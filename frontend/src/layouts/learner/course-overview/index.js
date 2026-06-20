@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
@@ -42,6 +42,7 @@ function CourseOverview() {
   const { courseId, templateId } = useParams();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const previewMode = pathname.includes("/preview");
   const templatePreviewMode = previewMode && pathname.startsWith("/system-admin");
@@ -52,6 +53,8 @@ function CourseOverview() {
   const [error, setError] = useState("");
   const [downloadingModule, setDownloadingModule] = useState(null);
   const [downloadError, setDownloadError] = useState("");
+  const [paying, setPaying] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState("");
 
   const loadOverview = async () => {
     setLoading(true);
@@ -75,6 +78,24 @@ function CourseOverview() {
   useEffect(() => {
     loadOverview();
   }, [entityId, templatePreviewMode]);
+
+  useEffect(() => {
+    const txRef = searchParams.get("course_tx_ref");
+    const transactionId = searchParams.get("transaction_id");
+    if (!txRef || !transactionId || previewMode) return;
+
+    apiClient
+      .post("/courses/payments/verify", {
+        course_tx_ref: txRef,
+        transaction_id: transactionId,
+      })
+      .then(() => {
+        setPaymentMessage("Payment verified. Course access unlocked.");
+        setSearchParams({});
+        loadOverview();
+      })
+      .catch((err) => setError(err.message || "Could not verify course payment."));
+  }, [searchParams, previewMode, setSearchParams]);
 
   const toggleModule = (moduleId) => {
     setOpenModules((current) => ({ ...current, [moduleId]: !current[moduleId] }));
@@ -100,6 +121,38 @@ function CourseOverview() {
       setDownloadError(err.message || "Failed to download module PDF.");
     } finally {
       setDownloadingModule(null);
+    }
+  };
+
+  const startCoursePayment = async () => {
+    if (!overview?.course?.id) return;
+    const paymentWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (paymentWindow) {
+      paymentWindow.document.write("Opening secure eduClub payment...");
+    }
+
+    setPaying(true);
+    setError("");
+    setPaymentMessage("");
+    try {
+      const result = await apiClient.post(`/courses/${overview.course.id}/payments/start`, {});
+      if (result.status === "already_unlocked") {
+        paymentWindow?.close();
+        setPaymentMessage("This course is already unlocked.");
+        await loadOverview();
+        return;
+      }
+      if (paymentWindow) {
+        paymentWindow.location.href = result.paymentLink;
+        setPaymentMessage("Payment opened in a new tab. Return here after payment to continue.");
+      } else {
+        window.location.href = result.paymentLink;
+      }
+    } catch (err) {
+      paymentWindow?.close();
+      setError(err.message || "Could not start course payment.");
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -140,6 +193,42 @@ function CourseOverview() {
                 {downloadError}
               </MDTypography>
             )}
+          </MDBox>
+        )}
+
+        {!previewMode && overview?.preview && (
+          <MDBox mb={2} p={2} borderRadius="md" sx={{ bgcolor: "#fff7ed" }}>
+            <MDBox
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+              flexWrap="wrap"
+              gap={1.5}
+            >
+              <MDBox>
+                <MDTypography variant="button" color="warning" fontWeight="bold">
+                  Course preview
+                </MDTypography>
+                <MDTypography variant="body2" color="text">
+                  First module and {overview.preview.extra_activity_limit} extra activities are
+                  open. Pay to continue the full course with tutor guidance.
+                </MDTypography>
+                {paymentMessage && (
+                  <MDTypography variant="caption" color="success" display="block">
+                    {paymentMessage}
+                  </MDTypography>
+                )}
+              </MDBox>
+              <MDButton
+                variant="gradient"
+                color="warning"
+                startIcon={<Icon fontSize="small">lock_open</Icon>}
+                disabled={paying}
+                onClick={startCoursePayment}
+              >
+                {paying ? "Opening..." : "Pay to continue"}
+              </MDButton>
+            </MDBox>
           </MDBox>
         )}
 
@@ -320,7 +409,8 @@ function CourseOverview() {
                           <MDBox display="flex" justifyContent="flex-end" gap={1} mt={2}>
                             <MDButton
                               variant="gradient"
-                              color="success"
+                              color={courseModule.is_unlocked ? "success" : "warning"}
+                              disabled={!courseModule.is_unlocked}
                               startIcon={<Icon fontSize="small">open_in_new</Icon>}
                               onClick={() =>
                                 navigate(
@@ -334,7 +424,7 @@ function CourseOverview() {
                                 )
                               }
                             >
-                              Open Module
+                              {courseModule.is_unlocked ? "Open Module" : "Locked"}
                             </MDButton>
                           </MDBox>
                         </MDBox>

@@ -479,6 +479,32 @@ async function deleteActivity(req, res) {
   }
 }
 
+async function startCoursePayment(req, res) {
+  try {
+    const result = await coursesService.startCoursePayment(req.params.id, req.user);
+    res.json(result);
+  } catch (error) {
+    console.error("Start course payment error:", error);
+    res.status(400).json({ error: error.message || "Failed to start course payment" });
+  }
+}
+
+async function verifyCoursePayment(req, res) {
+  try {
+    const result = await coursesService.verifyCoursePayment(
+      {
+        transactionId: req.body.transaction_id,
+        txRef: req.body.course_tx_ref || req.body.tx_ref,
+      },
+      req.user,
+    );
+    res.json(result);
+  } catch (error) {
+    console.error("Verify course payment error:", error);
+    res.status(400).json({ error: error.message || "Failed to verify course payment" });
+  }
+}
+
 async function reorderActivities(req, res) {
   try {
     const activities = await coursesService.reorderActivities(
@@ -637,6 +663,8 @@ module.exports = {
   getModuleLearning,
   downloadModulePdf,
   updateActivityProgress,
+  startCoursePayment,
+  verifyCoursePayment,
   getActivityDiscussion,
   addDiscussionReply,
   submitQuiz,

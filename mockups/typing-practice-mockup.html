@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>eduClub Typing Practice Mockup</title>
+    <style>
+      :root {
+        --ink: #17213a;
+        --muted: #667085;
+        --blue: #1e88e5;
+        --green: #22a06b;
+        --gold: #ffb020;
+        --paper: #fffaf0;
+        --line: #e6e8ef;
+        --soft: #f4f7fb;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: linear-gradient(180deg, #eef6ff 0%, #fffaf0 52%, #f7fbf7 100%);
+        color: var(--ink);
+      }
+
+      .shell {
+        width: min(1180px, calc(100% - 28px));
+        margin: 0 auto;
+        padding: 24px 0 36px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 22px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .logo {
+        width: 46px;
+        height: 46px;
+        display: grid;
+        place-items: center;
+        border-radius: 12px;
+        background: #111827;
+        color: white;
+        font-weight: 800;
+        box-shadow: 0 12px 24px rgba(17, 24, 39, 0.16);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(24px, 4vw, 42px);
+        line-height: 1.06;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .pill {
+        border: 1px solid var(--line);
+        background: white;
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 330px minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .panel,
+      .card {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(230, 232, 239, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 16px 36px rgba(17, 24, 39, 0.08);
+      }
+
+      .panel {
+        padding: 16px;
+      }
+
+      .track {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: white;
+        margin-top: 10px;
+      }
+
+      .track.active {
+        border-color: rgba(30, 136, 229, 0.45);
+        background: #eef7ff;
+      }
+
+      .progress {
+        height: 8px;
+        width: 100%;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e7ecf3;
+        margin-top: 8px;
+      }
+
+      .progress span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--blue), var(--green));
+      }
+
+      .main {
+        display: grid;
+        gap: 18px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
+        gap: 18px;
+        align-items: stretch;
+      }
+
+      .card {
+        padding: 18px;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+
+      .stat {
+        border-radius: 8px;
+        padding: 12px;
+        background: var(--soft);
+      }
+
+      .stat b {
+        display: block;
+        font-size: 26px;
+        margin-top: 6px;
+      }
+
+      .levels {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .level {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: white;
+      }
+
+      .level.active {
+        background: #fff8e6;
+        border-color: rgba(255, 176, 32, 0.55);
+      }
+
+      .practice {
+        display: grid;
+        gap: 14px;
+      }
+
+      .target {
+        padding: 18px;
+        border-radius: 8px;
+        background: #111827;
+        color: white;
+        font-size: clamp(22px, 4vw, 36px);
+        line-height: 1.45;
+        letter-spacing: 0;
+      }
+
+      .done {
+        color: #77e6ad;
+      }
+
+      .next {
+        color: #ffdc7a;
+        border-bottom: 3px solid #ffdc7a;
+      }
+
+      .keyboard {
+        display: grid;
+        gap: 7px;
+        padding: 14px;
+        border-radius: 8px;
+        background: #f0f4f8;
+      }
+
+      .row {
+        display: flex;
+        justify-content: center;
+        gap: 7px;
+      }
+
+      .key {
+        width: 42px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        border-radius: 7px;
+        border: 1px solid #d2dae6;
+        background: white;
+        font-weight: 800;
+      }
+
+      .key.hot {
+        background: var(--gold);
+        border-color: #d49313;
+        box-shadow: 0 8px 18px rgba(255, 176, 32, 0.35);
+      }
+
+      .hands {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+
+      .hand {
+        border-radius: 8px;
+        background: var(--paper);
+        border: 1px solid #f3dfb6;
+        padding: 14px;
+      }
+
+      .activities {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+      }
+
+      .activity {
+        min-height: 96px;
+        padding: 12px;
+        border-radius: 8px;
+        color: white;
+      }
+
+      .activity:nth-child(1) {
+        background: #1e88e5;
+      }
+
+      .activity:nth-child(2) {
+        background: #22a06b;
+      }
+
+      .activity:nth-child(3) {
+        background: #7c3aed;
+      }
+
+      .activity:nth-child(4) {
+        background: #f97316;
+      }
+
+      .activity:nth-child(5) {
+        background: #111827;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 12px 16px;
+        background: var(--blue);
+        color: white;
+        font-weight: 800;
+        cursor: default;
+      }
+
+      button.secondary {
+        background: #111827;
+      }
+
+      @media (max-width: 900px) {
+        .grid,
+        .hero {
+          grid-template-columns: 1fr;
+        }
+
+        .levels,
+        .activities {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
+      @media (max-width: 560px) {
+        .shell {
+          width: min(100% - 20px, 1180px);
+          padding-top: 14px;
+        }
+
+        .topbar,
+        .actions {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .stats {
+          grid-template-columns: 1fr;
+        }
+
+        .levels,
+        .activities,
+        .hands {
+          grid-template-columns: 1fr;
+        }
+
+        .key {
+          width: 29px;
+          height: 32px;
+          font-size: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo">EC</div>
+          <div>
+            <p class="muted">Learner / Typing Practice</p>
+            <h1>Beginner Keyboard Quest</h1>
+          </div>
+        </div>
+        <span class="pill">Always open practice</span>
+      </header>
+
+      <section class="grid">
+        <aside class="panel">
+          <h2>Practice Path</h2>
+          <p class="muted">Start with hand placement, then unlock harder drills.</p>
+
+          <div class="track active">
+            <div>
+              <b>Beginner</b>
+              <p class="muted">5 levels / 25 activities</p>
+              <div class="progress"><span style="width: 34%"></span></div>
+            </div>
+            <span class="pill">34%</span>
+          </div>
+
+          <div class="track">
+            <div>
+              <b>Intermediate</b>
+              <p class="muted">Coming after beginner</p>
+            </div>
+            <span class="pill">Locked</span>
+          </div>
+
+          <div class="track">
+            <div>
+              <b>Speed Builder</b>
+              <p class="muted">Timed growth challenges</p>
+            </div>
+            <span class="pill">Locked</span>
+          </div>
+        </aside>
+
+        <section class="main">
+          <div class="hero">
+            <div class="card">
+              <p class="muted">Level 1</p>
+              <h2>Home Row: A S D F J K L ;</h2>
+              <p class="muted" style="margin-top: 8px">
+                Keep your fingers resting on the home row. Type slowly first, then grow speed.
+              </p>
+
+              <div class="levels">
+                <div class="level active"><b>1</b><p class="muted">Home row</p></div>
+                <div class="level"><b>2</b><p class="muted">Left hand</p></div>
+                <div class="level"><b>3</b><p class="muted">Right hand</p></div>
+                <div class="level"><b>4</b><p class="muted">Top row</p></div>
+                <div class="level"><b>5</b><p class="muted">Bottom row</p></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Today</h2>
+              <div class="stats" style="margin-top: 12px">
+                <div class="stat"><span class="muted">Best WPM</span><b>18</b></div>
+                <div class="stat"><span class="muted">Accuracy</span><b>94%</b></div>
+                <div class="stat"><span class="muted">Streak</span><b>4</b></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card practice">
+            <div class="actions">
+              <div>
+                <p class="muted">Activity 3 of 5</p>
+                <h2>Type the glowing key</h2>
+              </div>
+              <div>
+                <span class="pill">45 seconds</span>
+                <span class="pill">Goal: 90% accuracy</span>
+              </div>
+            </div>
+
+            <div class="target">
+              <span class="done">asdf jk</span><span class="next">l</span> ; asdf jkl;
+            </div>
+
+            <div class="keyboard" aria-label="Keyboard mockup">
+              <div class="row">
+                <div class="key">Q</div><div class="key">W</div><div class="key">E</div>
+                <div class="key">R</div><div class="key">T</div><div class="key">Y</div>
+                <div class="key">U</div><div class="key">I</div><div class="key">O</div>
+                <div class="key">P</div>
+              </div>
+              <div class="row">
+                <div class="key">A</div><div class="key">S</div><div class="key">D</div>
+                <div class="key">F</div><div class="key">J</div><div class="key">K</div>
+                <div class="key hot">L</div><div class="key">;</div>
+              </div>
+              <div class="row">
+                <div class="key">Z</div><div class="key">X</div><div class="key">C</div>
+                <div class="key">V</div><div class="key">B</div><div class="key">N</div>
+                <div class="key">M</div>
+              </div>
+            </div>
+
+            <div class="hands">
+              <div class="hand">
+                <b>Left hand</b>
+                <p class="muted">A S D F fingers stay resting gently.</p>
+              </div>
+              <div class="hand">
+                <b>Right hand</b>
+                <p class="muted">Use ring finger for L, then return to home row.</p>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="secondary">Retry Activity</button>
+              <button>Start Practice</button>
+            </div>
+          </div>
+
+          <div class="activities">
+            <div class="activity"><b>1. Finger Map</b><p>Learn hand placement.</p></div>
+            <div class="activity"><b>2. Key Hunt</b><p>Find each home key.</p></div>
+            <div class="activity"><b>3. Glow Key</b><p>Type the highlighted key.</p></div>
+            <div class="activity"><b>4. Word Sprint</b><p>Timed mini drill.</p></div>
+            <div class="activity"><b>5. Level Boss</b><p>Pass to unlock level 2.</p></div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

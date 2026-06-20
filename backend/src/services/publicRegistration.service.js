@@ -8,6 +8,7 @@ const {
 } = require("../utils/email");
 const { validatePasswordPolicy } = require("./auth.service");
 const learnersService = require("./learners.service");
+const independentLearnersService = require("./independentLearners.service");
 
 function cleanText(value) {
   return String(value || "").trim();
@@ -39,7 +40,12 @@ function validateRegistration(data) {
   const thirdName = cleanText(data.third_name);
   const fullName = buildFullName(firstName, secondName, thirdName);
   const grade = Number(data.grade);
-  const schoolId = Number(data.school_id);
+  const registrationType =
+    data.registration_type === "independent" || data.school_id === "independent"
+      ? "independent"
+      : "school";
+  const schoolId =
+    registrationType === "independent" ? null : Number(data.school_id);
   const email = cleanText(data.email).toLowerCase();
   const parentFullName = cleanText(data.parent_full_name);
   const parentPhone = cleanText(data.parent_phone);
@@ -50,7 +56,10 @@ function validateRegistration(data) {
   if (!Number.isInteger(grade) || grade < 1 || grade > 12) {
     throw new Error("Choose a grade between 1 and 12.");
   }
-  if (!Number.isInteger(schoolId) || schoolId <= 0) {
+  if (
+    registrationType !== "independent" &&
+    (!Number.isInteger(schoolId) || schoolId <= 0)
+  ) {
     throw new Error("Choose a registered school.");
   }
   if (!validateEmail(email)) {
@@ -81,6 +90,7 @@ function validateRegistration(data) {
     fullName,
     grade: String(grade),
     schoolId,
+    registrationType,
     email,
     parentFullName,
     parentPhone,
@@ -102,6 +112,26 @@ async function listPublicSchools() {
   );
 
   return result.rows;
+}
+
+async function resolveRegistrationSchool(valid, client) {
+  if (valid.registrationType === "independent") {
+    return independentLearnersService.ensureIndependentSchool();
+  }
+
+  const schoolResult = await client.query(
+    `SELECT id, name
+     FROM schools
+     WHERE id = $1
+       AND is_active = true
+       AND allow_self_registration = true`,
+    [valid.schoolId],
+  );
+  const school = schoolResult.rows[0];
+  if (!school) {
+    throw new Error("This school is not accepting self-registration right now.");
+  }
+  return school;
 }
 
 async function listPublicTerms() {
@@ -155,22 +185,13 @@ async function notifySystemAdmins(registration) {
 async function registerLearner(data, ipAddress, userAgent) {
   const valid = validateRegistration(data);
   const client = await pool.connect();
+  let committed = false;
 
   try {
     await client.query("BEGIN");
 
-    const schoolResult = await client.query(
-      `SELECT id, name
-       FROM schools
-       WHERE id = $1
-         AND is_active = true
-         AND allow_self_registration = true`,
-      [valid.schoolId],
-    );
-    const school = schoolResult.rows[0];
-    if (!school) {
-      throw new Error("This school is not accepting self-registration right now.");
-    }
+    const school = await resolveRegistrationSchool(valid, client);
+    valid.schoolId = school.id;
 
     const termResult = valid.termId
       ? await client.query(
@@ -314,6 +335,21 @@ async function registerLearner(data, ipAddress, userAgent) {
     );
 
     await client.query("COMMIT");
+    committed = true;
+
+    if (valid.registrationType === "independent") {
+      try {
+        await independentLearnersService.allocateIndependentPreviewCourses(
+          learner,
+          term,
+        );
+      } catch (allocationError) {
+        console.error(
+          "Independent learner preview allocation error:",
+          allocationError,
+        );
+      }
+    }
 
     const registration = {
       learnerName: valid.fullName,
@@ -341,7 +377,9 @@ async function registerLearner(data, ipAddress, userAgent) {
       academic_year: term.academic_year,
     };
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (!committed) {
+      await client.query("ROLLBACK");
+    }
     throw error;
   } finally {
     client.release();

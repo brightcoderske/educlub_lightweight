@@ -11,10 +11,21 @@ CREATE TABLE IF NOT EXISTS schools (
   address TEXT,
   logo_url TEXT,
   allow_self_registration BOOLEAN DEFAULT FALSE,
+  is_independent_school BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS is_independent_school BOOLEAN DEFAULT FALSE;
+
+INSERT INTO schools (name, code, email, allow_self_registration, is_independent_school, is_active)
+VALUES ('eduClub Independent Learners', 'EDUCLUB-INDEPENDENT', 'support@educlub.co.ke', true, true, true)
+ON CONFLICT (code) DO UPDATE
+SET name = EXCLUDED.name,
+    allow_self_registration = true,
+    is_independent_school = true,
+    is_active = true,
+    updated_at = CURRENT_TIMESTAMP;
 
 -- Users table (for authentication)
 CREATE TABLE IF NOT EXISTS users (
@@ -133,6 +144,8 @@ CREATE TABLE IF NOT EXISTS courses (
   estimated_weeks INTEGER,
   learning_objectives JSONB DEFAULT '[]'::jsonb,
   certificate_enabled BOOLEAN DEFAULT FALSE,
+  independent_price_amount NUMERIC(12, 2) DEFAULT 0,
+  independent_currency VARCHAR(10) DEFAULT 'KES',
   course_category VARCHAR(50) DEFAULT 'general' CHECK (course_category IN ('general', 'weekly_typing', 'weekly_quiz')),
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -146,6 +159,8 @@ ALTER TABLE courses ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS estimated_weeks INTEGER;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS learning_objectives JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS certificate_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS independent_price_amount NUMERIC(12, 2) DEFAULT 0;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS independent_currency VARCHAR(10) DEFAULT 'KES';
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS course_category VARCHAR(50) DEFAULT 'general';
 ALTER TABLE courses DROP CONSTRAINT IF EXISTS courses_course_category_check;
 ALTER TABLE courses ADD CONSTRAINT courses_course_category_check
@@ -590,6 +605,10 @@ CREATE TABLE IF NOT EXISTS course_allocations (
   term VARCHAR(50),
   academic_year INTEGER,
   status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'completed', 'dropped')),
+  access_level VARCHAR(20) DEFAULT 'paid' CHECK (access_level IN ('preview', 'paid', 'grant', 'scholarship')),
+  preview_activity_limit INTEGER DEFAULT 0,
+  paid_at TIMESTAMP,
+  payment_reference VARCHAR(100),
   allocated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   completed_at TIMESTAMP,
   start_date DATE,
@@ -712,6 +731,31 @@ CREATE TABLE IF NOT EXISTS typing_attempts (
   duration_seconds INTEGER,
   submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(typing_lesson_id, learner_id, attempt_number)
+);
+ALTER TABLE course_allocations ADD COLUMN IF NOT EXISTS access_level VARCHAR(20) DEFAULT 'paid';
+ALTER TABLE course_allocations DROP CONSTRAINT IF EXISTS course_allocations_access_level_check;
+ALTER TABLE course_allocations ADD CONSTRAINT course_allocations_access_level_check
+  CHECK (access_level IN ('preview', 'paid', 'grant', 'scholarship'));
+ALTER TABLE course_allocations ADD COLUMN IF NOT EXISTS preview_activity_limit INTEGER DEFAULT 0;
+ALTER TABLE course_allocations ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;
+ALTER TABLE course_allocations ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100);
+
+CREATE TABLE IF NOT EXISTS course_payments (
+  id SERIAL PRIMARY KEY,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+  allocation_id INTEGER REFERENCES course_allocations(id) ON DELETE SET NULL,
+  provider VARCHAR(50) DEFAULT 'flutterwave',
+  tx_ref VARCHAR(100) UNIQUE NOT NULL,
+  provider_transaction_id VARCHAR(100),
+  amount NUMERIC(12, 2) NOT NULL,
+  currency VARCHAR(10) NOT NULL DEFAULT 'KES',
+  status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'successful', 'failed')),
+  payment_link TEXT,
+  raw_response JSONB,
+  verified_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS typing_practice_attempts (
@@ -1107,6 +1151,11 @@ CREATE INDEX IF NOT EXISTS idx_course_allocations_course_id ON course_allocation
 CREATE INDEX IF NOT EXISTS idx_course_allocations_learner_status ON course_allocations(learner_id, status);
 CREATE INDEX IF NOT EXISTS idx_course_allocations_course_status ON course_allocations(course_id, status);
 CREATE INDEX IF NOT EXISTS idx_course_allocations_term_year ON course_allocations(term, academic_year);
+CREATE INDEX IF NOT EXISTS idx_course_allocations_access_level ON course_allocations(access_level, learner_id, course_id);
+CREATE INDEX IF NOT EXISTS idx_course_payments_tx_ref ON course_payments(tx_ref);
+CREATE INDEX IF NOT EXISTS idx_course_payments_provider_transaction ON course_payments(provider_transaction_id);
+CREATE INDEX IF NOT EXISTS idx_course_payments_allocation ON course_payments(allocation_id);
+CREATE INDEX IF NOT EXISTS idx_course_payments_status_created ON course_payments(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_grades_cache_lookup ON grades_cache(learner_id, course_id, term, academic_year);
 CREATE INDEX IF NOT EXISTS idx_progress_cache_lookup ON progress_cache(learner_id, course_id, term, academic_year);
 CREATE INDEX IF NOT EXISTS idx_weekly_marks_learner_period ON weekly_marks(learner_id, academic_year, term, week_number);
@@ -1242,6 +1291,7 @@ ALTER TABLE quiz_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discussions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discussion_replies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE course_allocations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE course_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE grades_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE progress_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weekly_marks ENABLE ROW LEVEL SECURITY;
@@ -3213,6 +3263,47 @@ CREATE POLICY competition_payments_system_admin_update ON competition_payments
   USING ((SELECT public.educlub_role()) = 'system_admin')
   WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
 CREATE POLICY competition_payments_system_admin_delete ON competition_payments
+  FOR DELETE
+  USING ((SELECT public.educlub_role()) = 'system_admin');
+
+DROP POLICY IF EXISTS course_payments_role_access ON course_payments;
+CREATE POLICY course_payments_role_access ON course_payments
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR EXISTS (
+      SELECT 1 FROM learners l
+      WHERE l.id = learner_id
+        AND (
+          (
+            (SELECT public.educlub_role()) = 'learner'
+            AND l.user_id = (SELECT public.educlub_user_id())
+          )
+          OR (
+            (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+            AND l.school_id = (SELECT public.educlub_school_id())
+          )
+        )
+    )
+  );
+DROP POLICY IF EXISTS course_payments_owner_insert ON course_payments;
+DROP POLICY IF EXISTS course_payments_system_admin_update ON course_payments;
+DROP POLICY IF EXISTS course_payments_system_admin_delete ON course_payments;
+CREATE POLICY course_payments_owner_insert ON course_payments
+  FOR INSERT
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR EXISTS (
+      SELECT 1 FROM learners l
+      WHERE l.id = learner_id
+        AND l.user_id = (SELECT public.educlub_user_id())
+    )
+  );
+CREATE POLICY course_payments_system_admin_update ON course_payments
+  FOR UPDATE
+  USING ((SELECT public.educlub_role()) = 'system_admin')
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+CREATE POLICY course_payments_system_admin_delete ON course_payments
   FOR DELETE
   USING ((SELECT public.educlub_role()) = 'system_admin');
 

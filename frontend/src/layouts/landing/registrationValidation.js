@@ -15,7 +15,6 @@ const REQUIRED_FIELDS = [
   ["first_name", "learner first name"],
   ["second_name", "learner second name"],
   ["grade", "grade"],
-  ["school_id", "school"],
   ["term_id", "academic term"],
   ["email", "learner email"],
   ["parent_full_name", "parent or guardian name"],
@@ -28,6 +27,10 @@ export function registrationIssues(form = {}) {
   const issues = REQUIRED_FIELDS.filter(([field]) => !String(form[field] || "").trim()).map(
     ([, label]) => label
   );
+
+  if (form.registration_type !== "independent" && !String(form.school_id || "").trim()) {
+    issues.push("school");
+  }
 
   if (form.password && passwordIssues(form.password).length) {
     issues.push(`password needs ${passwordIssues(form.password).join(", ")}`);

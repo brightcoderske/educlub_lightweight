@@ -71,6 +71,18 @@ router.post(
   authenticateToken,
   coursesController.updateActivityProgress,
 );
+router.post(
+  "/:id/payments/start",
+  authenticateToken,
+  requireRole("learner"),
+  coursesController.startCoursePayment,
+);
+router.post(
+  "/payments/verify",
+  authenticateToken,
+  requireRole("learner"),
+  coursesController.verifyCoursePayment,
+);
 router.get(
   "/activities/:activityId/discussion",
   authenticateToken,

@@ -1,7 +1,7 @@
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const { query } = require("../config");
+const { query, runWithDbContext } = require("../config");
 const env = require("../config/env");
 const { sendMFACode, sendPasswordResetLinkEmail } = require("../utils/email");
 const privacyService = require("./privacy.service");
@@ -206,26 +206,35 @@ async function createPasswordResetToken(
   const tokenHash = hashResetToken(token);
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
-  await query(
-    `UPDATE password_reset_tokens
-     SET used_at = NOW()
-     WHERE user_id = $1 AND used_at IS NULL`,
-    [user.id],
-  );
+  await runWithDbContext(
+    {
+      userId: requestedByUserId || user.id,
+      role: "system_admin",
+      schoolId: user.school_id || null,
+    },
+    async () => {
+      await query(
+        `UPDATE password_reset_tokens
+         SET used_at = NOW()
+         WHERE user_id = $1 AND used_at IS NULL`,
+        [user.id],
+      );
 
-  await query(
-    `INSERT INTO password_reset_tokens (
-       user_id, token_hash, requested_by_user_id, expires_at, ip_address, user_agent
-     )
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [
-      user.id,
-      tokenHash,
-      requestedByUserId || null,
-      expiresAt,
-      ipAddress || null,
-      userAgent || null,
-    ],
+      await query(
+        `INSERT INTO password_reset_tokens (
+           user_id, token_hash, requested_by_user_id, expires_at, ip_address, user_agent
+         )
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          user.id,
+          tokenHash,
+          requestedByUserId || null,
+          expiresAt,
+          ipAddress || null,
+          userAgent || null,
+        ],
+      );
+    },
   );
 
   return {
@@ -299,12 +308,16 @@ async function confirmPasswordReset(token, newPassword) {
   validatePasswordPolicy(newPassword);
 
   const tokenHash = hashResetToken(token || "");
-  const result = await query(
-    `SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at, u.is_active
-     FROM password_reset_tokens prt
-     JOIN users u ON u.id = prt.user_id
-     WHERE prt.token_hash = $1`,
-    [tokenHash],
+  const result = await runWithDbContext(
+    { userId: "", role: "system_admin", schoolId: null },
+    () =>
+      query(
+        `SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at, u.is_active
+         FROM password_reset_tokens prt
+         JOIN users u ON u.id = prt.user_id
+         WHERE prt.token_hash = $1`,
+        [tokenHash],
+      ),
   );
   const reset = result.rows[0];
 
@@ -325,9 +338,12 @@ async function confirmPasswordReset(token, newPassword) {
     [hashedPassword, reset.user_id],
   );
   await revokeTrustedMfaDevices(reset.user_id);
-  await query(
-    "UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1",
-    [reset.id],
+  await runWithDbContext(
+    { userId: reset.user_id, role: "system_admin", schoolId: null },
+    () =>
+      query("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1", [
+        reset.id,
+      ]),
   );
   await query(
     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values)

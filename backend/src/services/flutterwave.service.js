@@ -63,6 +63,8 @@ async function createPaymentLink({
   customer,
   redirectUrl,
   metadata,
+  title,
+  description,
 }) {
   const hashedSecretKey = crypto
     .createHash("sha256")
@@ -83,8 +85,12 @@ async function createPaymentLink({
     redirect_url: redirectUrl,
     customer,
     customizations: {
-      title: "eduClub Competition",
-      description: metadata?.competitionName || "Competition enrolment",
+      title: title || "eduClub Payment",
+      description:
+        description ||
+        metadata?.competitionName ||
+        metadata?.courseName ||
+        "eduClub access",
     },
     payload_hash: payloadHash,
     configurations: {

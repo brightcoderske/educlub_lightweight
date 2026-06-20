@@ -19,6 +19,7 @@ import { useAuth } from "context/AuthContext";
 import { passwordIssues, registrationIssues } from "./registrationValidation";
 
 const initialForm = {
+  registration_type: "school",
   first_name: "",
   second_name: "",
   third_name: "",
@@ -292,6 +293,14 @@ function RegistrationLanding() {
     setForm((current) => ({ ...current, [name]: value }));
   };
 
+  const setRegistrationType = (value) => {
+    setForm((current) => ({
+      ...current,
+      registration_type: value,
+      school_id: value === "independent" ? "independent" : "",
+    }));
+  };
+
   const openRegistration = () => {
     setError("");
     setMessage("");
@@ -369,24 +378,52 @@ function RegistrationLanding() {
           <MDInput
             select
             fullWidth
-            label="School *"
-            value={form.school_id}
+            label="Registration type *"
+            value={form.registration_type}
             SelectProps={{ native: true }}
             InputLabelProps={{ shrink: true }}
-            onChange={(e) => setField("school_id", e.target.value)}
+            onChange={(e) => setRegistrationType(e.target.value)}
           >
-            <option value="">
-              {schools.length
-                ? "Choose school"
-                : "No schools currently accepting self-registration"}
-            </option>
-            {schools.map((school) => (
-              <option key={school.id} value={school.id}>
-                {school.name}
-              </option>
-            ))}
+            <option value="school">Join through my school</option>
+            <option value="independent">Independent learner</option>
           </MDInput>
         </Grid>
+        {form.registration_type !== "independent" && (
+          <Grid item xs={12} md={4}>
+            <MDInput
+              select
+              fullWidth
+              label="School *"
+              value={form.school_id}
+              SelectProps={{ native: true }}
+              InputLabelProps={{ shrink: true }}
+              onChange={(e) => setField("school_id", e.target.value)}
+            >
+              <option value="">
+                {schools.length
+                  ? "Choose school"
+                  : "No schools currently accepting self-registration"}
+              </option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.name}
+                </option>
+              ))}
+            </MDInput>
+          </Grid>
+        )}
+        {form.registration_type === "independent" && (
+          <Grid item xs={12} md={4}>
+            <MDBox p={1.6} borderRadius="md" sx={{ bgcolor: "#eef7ff", height: "100%" }}>
+              <MDTypography variant="caption" color="info" fontWeight="bold">
+                eduClub Independent Learners
+              </MDTypography>
+              <MDTypography variant="caption" color="text" display="block">
+                Preview published courses, then pay to continue with tutor guidance.
+              </MDTypography>
+            </MDBox>
+          </Grid>
+        )}
         <Grid item xs={12} md={4}>
           <MDInput
             select
