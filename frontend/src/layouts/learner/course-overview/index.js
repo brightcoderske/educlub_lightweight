@@ -179,11 +179,6 @@ function CourseOverview() {
 
   const startCoursePayment = async () => {
     if (!overview?.course?.id) return;
-    const paymentWindow = window.open("", "_blank", "noopener,noreferrer");
-    if (paymentWindow) {
-      paymentWindow.document.write("Opening secure eduClub payment...");
-    }
-
     setPaying(true);
     setError("");
     setPaymentMessage("");
@@ -191,7 +186,6 @@ function CourseOverview() {
     try {
       const result = await apiClient.post(`/courses/${overview.course.id}/payments/start`, {});
       if (result.status === "already_unlocked") {
-        paymentWindow?.close();
         setPaymentMessage("This course is already unlocked.");
         await loadOverview();
         return;
@@ -204,14 +198,9 @@ function CourseOverview() {
         currency: independentCurrency,
       });
       setPaymentSupport(supportDetails);
-      if (paymentWindow) {
-        paymentWindow.location.href = result.paymentLink;
-        setPaymentMessage("Payment opened in a new tab. Return here after payment to continue.");
-      } else {
-        window.location.href = result.paymentLink;
-      }
+      setPaymentMessage("Opening secure eduClub payment...");
+      window.location.href = result.paymentLink;
     } catch (err) {
-      paymentWindow?.close();
       setError(err.message || "Could not start course payment.");
     } finally {
       setPaying(false);

@@ -57,3 +57,13 @@ test("independent preview limits access to the configured first activities only"
   assert.doesNotMatch(source, /first_module_included: true/);
   assert.match(source, /preview_activity_limit: activityLimit/);
 });
+
+test("independent course sync does not overwrite a configured price with template zero", () => {
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../src/services/independentLearners.service.js"),
+    "utf8",
+  );
+
+  assert.match(source, /NULLIF\(t\.independent_price_amount, 0\)/);
+  assert.match(source, /NULLIF\(c\.independent_price_amount, 0\)/);
+});

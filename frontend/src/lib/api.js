@@ -50,7 +50,10 @@ class ApiClient {
         dispatchAuthExpired();
         throw new Error("Your session has expired. Please sign in again, then retry.");
       }
-      throw new Error(payload.error || payload.message || "Request failed");
+      const error = new Error(payload.error || payload.message || "Request failed");
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
     }
 
     return payload;

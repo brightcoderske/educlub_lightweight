@@ -1042,7 +1042,9 @@ function ModuleLearn() {
   const [quizResult, setQuizResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
+  const [paywall, setPaywall] = useState(null);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
   const [feedbackSaving, setFeedbackSaving] = useState(false);
@@ -1061,6 +1063,7 @@ function ModuleLearn() {
           ? `/course-templates/${entityId}/modules/${moduleId}/learn`
           : `/courses/${entityId}/modules/${moduleId}/learn`
       );
+      setPaywall(null);
       setData(response);
       setFeedbackRating(Number(response.feedback?.rating || 0));
       setFeedbackComment(response.feedback?.comment || "");
@@ -1070,7 +1073,13 @@ function ModuleLearn() {
           resolveInitialActivity(response.module.activities || [], searchParams.get("activity"))
       );
     } catch (err) {
-      setError(err.message || "Failed to load module");
+      if (err.status === 402 && err.payload?.payment_required) {
+        setPaywall(err.payload);
+        setData(null);
+        setError("");
+      } else {
+        setError(err.message || "Failed to load module");
+      }
     } finally {
       if (!silent) setLoading(false);
     }
@@ -1197,7 +1206,6 @@ function ModuleLearn() {
     }
     setSaving(true);
     try {
-      patchActivityProgress(activity.id, { status });
       const progress = await apiClient.post(`/courses/activities/${activity.id}/progress`, {
         status,
       });
@@ -1207,6 +1215,24 @@ function ModuleLearn() {
       await loadModule(true);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const startCoursePayment = async () => {
+    if (previewMode || !entityId) return;
+    setPaying(true);
+    setError("");
+    try {
+      const result = await apiClient.post(`/courses/${entityId}/payments/start`, {});
+      if (result.status === "already_unlocked") {
+        await loadModule();
+        return;
+      }
+      window.location.href = result.paymentLink;
+    } catch (err) {
+      setError(err.message || "Could not start course payment.");
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -1400,6 +1426,67 @@ function ModuleLearn() {
         <MDTypography variant="body2" color="text">
           Loading module...
         </MDTypography>
+      </MDBox>
+    );
+  }
+
+  if (paywall) {
+    const amount = Number(paywall.course?.independent_price_amount || 0);
+    const currency = paywall.course?.independent_currency || "KES";
+    return (
+      <MDBox
+        minHeight="100vh"
+        px={2}
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        sx={{ bgcolor: "#f7f1e3" }}
+      >
+        <Card sx={{ maxWidth: 560, width: "100%" }}>
+          <MDBox p={{ xs: 3, md: 4 }} textAlign="center">
+            <Icon color="warning" sx={{ fontSize: 48, mb: 1 }}>
+              lock
+            </Icon>
+            <MDTypography variant="h4" fontWeight="bold">
+              Preview ended
+            </MDTypography>
+            <MDTypography variant="body2" color="text" mt={1.5}>
+              To access this course, pay for an access key and continue with support and guided
+              lessons from eduClub tutors.
+            </MDTypography>
+            {amount > 0 && (
+              <MDTypography variant="h5" color="warning" fontWeight="bold" mt={2}>
+                {currency} {amount.toLocaleString()}
+              </MDTypography>
+            )}
+            {error && (
+              <MDBox mt={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#fee2e2" }}>
+                <MDTypography variant="body2" color="error">
+                  {error}
+                </MDTypography>
+              </MDBox>
+            )}
+            <MDBox mt={3} display="flex" justifyContent="center" gap={1.5} flexWrap="wrap">
+              <MDButton
+                variant="gradient"
+                color="warning"
+                disabled={paying}
+                startIcon={<Icon fontSize="small">payments</Icon>}
+                onClick={startCoursePayment}
+              >
+                {paying ? "Opening..." : "Pay Now"}
+              </MDButton>
+              <MDButton
+                variant="outlined"
+                color="dark"
+                startIcon={<Icon fontSize="small">arrow_back</Icon>}
+                onClick={() => navigate("/learner")}
+              >
+                Back
+              </MDButton>
+            </MDBox>
+          </MDBox>
+        </Card>
       </MDBox>
     );
   }

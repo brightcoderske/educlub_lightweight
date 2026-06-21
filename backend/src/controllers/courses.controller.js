@@ -216,6 +216,17 @@ async function getModuleLearning(req, res) {
         .json({ error: "Module not found or not available" });
     }
     if (!moduleLearning.is_unlocked) {
+      if (moduleLearning.preview || moduleLearning.module?.requires_payment) {
+        return res.status(402).json({
+          error:
+            moduleLearning.preview?.paywall_message ||
+            moduleLearning.module?.lock_reason ||
+            "Preview ended. Pay to continue this course.",
+          payment_required: true,
+          course: moduleLearning.course,
+          preview: moduleLearning.preview || null,
+        });
+      }
       return res.status(403).json({ error: "This module is not open yet" });
     }
     res.json(moduleLearning);

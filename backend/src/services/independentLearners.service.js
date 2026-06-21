@@ -67,7 +67,11 @@ async function ensureIndependentSchoolCourses() {
     });
     const priced = await query(
       `UPDATE courses c
-       SET independent_price_amount = COALESCE(t.independent_price_amount, c.independent_price_amount, 0),
+       SET independent_price_amount = COALESCE(
+             NULLIF(t.independent_price_amount, 0),
+             NULLIF(c.independent_price_amount, 0),
+             0
+           ),
            independent_currency = COALESCE(NULLIF(t.independent_currency, ''), c.independent_currency, 'KES'),
            updated_at = CURRENT_TIMESTAMP
        FROM course_templates t

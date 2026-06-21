@@ -50,7 +50,12 @@ export function findContinueLearning(courseOverviews = []) {
   const candidates = courseOverviews.flatMap(({ allocation, overview }) =>
     (overview?.modules || []).flatMap((courseModule) =>
       (courseModule.activities || [])
-        .filter((activity) => activity.is_unlocked && !COMPLETED_STATUSES.has(activity.status))
+        .filter(
+          (activity) =>
+            activity.is_unlocked &&
+            !activity.requires_payment &&
+            !COMPLETED_STATUSES.has(activity.status)
+        )
         .map((activity) => ({
           courseId: allocation.course_id,
           courseName: allocation.course_name || overview?.course?.name || "Course",

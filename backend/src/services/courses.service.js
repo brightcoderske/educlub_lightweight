@@ -1132,6 +1132,7 @@ async function getModuleLearning(courseId, moduleId, user = {}) {
         }
       : null,
     course_summary: overview.summary,
+    preview: overview.preview || null,
     is_unlocked: isUnlocked,
     badge,
     feedback,
