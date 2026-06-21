@@ -66,18 +66,6 @@ async function createPaymentLink({
   title,
   description,
 }) {
-  const hashedSecretKey = crypto
-    .createHash("sha256")
-    .update(env.flutterwaveSecretKey, "utf8")
-    .digest("hex");
-  const payloadHash = crypto
-    .createHash("sha256")
-    .update(
-      `${amount}${currency}${customer.email}${txRef}${hashedSecretKey}`,
-      "utf8",
-    )
-    .digest("hex");
-
   const response = await client().post("/payments", {
     tx_ref: txRef,
     amount,
@@ -92,17 +80,20 @@ async function createPaymentLink({
         metadata?.courseName ||
         "eduClub access",
     },
-    payload_hash: payloadHash,
-    configurations: {
-      session_duration: 30,
-      max_retry_attempt: 3,
-    },
     meta: metadata,
   });
 
   const link = response.data?.data?.link;
   if (!link) {
     throw new Error("Flutterwave did not return a payment link.");
+  }
+  try {
+    const parsed = new URL(link);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error("Unsupported payment link protocol.");
+    }
+  } catch (error) {
+    throw new Error("Flutterwave returned an invalid payment link.");
   }
 
   return { link, raw: response.data };
