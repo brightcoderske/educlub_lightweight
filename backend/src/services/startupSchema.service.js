@@ -32,6 +32,69 @@ const statements = [
   "ALTER TABLE IF EXISTS course_allocations ADD COLUMN IF NOT EXISTS preview_activity_limit INTEGER DEFAULT 0",
   "ALTER TABLE IF EXISTS course_allocations ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP",
   "ALTER TABLE IF EXISTS course_allocations ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100)",
+  `CREATE TABLE IF NOT EXISTS course_payments (
+    id SERIAL PRIMARY KEY,
+    course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+    allocation_id INTEGER REFERENCES course_allocations(id) ON DELETE SET NULL,
+    provider VARCHAR(50) DEFAULT 'flutterwave',
+    tx_ref VARCHAR(100) UNIQUE NOT NULL,
+    provider_transaction_id VARCHAR(100),
+    amount NUMERIC(12, 2) NOT NULL,
+    currency VARCHAR(10) NOT NULL DEFAULT 'KES',
+    status VARCHAR(50) DEFAULT 'pending'
+      CHECK (status IN ('pending', 'successful', 'failed')),
+    payment_link TEXT,
+    raw_response JSONB,
+    verified_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_course_payments_tx_ref ON course_payments(tx_ref)",
+  "CREATE INDEX IF NOT EXISTS idx_course_payments_provider_transaction ON course_payments(provider_transaction_id)",
+  "CREATE INDEX IF NOT EXISTS idx_course_payments_allocation ON course_payments(allocation_id)",
+  "CREATE INDEX IF NOT EXISTS idx_course_payments_status_created ON course_payments(status, created_at)",
+  "ALTER TABLE IF EXISTS course_payments ENABLE ROW LEVEL SECURITY",
+  "DROP POLICY IF EXISTS course_payments_role_access ON course_payments",
+  `CREATE POLICY course_payments_role_access ON course_payments
+    FOR SELECT
+    USING (
+      (SELECT public.educlub_role()) = 'system_admin'
+      OR EXISTS (
+        SELECT 1 FROM learners l
+        WHERE l.id = learner_id
+          AND (
+            (
+              (SELECT public.educlub_role()) = 'learner'
+              AND l.user_id = (SELECT public.educlub_user_id())
+            )
+            OR (
+              (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+              AND l.school_id = (SELECT public.educlub_school_id())
+            )
+          )
+      )
+    )`,
+  "DROP POLICY IF EXISTS course_payments_owner_insert ON course_payments",
+  "DROP POLICY IF EXISTS course_payments_system_admin_update ON course_payments",
+  "DROP POLICY IF EXISTS course_payments_system_admin_delete ON course_payments",
+  `CREATE POLICY course_payments_owner_insert ON course_payments
+    FOR INSERT
+    WITH CHECK (
+      (SELECT public.educlub_role()) = 'system_admin'
+      OR EXISTS (
+        SELECT 1 FROM learners l
+        WHERE l.id = learner_id
+          AND l.user_id = (SELECT public.educlub_user_id())
+      )
+    )`,
+  `CREATE POLICY course_payments_system_admin_update ON course_payments
+    FOR UPDATE
+    USING ((SELECT public.educlub_role()) = 'system_admin')
+    WITH CHECK ((SELECT public.educlub_role()) = 'system_admin')`,
+  `CREATE POLICY course_payments_system_admin_delete ON course_payments
+    FOR DELETE
+    USING ((SELECT public.educlub_role()) = 'system_admin')`,
   `CREATE TABLE IF NOT EXISTS course_teacher_assignments (
     id SERIAL PRIMARY KEY,
     course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,

@@ -10,12 +10,17 @@ async function main() {
     `SELECT table_name, column_name
      FROM information_schema.columns
      WHERE table_schema = 'public'
-       AND table_name IN ('courses', 'course_templates', 'course_allocations', 'schools')
+       AND table_name IN (
+         'courses', 'course_templates', 'course_allocations',
+         'course_payments', 'schools'
+       )
        AND column_name IN (
          'school_id', 'course_category', 'template_id', 'template_version',
          'school_version', 'last_template_sync_at', 'independent_price_amount',
          'independent_currency', 'version', 'is_independent_school',
-         'is_active', 'access_level', 'preview_activity_limit', 'paid_at', 'payment_reference'
+         'is_active', 'access_level', 'preview_activity_limit', 'paid_at',
+         'payment_reference', 'tx_ref', 'payment_link', 'provider_transaction_id',
+         'amount', 'currency', 'status', 'verified_at'
        )
      ORDER BY table_name, column_name`,
   );
