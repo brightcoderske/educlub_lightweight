@@ -3,7 +3,7 @@ const courseTemplatesService = require("./courseTemplates.service");
 
 const INDEPENDENT_SCHOOL_CODE = "EDUCLUB-INDEPENDENT";
 const INDEPENDENT_SCHOOL_NAME = "eduClub Independent Learners";
-const PREVIEW_EXTRA_ACTIVITY_LIMIT = 3;
+const PREVIEW_ACTIVITY_LIMIT = 3;
 
 async function ensureIndependentSchool() {
   const result = await query(
@@ -114,7 +114,7 @@ async function allocateIndependentPreviewCourses(learner, term = {}) {
         course.id,
         term.name || learner.term || null,
         term.academic_year || learner.academic_year || null,
-        PREVIEW_EXTRA_ACTIVITY_LIMIT,
+        PREVIEW_ACTIVITY_LIMIT,
       ],
     );
     allocated.push(result.rows[0]);
@@ -122,11 +122,44 @@ async function allocateIndependentPreviewCourses(learner, term = {}) {
   return { count: allocated.length, courses };
 }
 
+async function ensurePreviewAllocationsForLearnerUser(userId) {
+  if (!userId) return { count: 0, courses: [] };
+
+  const learnerResult = await query(
+    `SELECT l.*
+     FROM learners l
+     JOIN schools s ON s.id = l.school_id
+     WHERE l.user_id = $1::integer
+       AND (s.is_independent_school = true OR s.code = $2)
+     LIMIT 1`,
+    [userId, INDEPENDENT_SCHOOL_CODE],
+  );
+  const learner = learnerResult.rows[0];
+  if (!learner) return { count: 0, courses: [] };
+
+  const existing = await query(
+    `SELECT id
+     FROM course_allocations
+     WHERE learner_id = $1::integer
+       AND COALESCE(term, '') = COALESCE($2::text, '')
+       AND COALESCE(academic_year::text, '') = COALESCE($3::text, '')
+     LIMIT 1`,
+    [learner.id, learner.term || null, learner.academic_year || null],
+  );
+  if (existing.rows[0]) return { count: 0, courses: [] };
+
+  return allocateIndependentPreviewCourses(learner, {
+    name: learner.term,
+    academic_year: learner.academic_year,
+  });
+}
+
 module.exports = {
   INDEPENDENT_SCHOOL_CODE,
   INDEPENDENT_SCHOOL_NAME,
-  PREVIEW_EXTRA_ACTIVITY_LIMIT,
+  PREVIEW_ACTIVITY_LIMIT,
   allocateIndependentPreviewCourses,
+  ensurePreviewAllocationsForLearnerUser,
   ensureIndependentSchool,
   ensureIndependentSchoolCourses,
   getIndependentSchool,

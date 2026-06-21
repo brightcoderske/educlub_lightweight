@@ -286,8 +286,8 @@ function CourseOverview() {
                   Course preview
                 </MDTypography>
                 <MDTypography variant="body2" color="text">
-                  First module and {overview.preview.extra_activity_limit} extra activities are
-                  open. Pay to continue the full course with tutor guidance.
+                  First {overview.preview.preview_activity_limit || 3} activities are open. Pay to
+                  continue the full course with tutor guidance.
                 </MDTypography>
                 {independentPrice > 0 && (
                   <MDTypography variant="caption" color="text" display="block">

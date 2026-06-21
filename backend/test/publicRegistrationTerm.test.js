@@ -21,3 +21,16 @@ test("self-registration assigns a configured academic term in the same transacti
   );
   assert.match(service, /CURRENT_DATE BETWEEN t\.start_date AND t\.end_date/);
 });
+
+test("self-registration schedules slow post-registration work after commit", () => {
+  const service = fs.readFileSync(
+    path.join(__dirname, "../src/services/publicRegistration.service.js"),
+    "utf8",
+  );
+
+  assert.match(service, /function schedulePostRegistrationTasks/);
+  assert.match(service, /setImmediate/);
+  assert.match(service, /Promise\.allSettled/);
+  assert.match(service, /await client\.query\("COMMIT"\)/);
+  assert.match(service, /schedulePostRegistrationTasks\(\{/);
+});

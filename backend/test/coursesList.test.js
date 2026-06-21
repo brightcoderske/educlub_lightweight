@@ -45,3 +45,15 @@ test("learner course list joins the learner allocation for preview access detail
 
   assert.equal(courses[0].access_level, "preview");
 });
+
+test("independent preview limits access to the configured first activities only", () => {
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../src/services/courses.service.js"),
+    "utf8",
+  );
+
+  assert.match(source, /const activityLimit = Math\.max/);
+  assert.match(source, /const allowedByPreview = inFirstModule && activityUsed < activityLimit/);
+  assert.doesNotMatch(source, /first_module_included: true/);
+  assert.match(source, /preview_activity_limit: activityLimit/);
+});

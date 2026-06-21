@@ -490,9 +490,9 @@ function applyPreviewAccess(modules = [], allocation = null) {
     return { modules, preview: null };
   }
 
-  const extraLimit = Math.max(0, Number(allocation.preview_activity_limit || 0));
+  const activityLimit = Math.max(0, Number(allocation.preview_activity_limit || 0));
   const firstModuleId = modules[0]?.id;
-  let extraUsed = 0;
+  let activityUsed = 0;
   let lockedActivities = 0;
   const paywallReason = "Pay to continue this course and get guidance from eduClub tutors.";
 
@@ -501,9 +501,9 @@ function applyPreviewAccess(modules = [], allocation = null) {
     const activities = module.activities.map((activity) => {
       const baseUnlocked = activity.is_unlocked !== false;
       const inFirstModule = Number(module.id) === Number(firstModuleId);
-      const allowedByPreview = inFirstModule || extraUsed < extraLimit;
+      const allowedByPreview = inFirstModule && activityUsed < activityLimit;
 
-      if (!inFirstModule && baseUnlocked && allowedByPreview) extraUsed += 1;
+      if (baseUnlocked && allowedByPreview) activityUsed += 1;
       if (baseUnlocked && allowedByPreview) {
         moduleHasOpenActivity = true;
         return activity;
@@ -534,9 +534,9 @@ function applyPreviewAccess(modules = [], allocation = null) {
     modules: previewModules,
     preview: {
       access_level: "preview",
-      first_module_included: true,
-      extra_activity_limit: extraLimit,
-      extra_activities_remaining: Math.max(0, extraLimit - extraUsed),
+      first_module_included: false,
+      preview_activity_limit: activityLimit,
+      preview_activities_remaining: Math.max(0, activityLimit - activityUsed),
       locked_activities: lockedActivities,
       paywall_message: paywallReason,
     },

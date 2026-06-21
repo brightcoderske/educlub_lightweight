@@ -1,5 +1,6 @@
 const { query } = require("../config");
 const academicService = require("../services/academic.service");
+const independentLearnersService = require("../services/independentLearners.service");
 const notificationsService = require("../services/notifications.service");
 const teacherAssignmentsService = require("../services/teacherAssignments.service");
 
@@ -40,6 +41,14 @@ async function getAllAllocations(req, res) {
   try {
     const { school_id, learner_id, course_id, term, academic_year, category } =
       req.query;
+
+    if (req.user.role === "learner") {
+      await independentLearnersService
+        .ensurePreviewAllocationsForLearnerUser(req.user.userId)
+        .catch((error) => {
+          console.error("Independent preview allocation self-heal error:", error);
+        });
+    }
 
     let queryText = `
       SELECT a.*,

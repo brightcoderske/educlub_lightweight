@@ -182,6 +182,53 @@ async function notifySystemAdmins(registration) {
   );
 }
 
+function schedulePostRegistrationTasks({
+  registrationType,
+  learner,
+  term,
+  registration,
+  email,
+  learnerName,
+  parentName,
+}) {
+  const run = async () => {
+    if (registrationType === "independent") {
+      try {
+        await independentLearnersService.allocateIndependentPreviewCourses(
+          learner,
+          term,
+        );
+      } catch (allocationError) {
+        console.error(
+          "Independent learner preview allocation error:",
+          allocationError,
+        );
+      }
+    }
+
+    const emailResults = await Promise.allSettled([
+      sendLearnerRegistrationWelcomeEmail({
+        email,
+        learnerName,
+        parentName,
+      }),
+      notifySystemAdmins(registration),
+    ]);
+
+    emailResults.forEach((result) => {
+      if (result.status === "rejected") {
+        console.error("Post-registration notification error:", result.reason);
+      }
+    });
+  };
+
+  setImmediate(() => {
+    run().catch((error) => {
+      console.error("Post-registration task error:", error);
+    });
+  });
+}
+
 async function registerLearner(data, ipAddress, userAgent) {
   const valid = validateRegistration(data);
   const client = await pool.connect();
@@ -337,20 +384,6 @@ async function registerLearner(data, ipAddress, userAgent) {
     await client.query("COMMIT");
     committed = true;
 
-    if (valid.registrationType === "independent") {
-      try {
-        await independentLearnersService.allocateIndependentPreviewCourses(
-          learner,
-          term,
-        );
-      } catch (allocationError) {
-        console.error(
-          "Independent learner preview allocation error:",
-          allocationError,
-        );
-      }
-    }
-
     const registration = {
       learnerName: valid.fullName,
       learnerEmail: valid.email,
@@ -360,14 +393,15 @@ async function registerLearner(data, ipAddress, userAgent) {
       parentPhone: valid.parentPhone,
     };
 
-    await Promise.all([
-      sendLearnerRegistrationWelcomeEmail({
-        email: valid.email,
-        learnerName: valid.fullName,
-        parentName: valid.parentFullName,
-      }),
-      notifySystemAdmins(registration),
-    ]);
+    schedulePostRegistrationTasks({
+      registrationType: valid.registrationType,
+      learner,
+      term,
+      registration,
+      email: valid.email,
+      learnerName: valid.fullName,
+      parentName: valid.parentFullName,
+    });
 
     return {
       message: "Registration complete. Welcome to eduClub.",
