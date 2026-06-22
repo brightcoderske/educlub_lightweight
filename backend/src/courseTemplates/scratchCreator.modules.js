@@ -1,6 +1,7 @@
 const { createModule: M } = require("./scratchProgressive.module");
+const { creatorRichHtml } = require("./scratchCreator.richHtml");
 
-module.exports = [
+const modules = [
   M({
     title: "Module 1 - Interactive Story Director", focus: "broadcasts, state, user choices, nested decisions, and scene control", outcome: "a branching story whose choices reliably lead to different scenes and endings",
     introduction: "Directors coordinate performers and scenes; programmers coordinate sprites and state. You will replace fragile timing with named messages and record the viewer's choices.",
@@ -154,3 +155,8 @@ module.exports = [
     application: { prompt: "What should a capstone test include?", options: ["technical behavior and user understanding", "only the creator's opinion", "private stakeholder details", "features that were never built"], answer: "technical behavior and user understanding", hint: "A solution can run correctly and still confuse its intended user.", explanation: "Technical behavior and user understanding is correct because success requires both reliable code and a usable solution to the stated need." },
   }),
 ];
+
+module.exports = modules.map((module, index) => ({
+  ...module,
+  rich_html: creatorRichHtml(module, index),
+}));

@@ -137,6 +137,33 @@ test("Scratch Explorer Module 4 has rich visual learning for every activity", ()
   assert.match(module4.activities[7].content.rich_html, /Knowledge Check/);
 });
 
+test("Scratch Creator activities include self-paced rich HTML interactions", () => {
+  const creator = validateTemplateDefinition(
+    require("../src/courseTemplates/scratchCreator.template"),
+  );
+  const activities = creator.modules.flatMap((module) => module.activities);
+
+  assert.equal(activities.length, 90);
+  for (const activity of activities) {
+    const html = activity.content.rich_html || "";
+    assert.ok(html.length >= 2500, `${activity.title} needs complete rich HTML`);
+    assert.match(html, /data-rich-root/);
+    assert.match(html, /data-rich-progress/);
+    assert.match(html, /data-flashcard|data-rich-check|data-rich-quiz|data-rich-reflection/);
+    assert.match(html, /scratch-block/);
+  }
+
+  const projectActivities = creator.modules.map((module) => module.activities[5]);
+  for (const activity of projectActivities) {
+    assert.match(activity.content.rich_html, /Project 2:/);
+    assert.match(activity.content.rich_html, /Project 3:/);
+    assert.match(activity.content.rich_html, /Step-by-step Scratch build/);
+    assert.match(activity.content.rich_html, /Visual blocks for/);
+  }
+  assert.match(creator.modules[0].activities[2].content.rich_html, /data-sorter/);
+  assert.match(creator.modules[2].activities[5].content.rich_html, /when I start as a clone/);
+});
+
 test("AI learning includes safeguards and a Scratch-only alternative", () => {
   const aiModules = templates
     .slice(1)

@@ -87,6 +87,8 @@ function ExecutableRichContent({ html }) {
   const contentRef = useRef(null);
   const [previewImage, setPreviewImage] = useState("");
 
+  const storageKey = (key) => `educlub-rich:${key}`;
+
   useEffect(() => {
     const root = contentRef.current;
     if (!root) return undefined;
@@ -118,6 +120,153 @@ function ExecutableRichContent({ html }) {
       block.append(button, frame);
       cleanups.push(() => button.removeEventListener("click", run));
     });
+
+    const updateProgress = () => {
+      root.querySelectorAll("[data-rich-progress]").forEach((progress) => {
+        const container = progress.closest("[data-rich-root]") || root;
+        const checks = Array.from(container.querySelectorAll("[data-rich-check]"));
+        const answered = Array.from(container.querySelectorAll("[data-rich-quiz].answered"));
+        const sorted = Array.from(container.querySelectorAll("[data-sorter].answered"));
+        const reflections = Array.from(container.querySelectorAll("[data-rich-reflection]"));
+        const reflectionDone = reflections.filter((item) => item.value.trim()).length;
+        const total =
+          checks.length +
+          container.querySelectorAll("[data-rich-quiz]").length +
+          container.querySelectorAll("[data-sorter]").length +
+          reflections.length;
+        const doneCount =
+          checks.filter((item) => item.checked).length +
+          answered.length +
+          sorted.length +
+          reflectionDone;
+        const percent = total ? Math.round((doneCount / total) * 100) : 0;
+        const fill = progress.querySelector("[data-rich-progress-fill]");
+        const text = progress.querySelector("[data-rich-progress-text]");
+        if (fill) fill.style.width = `${percent}%`;
+        if (text) text.textContent = `${percent}% complete`;
+      });
+    };
+
+    root.querySelectorAll("[data-rich-check]").forEach((checkbox) => {
+      const key = checkbox.dataset.richKey;
+      if (key) checkbox.checked = localStorage.getItem(storageKey(key)) === "true";
+      const save = () => {
+        if (key) localStorage.setItem(storageKey(key), checkbox.checked ? "true" : "false");
+        updateProgress();
+      };
+      checkbox.addEventListener("change", save);
+      cleanups.push(() => checkbox.removeEventListener("change", save));
+    });
+
+    root.querySelectorAll("[data-rich-reflection]").forEach((textarea) => {
+      const key = textarea.dataset.richKey;
+      if (key) textarea.value = localStorage.getItem(storageKey(key)) || "";
+      const save = () => {
+        if (key) localStorage.setItem(storageKey(key), textarea.value);
+        updateProgress();
+      };
+      textarea.addEventListener("input", save);
+      cleanups.push(() => textarea.removeEventListener("input", save));
+    });
+
+    root.querySelectorAll("[data-sorter]").forEach((sorter) => {
+      const list = sorter.querySelector(".sc-sorter-list");
+      const status = sorter.querySelector("[data-sort-status]");
+      const checkButton = sorter.querySelector("[data-sort-check]");
+      const resetButton = sorter.querySelector("[data-sort-reset]");
+      if (!list) return;
+
+      const original = Array.from(list.children);
+      let dragged = null;
+
+      const itemOrder = () =>
+        Array.from(list.querySelectorAll("[data-sort-index]")).map((item) =>
+          Number(item.dataset.sortIndex)
+        );
+      const setStatus = (message) => {
+        if (status) status.textContent = message;
+      };
+      const isOrdered = () => itemOrder().every((value, index) => value === index + 1);
+      const markOrdered = () => {
+        sorter.classList.toggle("answered", isOrdered());
+        updateProgress();
+      };
+      const moveItem = (item, offset) => {
+        const items = Array.from(list.children);
+        const index = items.indexOf(item);
+        const nextIndex = index + offset;
+        if (nextIndex < 0 || nextIndex >= items.length) return;
+        if (offset < 0) {
+          list.insertBefore(item, items[nextIndex]);
+        } else {
+          list.insertBefore(items[nextIndex], item);
+        }
+        item.focus();
+        markOrdered();
+      };
+
+      const dragStart = (event) => {
+        dragged = event.currentTarget;
+        dragged.classList.add("dragging");
+        event.dataTransfer.effectAllowed = "move";
+      };
+      const dragOver = (event) => {
+        event.preventDefault();
+        const item = event.target.closest("[data-sort-index]");
+        if (!item || item === dragged) return;
+        const box = item.getBoundingClientRect();
+        const before = event.clientY < box.top + box.height / 2;
+        list.insertBefore(dragged, before ? item : item.nextSibling);
+      };
+      const dragEnd = () => {
+        dragged?.classList.remove("dragging");
+        dragged = null;
+        markOrdered();
+      };
+      const keyDown = (event) => {
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          moveItem(event.currentTarget, -1);
+        }
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          moveItem(event.currentTarget, 1);
+        }
+      };
+      const check = () => {
+        const ordered = isOrdered();
+        sorter.classList.toggle("answered", ordered);
+        setStatus(ordered ? "Correct order. Now build it in Scratch." : "Almost. Read the steps like a story from start to finish.");
+        updateProgress();
+      };
+      const reset = () => {
+        original.forEach((item) => list.appendChild(item));
+        sorter.classList.remove("answered");
+        setStatus("");
+        updateProgress();
+      };
+
+      Array.from(list.querySelectorAll("[data-sort-index]")).forEach((item) => {
+        item.addEventListener("dragstart", dragStart);
+        item.addEventListener("dragover", dragOver);
+        item.addEventListener("dragend", dragEnd);
+        item.addEventListener("keydown", keyDown);
+        cleanups.push(() => {
+          item.removeEventListener("dragstart", dragStart);
+          item.removeEventListener("dragover", dragOver);
+          item.removeEventListener("dragend", dragEnd);
+          item.removeEventListener("keydown", keyDown);
+        });
+      });
+      checkButton?.addEventListener("click", check);
+      resetButton?.addEventListener("click", reset);
+      cleanups.push(() => {
+        checkButton?.removeEventListener("click", check);
+        resetButton?.removeEventListener("click", reset);
+      });
+    });
+
+    updateProgress();
     return () => cleanups.forEach((cleanup) => cleanup());
   }, [html]);
 
@@ -130,6 +279,77 @@ function ExecutableRichContent({ html }) {
           const target = event.target;
           if (target.tagName === "IMG") {
             setPreviewImage(target.getAttribute("src") || "");
+            return;
+          }
+          const flashcard = target.closest?.("[data-flashcard]");
+          if (flashcard) {
+            flashcard.classList.toggle("is-flipped");
+            return;
+          }
+          const hintToggle = target.closest?.("[data-hint-toggle]");
+          if (hintToggle) {
+            const panel = contentRef.current?.querySelector(
+              `[data-hint-panel="${hintToggle.dataset.hintToggle}"]`
+            );
+            const open = !panel?.classList.contains("show");
+            panel?.classList.toggle("show", open);
+            hintToggle.setAttribute("aria-expanded", open ? "true" : "false");
+            hintToggle.textContent = open ? "Hide hint" : "Show hint";
+            return;
+          }
+          const quizOption = target.closest?.("[data-quiz-option]");
+          if (quizOption) {
+            const quiz = quizOption.closest("[data-rich-quiz]");
+            const correct = quizOption.dataset.correct === "true";
+            quiz?.querySelectorAll("[data-quiz-option]").forEach((option) => {
+              option.classList.remove("correct", "wrong");
+            });
+            quizOption.classList.add(correct ? "correct" : "wrong");
+            const feedback = quiz?.querySelector("[data-quiz-feedback]");
+            if (feedback) {
+              feedback.textContent = correct
+                ? "Correct. Nice thinking."
+                : "Not yet. Try again, then read the hint or flashcard.";
+            }
+            quiz?.classList.toggle("answered", correct);
+            const root = quiz?.closest("[data-rich-root]");
+            root?.querySelectorAll("[data-rich-progress]").forEach((progress) => {
+              const checks = Array.from(root.querySelectorAll("[data-rich-check]"));
+              const answered = Array.from(root.querySelectorAll("[data-rich-quiz].answered"));
+              const sorted = Array.from(root.querySelectorAll("[data-sorter].answered"));
+              const reflections = Array.from(root.querySelectorAll("[data-rich-reflection]"));
+              const total =
+                checks.length +
+                root.querySelectorAll("[data-rich-quiz]").length +
+                root.querySelectorAll("[data-sorter]").length +
+                reflections.length;
+              const doneCount =
+                checks.filter((item) => item.checked).length +
+                answered.length +
+                sorted.length +
+                reflections.filter((item) => item.value.trim()).length;
+              const percent = total ? Math.round((doneCount / total) * 100) : 0;
+              const fill = progress.querySelector("[data-rich-progress-fill]");
+              const text = progress.querySelector("[data-rich-progress-text]");
+              if (fill) fill.style.width = `${percent}%`;
+              if (text) text.textContent = `${percent}% complete`;
+            });
+            return;
+          }
+          const celebrate = target.closest?.("[data-celebrate]");
+          if (celebrate) {
+            const burst = document.createElement("div");
+            burst.className = "sc-confetti";
+            for (let index = 0; index < 36; index += 1) {
+              const star = document.createElement("span");
+              star.className = "sc-star";
+              star.textContent = "*";
+              star.style.left = `${Math.random() * 100}%`;
+              star.style.animationDelay = `${Math.random() * 0.45}s`;
+              burst.appendChild(star);
+            }
+            document.body.appendChild(burst);
+            window.setTimeout(() => burst.remove(), 1900);
             return;
           }
           const toggle = target.closest?.("[data-interactive-toggle]");
