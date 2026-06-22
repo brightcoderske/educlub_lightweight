@@ -32,6 +32,7 @@ const statements = [
   "ALTER TABLE IF EXISTS course_allocations ADD COLUMN IF NOT EXISTS preview_activity_limit INTEGER DEFAULT 0",
   "ALTER TABLE IF EXISTS course_allocations ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP",
   "ALTER TABLE IF EXISTS course_allocations ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100)",
+  "ALTER TABLE IF EXISTS activity_grades ADD COLUMN IF NOT EXISTS question_marks JSONB DEFAULT '{}'::jsonb",
   `CREATE TABLE IF NOT EXISTS course_payments (
     id SERIAL PRIMARY KEY,
     course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -132,20 +133,20 @@ async function ensureStartupSchema() {
     await query(statement);
   }
   await query(
-    "UPDATE courses SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''",
+    "UPDATE courses SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''"
   );
   await query(
-    "UPDATE course_templates SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''",
+    "UPDATE course_templates SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''"
   );
   await query("UPDATE courses SET is_active = TRUE WHERE is_active IS NULL");
   await query(
-    "UPDATE course_templates SET is_active = TRUE WHERE is_active IS NULL",
+    "UPDATE course_templates SET is_active = TRUE WHERE is_active IS NULL"
   );
   await query(
     `UPDATE schools
      SET is_independent_school = TRUE
      WHERE LOWER(code) = 'educlub-independent'
-        OR LOWER(name) LIKE '%independent learners%'`,
+        OR LOWER(name) LIKE '%independent learners%'`
   );
   await query(
     `UPDATE courses c
@@ -159,7 +160,7 @@ async function ensureStartupSchema() {
        HAVING COUNT(DISTINCT l.school_id) = 1
      ) source
      WHERE c.id = source.course_id
-       AND c.school_id IS NULL`,
+       AND c.school_id IS NULL`
   );
 }
 

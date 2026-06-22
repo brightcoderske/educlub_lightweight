@@ -105,7 +105,13 @@ function readFileAsDataUrl(file) {
 }
 
 function shuffled(items = []) {
-  return [...items].sort(() => Math.random() - 0.5);
+  const next = [...items];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  const unchanged = next.length > 1 && next.every((item, index) => item === items[index]);
+  return unchanged ? [...next.slice(1), next[0]] : next;
 }
 
 function optionLabel(index) {
@@ -167,6 +173,7 @@ function WeeklyLearning() {
   const [editingQuizId, setEditingQuizId] = useState(null);
   const [activeQuiz, setActiveQuiz] = useState(null);
   const [quizAnswers, setQuizAnswers] = useState({});
+  const [quizMatchingChoices, setQuizMatchingChoices] = useState({});
   const [quizResult, setQuizResult] = useState(null);
   const [previewImage, setPreviewImage] = useState("");
   const [quizRemaining, setQuizRemaining] = useState(0);
@@ -920,6 +927,16 @@ function WeeklyLearning() {
             .map((question) => [question.id, shuffled(question.options)])
         )
       );
+      setQuizMatchingChoices(
+        Object.fromEntries(
+          (quiz.questions || [])
+            .filter((question) => question.question_type === "matching")
+            .map((question) => [
+              question.id,
+              shuffled((question.options || []).map((pair) => pair.right).filter(Boolean)),
+            ])
+        )
+      );
     } catch (err) {
       setError(err.message || "Could not open quiz.");
     }
@@ -994,6 +1011,7 @@ function WeeklyLearning() {
   const closeQuizTest = () => {
     setActiveQuiz(null);
     setQuizMissing([]);
+    setQuizMatchingChoices({});
     setQuizRemaining(0);
     quizStartedAtRef.current = null;
   };
@@ -2140,6 +2158,14 @@ function WeeklyLearning() {
                                               />
                                             )}
                                             {question.question_type === "single_choice" && (
+                                              <Radio
+                                                checked={checked}
+                                                onChange={() =>
+                                                  toggleQuizCorrectOption(index, option)
+                                                }
+                                              />
+                                            )}
+                                            {question.question_type === "true_false" && (
                                               <Radio
                                                 checked={checked}
                                                 onChange={() =>
@@ -3341,9 +3367,9 @@ function WeeklyLearning() {
                                       SelectProps={{ native: true }}
                                     >
                                       <option value="">Choose match</option>
-                                      {(question.options || []).map((choice) => (
-                                        <option key={choice.right} value={choice.right}>
-                                          {choice.right}
+                                      {(quizMatchingChoices[question.id] || []).map((choice) => (
+                                        <option key={choice} value={choice}>
+                                          {choice}
                                         </option>
                                       ))}
                                     </MDInput>

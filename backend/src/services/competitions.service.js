@@ -3,7 +3,13 @@ const { query } = require("../config");
 const env = require("../config/env");
 const flutterwave = require("./flutterwave.service");
 
-const COMPETITION_TYPES = new Set(["quiz", "typing", "maths", "science", "stem"]);
+const COMPETITION_TYPES = new Set([
+  "quiz",
+  "typing",
+  "maths",
+  "science",
+  "stem",
+]);
 const RESULT_STAGES = new Set(["practice", "final"]);
 
 function normalizeGrade(value) {
@@ -21,7 +27,8 @@ function normalizeEligibleGrades(value) {
         .filter(Boolean);
 
   return [...new Set(grades.map(normalizeGrade).filter(Boolean))].sort(
-    (a, b) => Number(a.match(/\d+/)?.[0] || 0) - Number(b.match(/\d+/)?.[0] || 0)
+    (a, b) =>
+      Number(a.match(/\d+/)?.[0] || 0) - Number(b.match(/\d+/)?.[0] || 0)
   );
 }
 
@@ -47,8 +54,13 @@ function hydrateCompetition(competition) {
 }
 
 function isCompetitionVisibleForGrade(competition, learnerGrade) {
-  const eligibleGrades = normalizeEligibleGrades(competition.eligible_grades || []);
-  return eligibleGrades.length === 0 || eligibleGrades.includes(normalizeGrade(learnerGrade));
+  const eligibleGrades = normalizeEligibleGrades(
+    competition.eligible_grades || []
+  );
+  return (
+    eligibleGrades.length === 0 ||
+    eligibleGrades.includes(normalizeGrade(learnerGrade))
+  );
 }
 
 function availableToEnrollFilter() {
@@ -68,21 +80,47 @@ async function listCompetitionsForLearner(userId) {
   if (!learner) return [];
 
   const result = await query(
-    `SELECT c.*,
+    `WITH ranked_results AS (
+       SELECT cr.*,
+              COALESCE(
+                cr.rank,
+                RANK() OVER (
+                  PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
+                  ORDER BY cr.total_score DESC NULLS LAST
+                )
+              ) AS calculated_rank,
+              COUNT(*) OVER (
+                PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
+              )::integer AS participant_count
+       FROM competition_results cr
+       WHERE cr.result_stage = 'final'
+     )
+     SELECT c.*,
             ce.status AS enrollment_status,
             ce.enrolled_at,
-            ce.payment_reference
+            ce.payment_reference,
+            rr.total_score,
+            rr.quiz_score,
+            rr.typing_wpm,
+            rr.typing_accuracy,
+            rr.calculated_rank AS rank,
+            rr.participant_count
      FROM competitions c
      LEFT JOIN competition_enrollments ce
        ON ce.competition_id = c.id
       AND ce.learner_id = $1
+     LEFT JOIN ranked_results rr
+       ON rr.competition_id = c.id
+      AND rr.learner_id = $1
      WHERE c.is_active = true
      ORDER BY c.is_featured DESC, c.start_date DESC`,
     [learner.id]
   );
 
   return result.rows
-    .filter((competition) => isCompetitionVisibleForGrade(competition, learner.grade))
+    .filter((competition) =>
+      isCompetitionVisibleForGrade(competition, learner.grade)
+    )
     .map(hydrateCompetition);
 }
 
@@ -173,7 +211,8 @@ async function updateCompetition(id, data) {
 
 async function enrollOrStartPayment(competitionId, user) {
   const learner = await findLearnerForUser(user.userId);
-  if (!learner) throw new Error("Learner profile is not linked to this account.");
+  if (!learner)
+    throw new Error("Learner profile is not linked to this account.");
 
   const competitionResult = await query(
     `SELECT * FROM competitions c
@@ -208,7 +247,12 @@ async function enrollOrStartPayment(competitionId, user) {
            END,
            updated_at = NOW()
      RETURNING *`,
-    [competition.id, learner.id, amount > 0 ? "pending_payment" : "enrolled", competition.currency || "KES"]
+    [
+      competition.id,
+      learner.id,
+      amount > 0 ? "pending_payment" : "enrolled",
+      competition.currency || "KES",
+    ]
   );
   const enrollment = enrollmentResult.rows[0];
 
@@ -217,15 +261,21 @@ async function enrollOrStartPayment(competitionId, user) {
   }
 
   if (!flutterwave.isConfigured()) {
-    throw new Error("Payment is not configured yet. Contact the system administrator.");
+    throw new Error(
+      "Payment is not configured yet. Contact the system administrator."
+    );
   }
 
-  const txRef = `educlub-comp-${competition.id}-${learner.id}-${crypto.randomUUID()}`;
+  const txRef = `educlub-comp-${competition.id}-${
+    learner.id
+  }-${crypto.randomUUID()}`;
   const payment = await flutterwave.createPaymentLink({
     txRef,
     amount,
     currency: competition.currency || "KES",
-    redirectUrl: `${env.frontendUrl}/learner/competitions?tx_ref=${encodeURIComponent(txRef)}`,
+    redirectUrl: `${
+      env.frontendUrl
+    }/learner/competitions?tx_ref=${encodeURIComponent(txRef)}`,
     customer: {
       email: learner.email || user.email,
       name: learner.full_name || user.fullName || user.username,
@@ -256,11 +306,17 @@ async function enrollOrStartPayment(competitionId, user) {
     ]
   );
 
-  return { status: "payment_required", enrollment, paymentLink: payment.link, txRef };
+  return {
+    status: "payment_required",
+    enrollment,
+    paymentLink: payment.link,
+    txRef,
+  };
 }
 
 async function verifyPayment({ transactionId, txRef }) {
-  if (!transactionId) throw new Error("Flutterwave transaction id is required.");
+  if (!transactionId)
+    throw new Error("Flutterwave transaction id is required.");
   if (!txRef) throw new Error("Payment reference is required.");
 
   const paymentResult = await query(
@@ -297,7 +353,12 @@ async function verifyPayment({ transactionId, txRef }) {
          verified_at = NOW(),
          updated_at = NOW()
      WHERE id = $4`,
-    [successful ? "successful" : "failed", String(transactionId), JSON.stringify(verification), payment.id]
+    [
+      successful ? "successful" : "failed",
+      String(transactionId),
+      JSON.stringify(verification),
+      payment.id,
+    ]
   );
 
   if (!successful) throw new Error("Payment could not be verified.");
@@ -328,13 +389,29 @@ async function processFlutterwaveWebhook(payload = {}) {
   const transactionId = transaction.id || transaction.transaction_id;
 
   if (eventType && eventType !== "charge.completed") {
-    return { accepted: true, ignored: true, reason: "Webhook event is not a completed charge.", eventType };
+    return {
+      accepted: true,
+      ignored: true,
+      reason: "Webhook event is not a completed charge.",
+      eventType,
+    };
   }
   if (transaction.status && transaction.status !== "successful") {
-    return { accepted: true, ignored: true, reason: "Webhook transaction is not successful.", eventType, txRef };
+    return {
+      accepted: true,
+      ignored: true,
+      reason: "Webhook transaction is not successful.",
+      eventType,
+      txRef,
+    };
   }
   if (!txRef || !transactionId) {
-    return { accepted: true, ignored: true, reason: "Webhook did not include a tx_ref and transaction id.", eventType };
+    return {
+      accepted: true,
+      ignored: true,
+      reason: "Webhook did not include a tx_ref and transaction id.",
+      eventType,
+    };
   }
 
   return {
@@ -384,7 +461,8 @@ async function getSchoolCompetitionReport(schoolId, filters = {}) {
   ];
   const timingFilters = {
     available: "c.is_active = TRUE AND c.end_date >= CURRENT_DATE",
-    current: "c.is_active = TRUE AND c.start_date <= CURRENT_DATE AND c.end_date >= CURRENT_DATE",
+    current:
+      "c.is_active = TRUE AND c.start_date <= CURRENT_DATE AND c.end_date >= CURRENT_DATE",
     past: "c.end_date < CURRENT_DATE",
   };
   const sortDirection = normalized.sort === "asc" ? "ASC" : "DESC";
@@ -443,10 +521,15 @@ async function getSchoolCompetitionReport(schoolId, filters = {}) {
   return result.rows;
 }
 
-async function getLearnerCompetitionPerformance(userId, competitionId, stage = "final") {
+async function getLearnerCompetitionPerformance(
+  userId,
+  competitionId,
+  stage = "final"
+) {
   await backfillCompetitionResultMetadata();
   const learner = await findLearnerForUser(userId);
-  if (!learner) throw new Error("Learner profile is not linked to this account.");
+  if (!learner)
+    throw new Error("Learner profile is not linked to this account.");
   const resultStage = normalizeResultStage(stage);
 
   const result = await query(
@@ -492,7 +575,8 @@ async function getLearnerCompetitionPerformance(userId, competitionId, stage = "
     [learner.id, competitionId, resultStage]
   );
 
-  if (!result.rows[0]) throw new Error("Competition performance is not available.");
+  if (!result.rows[0])
+    throw new Error("Competition performance is not available.");
   return result.rows[0];
 }
 

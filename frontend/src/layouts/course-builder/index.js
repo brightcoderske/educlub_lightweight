@@ -681,7 +681,10 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
         <IconButton title="Insert code example" onClick={() => openDisplayCodeDialog()}>
           <Icon>data_object</Icon>
         </IconButton>
-        <IconButton title="Insert sandboxed interactive HTML/JS" onClick={() => openExecutableDialog()}>
+        <IconButton
+          title="Insert sandboxed interactive HTML/JS"
+          onClick={() => openExecutableDialog()}
+        >
           <Icon>play_circle</Icon>
         </IconButton>
         <IconButton title="Insert collapsible hint" onClick={() => openHintDialog()}>
@@ -1784,11 +1787,38 @@ function getAnswerValue(answers, question) {
   );
 }
 
+function questionKey(question) {
+  return String(question?.id ?? question?.position ?? "");
+}
+
+function quizFeedbackForQuestion(feedback, question) {
+  if (!feedback || !question) return {};
+  return (
+    feedback[question.id] ??
+    feedback[question.position] ??
+    feedback[String(question.position)] ??
+    {}
+  );
+}
+
 function earnedPointsFromFeedback(feedback) {
   if (!feedback || typeof feedback !== "object") return "";
   const values = Object.values(feedback);
   if (!values.length) return "";
   return values.reduce((sum, item) => sum + Number(item?.points || 0), 0);
+}
+
+function questionMarksFromFeedback(feedback, questions = []) {
+  return Object.fromEntries(
+    questions.map((question) => {
+      const feedbackItem = quizFeedbackForQuestion(feedback, question);
+      return [questionKey(question), Number(feedbackItem?.points || 0)];
+    })
+  );
+}
+
+function sumQuestionMarks(questionMarks = {}) {
+  return Object.values(questionMarks).reduce((sum, value) => sum + Number(value || 0), 0);
 }
 
 function renderSubmissionContent(row) {
@@ -1909,24 +1939,76 @@ function ActivityReviewDialog({
                               Latest quiz attempt:{" "}
                               {row.latest_attempt_id ? `${row.quiz_score || 0}%` : "No attempt yet"}
                             </MDTypography>
-                            {questions.map((question, index) => (
-                              <MDBox
-                                key={question.id || index}
-                                p={1.25}
-                                borderRadius="md"
-                                sx={{ bgcolor: "#eef6ff", border: "1px solid #bfdbfe" }}
-                              >
-                                <MDTypography variant="caption" fontWeight="bold">
-                                  {index + 1}. {question.prompt}
-                                </MDTypography>
-                                <MDTypography variant="caption" display="block" color="text">
-                                  Learner: {asText(getAnswerValue(row.answers, question)) || "-"}
-                                </MDTypography>
-                                <MDTypography variant="caption" display="block" color="success">
-                                  Correct: {asText(question.correct_answer) || "-"}
-                                </MDTypography>
-                              </MDBox>
-                            ))}
+                            {questions.map((question, index) => {
+                              const key = questionKey(question);
+                              const feedback = quizFeedbackForQuestion(row.quiz_feedback, question);
+                              const maxPoints = Number(question.points || feedback.max_points || 0);
+                              const currentMarks =
+                                form.question_marks?.[key] ?? Number(feedback.points || 0);
+                              return (
+                                <MDBox
+                                  key={question.id || index}
+                                  p={1.25}
+                                  borderRadius="md"
+                                  sx={{ bgcolor: "#eef6ff", border: "1px solid #bfdbfe" }}
+                                >
+                                  <Grid container spacing={1} alignItems="center">
+                                    <Grid item xs={12} md={8}>
+                                      <MDTypography variant="caption" fontWeight="bold">
+                                        {index + 1}. {question.prompt}
+                                      </MDTypography>
+                                      <MDTypography variant="caption" display="block" color="text">
+                                        Learner:{" "}
+                                        {asText(getAnswerValue(row.answers, question)) || "-"}
+                                      </MDTypography>
+                                      <MDTypography
+                                        variant="caption"
+                                        display="block"
+                                        color="success"
+                                      >
+                                        Correct: {asText(question.correct_answer) || "-"}
+                                      </MDTypography>
+                                    </Grid>
+                                    <Grid item xs={12} md={4}>
+                                      <MDInput
+                                        label={`Question marks / ${maxPoints || 0}`}
+                                        type="number"
+                                        fullWidth
+                                        value={currentMarks}
+                                        inputProps={{
+                                          min: 0,
+                                          max: maxPoints || undefined,
+                                          step: "any",
+                                        }}
+                                        onChange={(event) => {
+                                          const rawValue = event.target.value;
+                                          const numericValue =
+                                            rawValue === "" ? "" : Number(rawValue);
+                                          const safeValue =
+                                            numericValue === ""
+                                              ? ""
+                                              : Math.max(
+                                                  0,
+                                                  maxPoints
+                                                    ? Math.min(maxPoints, numericValue)
+                                                    : numericValue
+                                                );
+                                          const questionMarks = {
+                                            ...(form.question_marks || {}),
+                                            [key]: safeValue,
+                                          };
+                                          onChangeGrade(
+                                            row.learner_id,
+                                            "question_marks",
+                                            questionMarks
+                                          );
+                                        }}
+                                      />
+                                    </Grid>
+                                  </Grid>
+                                </MDBox>
+                              );
+                            })}
                           </MDBox>
                         ) : (
                           renderSubmissionContent(row)
@@ -2018,6 +2100,7 @@ ActivityReviewDialog.propTypes = {
   gradeForms: PropTypes.objectOf(
     PropTypes.shape({
       performance_level: PropTypes.string,
+      question_marks: PropTypes.objectOf(PropTypes.oneOfType([PropTypes.string, PropTypes.number])),
       score: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
       teacher_remarks: PropTypes.string,
     })
@@ -2277,13 +2360,19 @@ function CourseBuilder() {
       const response = await apiClient.get(`/courses/activities/${activity.id}/review`);
       setActivityReview(response);
       const forms = {};
+      const questions = response.activity?.content?.questions || [];
       (response.learners || []).forEach((learner) => {
         const earnedPoints = earnedPointsFromFeedback(learner.quiz_feedback);
+        const questionMarks =
+          learner.question_marks && Object.keys(learner.question_marks).length
+            ? learner.question_marks
+            : questionMarksFromFeedback(learner.quiz_feedback, questions);
         forms[learner.learner_id] = {
           score:
             learner.grade_score !== null && learner.grade_score !== undefined
               ? learner.grade_score
               : earnedPoints,
+          question_marks: questionMarks,
           performance_level: learner.performance_level || "",
           teacher_remarks: learner.teacher_remarks || "",
         };
@@ -2302,6 +2391,7 @@ function CourseBuilder() {
       [learnerId]: {
         ...(current[learnerId] || {}),
         [field]: value,
+        ...(field === "question_marks" ? { score: sumQuestionMarks(value) } : {}),
       },
     }));
   };
@@ -2316,6 +2406,7 @@ function CourseBuilder() {
     try {
       await apiClient.put(`/courses/activities/${activityId}/learners/${row.learner_id}/grade`, {
         score: form.score,
+        question_marks: form.question_marks || {},
         performance_level: form.performance_level,
         teacher_remarks: form.teacher_remarks,
       });
@@ -2544,9 +2635,7 @@ function CourseBuilder() {
   const applyActivityOrder = async (courseModule, orderedActivities) => {
     const originalActivities = courseModule.activities || [];
     const changedActivities = orderedActivities.filter((activity) => {
-      const original = originalActivities.find(
-        (item) => Number(item.id) === Number(activity.id)
-      );
+      const original = originalActivities.find((item) => Number(item.id) === Number(activity.id));
       return Number(original?.position) !== Number(activity.position);
     });
     if (!changedActivities.length) return;
@@ -2990,7 +3079,10 @@ function CourseBuilder() {
                                         "application/educlub-activity",
                                         JSON.stringify(dragPayload)
                                       );
-                                      event.dataTransfer.setData("text/plain", activity.title || "");
+                                      event.dataTransfer.setData(
+                                        "text/plain",
+                                        activity.title || ""
+                                      );
                                       setDraggingOrderItem(dragPayload);
                                     }}
                                     onDragEnd={(event) => {
@@ -3021,8 +3113,7 @@ function CourseBuilder() {
                                         : draggingOrderItem;
                                       if (
                                         droppedActivity?.type === "activity" &&
-                                        Number(droppedActivity.moduleId) ===
-                                          Number(courseModule.id)
+                                        Number(droppedActivity.moduleId) === Number(courseModule.id)
                                       ) {
                                         reorderActivities(
                                           courseModule,

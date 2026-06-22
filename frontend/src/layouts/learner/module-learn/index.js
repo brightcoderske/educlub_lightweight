@@ -54,7 +54,13 @@ function readFileAsDataUrl(file) {
 }
 
 function shuffled(items = []) {
-  return [...items].sort(() => Math.random() - 0.5);
+  const next = [...items];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  const unchanged = next.length > 1 && next.every((item, index) => item === items[index]);
+  return unchanged ? [...next.slice(1), next[0]] : next;
 }
 
 function buildDiscussionThreads(replies = []) {
@@ -439,9 +445,9 @@ function ActivityBody({
                           SelectProps={{ native: true }}
                         >
                           <option value="">Choose match</option>
-                          {(question.options || []).map((choice) => (
-                            <option key={choice.right} value={choice.right}>
-                              {choice.right}
+                          {(matchingChoices[question.id] || []).map((choice) => (
+                            <option key={choice} value={choice}>
+                              {choice}
                             </option>
                           ))}
                         </MDInput>
@@ -1028,6 +1034,7 @@ function ModuleLearn() {
   const [data, setData] = useState(null);
   const [activeActivityId, setActiveActivityId] = useState(null);
   const [answers, setAnswers] = useState({});
+  const [matchingChoices, setMatchingChoices] = useState({});
   const [discussion, setDiscussion] = useState(null);
   const [discussionReply, setDiscussionReply] = useState("");
   const [replyTarget, setReplyTarget] = useState(null);
@@ -1159,6 +1166,16 @@ function ModuleLearn() {
         (activeActivity?.content?.questions || [])
           .filter((question) => question.question_type === "ordering")
           .map((question) => [question.id, shuffled(question.options)])
+      )
+    );
+    setMatchingChoices(
+      Object.fromEntries(
+        (activeActivity?.content?.questions || [])
+          .filter((question) => question.question_type === "matching")
+          .map((question) => [
+            question.id,
+            shuffled((question.options || []).map((pair) => pair.right).filter(Boolean)),
+          ])
       )
     );
     setQuizResult(null);
@@ -1523,9 +1540,7 @@ function ModuleLearn() {
         </MDBox>
         <IconButton
           aria-label="Close learning page"
-          onClick={() =>
-            navigate(courseOverviewPath(entityId, previewMode, templatePreviewMode))
-          }
+          onClick={() => navigate(courseOverviewPath(entityId, previewMode, templatePreviewMode))}
         >
           <Icon>close</Icon>
         </IconButton>

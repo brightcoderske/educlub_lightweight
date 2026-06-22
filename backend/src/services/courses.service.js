@@ -96,7 +96,7 @@ async function getAllCourses(filters = {}) {
        ${categorySql}
        ${scopeSql}
      ORDER BY c.course_category, c.name`,
-    params,
+    params
   );
   return result.rows;
 }
@@ -141,7 +141,7 @@ async function createCourse(courseData) {
       independent_currency || "KES",
       courseCategory,
       is_active !== false,
-    ],
+    ]
   );
   return result.rows[0];
 }
@@ -201,7 +201,7 @@ async function updateCourse(id, courseData) {
       courseCategory,
       is_active !== false,
       id,
-    ],
+    ]
   );
   return result.rows[0];
 }
@@ -210,14 +210,14 @@ async function deleteCourse(id) {
   await query(
     `DELETE FROM courses c
      WHERE c.id = $1`,
-    [id],
+    [id]
   );
 }
 
 async function findLearnerForUser(userId) {
   const result = await query(
     "SELECT * FROM learners WHERE user_id = $1 AND is_active = true LIMIT 1",
-    [userId],
+    [userId]
   );
   return result.rows[0];
 }
@@ -236,14 +236,14 @@ async function assertCourseManageAccess(courseId, user = {}) {
 
   const result = await query(
     "SELECT id FROM courses WHERE id = $1 AND school_id = $2",
-    [courseId, user.schoolId],
+    [courseId, user.schoolId]
   );
   if (!result.rows[0]) return false;
   if (user.role === "teacher") {
     return teacherAssignmentsService.isTeacherAssignedToCourse(
       user.userId,
       courseId,
-      user.schoolId,
+      user.schoolId
     );
   }
   return true;
@@ -256,7 +256,7 @@ async function bumpSchoolCourseVersion(courseId) {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1
        AND school_id IS NOT NULL`,
-    [courseId],
+    [courseId]
   );
 }
 
@@ -304,7 +304,7 @@ function sanitizeActivityContent(content = {}, includeAnswers = false) {
   const sanitized = { ...content };
   if (Array.isArray(sanitized.questions)) {
     sanitized.questions = sanitized.questions.map((question, index) =>
-      normalizeQuestion(question, index, includeAnswers),
+      normalizeQuestion(question, index, includeAnswers)
     );
   }
   return sanitized;
@@ -327,7 +327,7 @@ function normalizeAnswer(value, preserveOrder = false) {
         ? JSON.stringify(item)
         : String(item ?? "")
             .trim()
-            .toLowerCase(),
+            .toLowerCase()
     );
     return preserveOrder ? normalized : normalized.sort();
   }
@@ -339,6 +339,13 @@ function normalizeAnswer(value, preserveOrder = false) {
 function answersMatch(expected, actual, questionType = "") {
   if (questionType === "true_false") {
     return normalizeBooleanAnswer(expected) === normalizeBooleanAnswer(actual);
+  }
+  if (questionType === "short_answer") {
+    const accepted = Array.isArray(expected) ? expected : [expected];
+    const normalizedActual = normalizeAnswer(actual);
+    return accepted.some(
+      (answer) => normalizeAnswer(answer) === normalizedActual
+    );
   }
   const preserveOrder = questionType === "ordering";
   const normalizedExpected = normalizeAnswer(expected, preserveOrder);
@@ -371,21 +378,21 @@ function validateQuizAllocation(data = {}) {
   }
   if (allocated > available) {
     throw new Error(
-      `Question marks total ${allocated}, which exceeds the quiz total of ${available}.`,
+      `Question marks total ${allocated}, which exceeds the quiz total of ${available}.`
     );
   }
 }
 
 function moduleSummary(module) {
   const required = module.activities.filter(
-    (activity) => (activity.availability_mode || "required") === "required",
+    (activity) => (activity.availability_mode || "required") === "required"
   );
   const optional = module.activities.filter(
-    (activity) => activity.availability_mode === "try_more",
+    (activity) => activity.availability_mode === "try_more"
   );
   const total = required.length;
   const completed = required.filter((activity) =>
-    activityDone(activity.status),
+    activityDone(activity.status)
   ).length;
   const scores = required
     .map((activity) => Number(activity.score))
@@ -402,7 +409,7 @@ function moduleSummary(module) {
     is_done: total > 0 && completed >= total,
     try_more_total: optional.length,
     try_more_completed: optional.filter((activity) =>
-      activityDone(activity.status),
+      activityDone(activity.status)
     ).length,
   };
 }
@@ -419,7 +426,7 @@ async function assertCourseAccess(courseId, user = {}) {
        FROM courses c
        LEFT JOIN course_templates t ON t.id = c.template_id
        WHERE c.id = $1`,
-      [courseId],
+      [courseId]
     );
     return { course: result.rows[0], learner: null };
   }
@@ -437,7 +444,7 @@ async function assertCourseAccess(courseId, user = {}) {
        FROM courses c
        LEFT JOIN course_templates t ON t.id = c.template_id
        WHERE c.id = $1 AND c.school_id = $2`,
-      [courseId, user.schoolId],
+      [courseId, user.schoolId]
     );
     return { course: result.rows[0], learner: null };
   }
@@ -464,7 +471,7 @@ async function assertCourseAccess(courseId, user = {}) {
        AND a.learner_id = $2
        AND a.status IN ('active', 'in_progress', 'completed')
      LIMIT 1`,
-    [courseId, learner.id],
+    [courseId, learner.id]
   );
   const row = result.rows[0];
   return {
@@ -490,11 +497,15 @@ function applyPreviewAccess(modules = [], allocation = null) {
     return { modules, preview: null };
   }
 
-  const activityLimit = Math.max(0, Number(allocation.preview_activity_limit || 0));
+  const activityLimit = Math.max(
+    0,
+    Number(allocation.preview_activity_limit || 0)
+  );
   const firstModuleId = modules[0]?.id;
   let activityUsed = 0;
   let lockedActivities = 0;
-  const paywallReason = "Pay to continue this course and get guidance from eduClub tutors.";
+  const paywallReason =
+    "Pay to continue this course and get guidance from eduClub tutors.";
 
   const previewModules = modules.map((module) => {
     let moduleHasOpenActivity = false;
@@ -525,7 +536,9 @@ function applyPreviewAccess(modules = [], allocation = null) {
       ...module,
       activities,
       is_unlocked: isModuleOpen,
-      requires_payment: activities.some((activity) => activity.requires_payment),
+      requires_payment: activities.some(
+        (activity) => activity.requires_payment
+      ),
       lock_reason: isModuleOpen ? module.lock_reason : paywallReason,
     };
   });
@@ -544,7 +557,10 @@ function applyPreviewAccess(modules = [], allocation = null) {
 }
 
 async function getCourseLearningOverview(courseId, user = {}) {
-  const { course, learner, allocation } = await assertCourseAccess(courseId, user);
+  const { course, learner, allocation } = await assertCourseAccess(
+    courseId,
+    user
+  );
   if (!course) return null;
 
   const staffView = isStaff(user);
@@ -599,7 +615,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
      WHERE cm.course_id = $1
        AND (cm.is_published = true OR ${staffParam} = true)
      ORDER BY cm.position, la.position`,
-    params,
+    params
   );
 
   const moduleMap = new Map();
@@ -664,7 +680,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
              AND (o.target_stream IS NULL OR o.target_stream = $4::varchar)
            )
          )`,
-      [courseId, learner.id, learner.grade || null, learner.stream || null],
+      [courseId, learner.id, learner.grade || null, learner.stream || null]
     );
     overrideRows = overrides.rows;
   }
@@ -672,7 +688,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
   const builtModules = [...moduleMap.values()].map((module) => {
     const moduleOverride = overrideRows.some(
       (item) =>
-        Number(item.module_id) === Number(module.id) && !item.activity_id,
+        Number(item.module_id) === Number(module.id) && !item.activity_id
     );
     const availability = resolveModuleAvailability({
       opens_at: module.schedule?.opens_at,
@@ -684,14 +700,14 @@ async function getCourseLearningOverview(courseId, user = {}) {
       module.activities.map((activity) => ({
         ...activity,
         has_override: overrideRows.some(
-          (item) => Number(item.activity_id) === Number(activity.id),
+          (item) => Number(item.activity_id) === Number(activity.id)
         ),
       })),
-      availability.is_open,
+      availability.is_open
     ).map((activity) =>
       activity.has_override
         ? { ...activity, is_unlocked: true, lock_reason: null }
-        : activity,
+        : activity
     );
     const decorated = {
       ...module,
@@ -709,16 +725,16 @@ async function getCourseLearningOverview(courseId, user = {}) {
   const completedModules = modules.filter((module) => module.is_done).length;
   const totalActivities = modules.reduce(
     (sum, module) => sum + module.total_activities,
-    0,
+    0
   );
   const completedActivities = modules.reduce(
     (sum, module) => sum + module.completed_activities,
-    0,
+    0
   );
   const courseScore = modules.length
     ? Math.round(
         modules.reduce((sum, module) => sum + module.score_percent, 0) /
-          modules.length,
+          modules.length
       )
     : 0;
 
@@ -749,7 +765,7 @@ async function assertActivityAccess(activityId, user = {}) {
      JOIN course_modules cm ON cm.id = la.module_id
      JOIN courses c ON c.id = cm.course_id
      WHERE la.id = $1`,
-    [activityId],
+    [activityId]
   );
   const activity = result.rows[0];
   if (!activity) return { activity: null, learner: null, staffView: false };
@@ -763,7 +779,7 @@ async function assertActivityAccess(activityId, user = {}) {
       (await teacherAssignmentsService.isTeacherAssignedToCourse(
         user.userId,
         activity.course_id,
-        user.schoolId,
+        user.schoolId
       ));
     const allowed =
       user.role === "system_admin" || (schoolAllowed && teacherAllowed);
@@ -784,23 +800,23 @@ async function assertActivityAccess(activityId, user = {}) {
        AND learner_id = $2
        AND status IN ('active', 'in_progress', 'completed')
      LIMIT 1`,
-    [activity.course_id, learner.id],
+    [activity.course_id, learner.id]
   );
 
   if (!allocation.rows[0]) return { activity: null, learner, staffView: false };
   const moduleLearning = await getModuleLearning(
     activity.course_id,
     activity.module_id,
-    user,
+    user
   );
   const learningActivity = moduleLearning?.module?.activities?.find(
-    (item) => Number(item.id) === Number(activityId),
+    (item) => Number(item.id) === Number(activityId)
   );
   if (!moduleLearning?.is_unlocked || !learningActivity?.is_unlocked) {
     throw new Error(
       learningActivity?.lock_reason ||
         moduleLearning?.module?.lock_reason ||
-        "Complete the previous required activity first.",
+        "Complete the previous required activity first."
     );
   }
   return { activity, learner, staffView: false };
@@ -809,7 +825,7 @@ async function assertActivityAccess(activityId, user = {}) {
 async function ensureDiscussion(activity, user = {}) {
   const existing = await query(
     "SELECT * FROM discussions WHERE activity_id = $1 LIMIT 1",
-    [activity.id],
+    [activity.id]
   );
   if (existing.rows[0]) return existing.rows[0];
 
@@ -832,7 +848,7 @@ async function ensureDiscussion(activity, user = {}) {
       prompt,
       content.allow_peer_replies !== false,
       user.userId ? String(user.userId) : "",
-    ],
+    ]
   );
   return created.rows[0];
 }
@@ -848,7 +864,7 @@ async function syncDiscussionSetup(activity, user = {}) {
 
   const existing = await query(
     "SELECT * FROM discussions WHERE activity_id = $1 LIMIT 1",
-    [activity.id],
+    [activity.id]
   );
 
   if (existing.rows[0]) {
@@ -859,7 +875,7 @@ async function syncDiscussionSetup(activity, user = {}) {
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $3::integer
        RETURNING *`,
-      [prompt, content.allow_peer_replies !== false, existing.rows[0].id],
+      [prompt, content.allow_peer_replies !== false, existing.rows[0].id]
     );
     return result.rows[0];
   }
@@ -885,7 +901,7 @@ async function getActivityDiscussion(activityId, user = {}) {
      WHERE dr.discussion_id = $1::integer
        AND dr.is_hidden = false
      ORDER BY dr.created_at ASC`,
-    [discussion.id],
+    [discussion.id]
   );
 
   return { discussion, replies: replies.rows };
@@ -894,7 +910,7 @@ async function getActivityDiscussion(activityId, user = {}) {
 async function addDiscussionReply(activityId, user = {}, data = {}) {
   const { activity, learner, staffView } = await assertActivityAccess(
     activityId,
-    user,
+    user
   );
   if (!activity) throw new Error("Activity not found or not available.");
   if (activity.activity_type !== "discussion") {
@@ -924,7 +940,7 @@ async function addDiscussionReply(activityId, user = {}, data = {}) {
       user.userId ? String(user.userId) : "",
       data.parent_reply_id ? String(data.parent_reply_id) : "",
       body,
-    ],
+    ]
   );
 
   if (learner) {
@@ -964,12 +980,7 @@ async function submitActivityWork(activityId, user = {}, data = {}) {
        submitted_at = CURRENT_TIMESTAMP,
        status = 'submitted'::varchar
      RETURNING *`,
-    [
-      learner.id,
-      activityId,
-      submissionType,
-      JSON.stringify(data.content || {}),
-    ],
+    [learner.id, activityId, submissionType, JSON.stringify(data.content || {})]
   );
 
   await upsertActivityProgress(activityId, user, { status: "submitted" });
@@ -1003,7 +1014,7 @@ async function submitQuiz(activityId, user = {}, data = {}) {
 
   const questions = Array.isArray(activity.content?.questions)
     ? activity.content.questions.map((question, index) =>
-        normalizeQuestion(question, index, true),
+        normalizeQuestion(question, index, true)
       )
     : [];
   if (questions.length === 0)
@@ -1013,7 +1024,7 @@ async function submitQuiz(activityId, user = {}, data = {}) {
   let earned = 0;
   const total = questions.reduce(
     (sum, question) => sum + Number(question.points || 0),
-    0,
+    0
   );
   const feedback = {};
 
@@ -1022,7 +1033,7 @@ async function submitQuiz(activityId, user = {}, data = {}) {
     const correct = answersMatch(
       question.correct_answer,
       answer,
-      question.question_type,
+      question.question_type
     );
     if (correct) earned += Number(question.points || 0);
     feedback[question.id] = {
@@ -1040,7 +1051,7 @@ async function submitQuiz(activityId, user = {}, data = {}) {
      FROM quiz_attempts
      WHERE learner_id = $1::integer
        AND activity_id = $2::integer`,
-    [learner.id, activityId],
+    [learner.id, activityId]
   );
   const attempt = await query(
     `INSERT INTO quiz_attempts (
@@ -1055,7 +1066,7 @@ async function submitQuiz(activityId, user = {}, data = {}) {
       JSON.stringify(answers),
       score,
       JSON.stringify(feedback),
-    ],
+    ]
   );
 
   const passScore = Number(activity.pass_score ?? 0);
@@ -1064,7 +1075,7 @@ async function submitQuiz(activityId, user = {}, data = {}) {
     activityId,
     user,
     { status: passed ? "graded" : "in_progress", score },
-    { allowQuizCompletion: true, preserveMastery: true },
+    { allowQuizCompletion: true, preserveMastery: true }
   );
 
   return {
@@ -1083,7 +1094,7 @@ async function getModuleLearning(courseId, moduleId, user = {}) {
   if (!overview) return null;
 
   const moduleIndex = overview.modules.findIndex(
-    (module) => Number(module.id) === Number(moduleId),
+    (module) => Number(module.id) === Number(moduleId)
   );
   if (moduleIndex === -1) return null;
 
@@ -1099,7 +1110,7 @@ async function getModuleLearning(courseId, moduleId, user = {}) {
       `SELECT * FROM learner_module_badges
        WHERE learner_id = $1::integer AND module_id = $2::integer
        LIMIT 1`,
-      [overview.learner.id, moduleId],
+      [overview.learner.id, moduleId]
     );
     badge = badgeResult.rows[0] || null;
     const feedbackResult = await query(
@@ -1107,7 +1118,7 @@ async function getModuleLearning(courseId, moduleId, user = {}) {
        FROM module_feedback
        WHERE learner_id = $1::integer AND module_id = $2::integer
        LIMIT 1`,
-      [overview.learner.id, moduleId],
+      [overview.learner.id, moduleId]
     );
     feedback = feedbackResult.rows[0] || null;
   }
@@ -1140,7 +1151,10 @@ async function getModuleLearning(courseId, moduleId, user = {}) {
 }
 
 async function startCoursePayment(courseId, user = {}) {
-  const { course, learner, allocation } = await assertCourseAccess(courseId, user);
+  const { course, learner, allocation } = await assertCourseAccess(
+    courseId,
+    user
+  );
   if (!course || !learner || !allocation) {
     throw new Error("Course is not available to this learner.");
   }
@@ -1149,29 +1163,37 @@ async function startCoursePayment(courseId, user = {}) {
   }
 
   const independent = await independentLearnersService.isIndependentSchool(
-    learner.school_id,
+    learner.school_id
   );
   if (!independent) {
-    throw new Error("Course payments are only available for independent learners.");
+    throw new Error(
+      "Course payments are only available for independent learners."
+    );
   }
 
   const amount = Number(course.independent_price_amount || 0);
   const currency = course.independent_currency || "KES";
   if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error("This course does not have an access price configured yet.");
+    throw new Error(
+      "This course does not have an access price configured yet."
+    );
   }
   if (!flutterwave.isConfigured()) {
-    throw new Error("Payment is not configured yet. Contact the system administrator.");
+    throw new Error(
+      "Payment is not configured yet. Contact the system administrator."
+    );
   }
 
-  const txRef = `educlub-course-${course.id}-${learner.id}-${crypto.randomUUID()}`;
+  const txRef = `educlub-course-${course.id}-${
+    learner.id
+  }-${crypto.randomUUID()}`;
   const payment = await flutterwave.createPaymentLink({
     txRef,
     amount,
     currency,
-    redirectUrl: `${env.frontendUrl}/learner/courses/${course.id}?course_tx_ref=${encodeURIComponent(
-      txRef,
-    )}`,
+    redirectUrl: `${env.frontendUrl}/learner/courses/${
+      course.id
+    }?course_tx_ref=${encodeURIComponent(txRef)}`,
     customer: {
       email: learner.email || user.email,
       name: learner.full_name || user.fullName || user.username,
@@ -1202,14 +1224,15 @@ async function startCoursePayment(courseId, user = {}) {
       currency,
       payment.link,
       JSON.stringify(payment.raw),
-    ],
+    ]
   );
 
   return { status: "payment_required", paymentLink: payment.link, txRef };
 }
 
 async function verifyCoursePayment({ transactionId, txRef }, user = {}) {
-  if (!transactionId) throw new Error("Flutterwave transaction id is required.");
+  if (!transactionId)
+    throw new Error("Flutterwave transaction id is required.");
   if (!txRef) throw new Error("Payment reference is required.");
 
   const paymentResult = await query(
@@ -1218,7 +1241,7 @@ async function verifyCoursePayment({ transactionId, txRef }, user = {}) {
      JOIN learners l ON l.id = cp.learner_id
      WHERE cp.tx_ref = $1
      LIMIT 1`,
-    [txRef],
+    [txRef]
   );
   const payment = paymentResult.rows[0];
   if (!payment) throw new Error("Payment record not found.");
@@ -1254,7 +1277,7 @@ async function verifyCoursePayment({ transactionId, txRef }, user = {}) {
       String(transactionId),
       JSON.stringify(verification),
       payment.id,
-    ],
+    ]
   );
 
   if (!successful) throw new Error("Payment could not be verified.");
@@ -1266,7 +1289,7 @@ async function verifyCoursePayment({ transactionId, txRef }, user = {}) {
          payment_reference = $1,
          status = CASE WHEN status = 'inactive' THEN 'active' ELSE status END
      WHERE id = $2`,
-    [payment.tx_ref, payment.allocation_id],
+    [payment.tx_ref, payment.allocation_id]
   );
 
   return { status: "unlocked" };
@@ -1321,7 +1344,7 @@ async function upsertActivityProgress(
   activityId,
   user = {},
   data = {},
-  options = {},
+  options = {}
 ) {
   const activityAccess = await assertActivityAccess(activityId, user);
   const learner = activityAccess.learner;
@@ -1337,7 +1360,7 @@ async function upsertActivityProgress(
        AND ca.learner_id = $2::integer
        AND ca.status IN ('active', 'in_progress', 'completed')
      LIMIT 1`,
-    [activityId, learner.id],
+    [activityId, learner.id]
   );
 
   if (!access.rows[0])
@@ -1391,7 +1414,7 @@ async function upsertActivityProgress(
       score,
       data.opened_at || null,
       options.preserveMastery === true,
-    ],
+    ]
   );
 
   let badge = null;
@@ -1416,7 +1439,7 @@ function gradeToProgressScore(score, activityPoints) {
   if (maxPoints > 0) {
     return Math.max(
       0,
-      Math.min(100, Math.round((numericScore / maxPoints) * 100)),
+      Math.min(100, Math.round((numericScore / maxPoints) * 100))
     );
   }
   return Math.max(0, Math.min(100, numericScore));
@@ -1435,7 +1458,7 @@ async function assertActivityReviewAccess(activityId, user = {}) {
      JOIN course_modules cm ON cm.id = la.module_id
      JOIN courses c ON c.id = cm.course_id
      WHERE la.id = $1::integer`,
-    [activityId],
+    [activityId]
   );
   const activity = result.rows[0];
   if (!activity) throw new Error("Activity not found.");
@@ -1457,7 +1480,7 @@ async function getActivityReview(activityId, user = {}, filters = {}) {
      WHERE ca.course_id = $1::integer
        AND ca.status IN ('active', 'in_progress', 'completed')
        AND l.is_active = true`,
-    [activity.course_id],
+    [activity.course_id]
   );
 
   const learnersResult = await query(
@@ -1479,6 +1502,7 @@ async function getActivityReview(activityId, user = {}, filters = {}) {
             s.status AS submission_status,
             g.id AS grade_id,
             g.score AS grade_score,
+            g.question_marks,
             g.performance_level,
             g.teacher_remarks,
             g.graded_by_user_id,
@@ -1514,7 +1538,7 @@ async function getActivityReview(activityId, user = {}, filters = {}) {
      ORDER BY COALESCE(s.submitted_at, qa.submitted_at, ap.updated_at) DESC NULLS LAST,
               l.full_name
      LIMIT $3::integer OFFSET $4::integer`,
-    [activityId, activity.course_id, limit, offset],
+    [activityId, activity.course_id, limit, offset]
   );
 
   return {
@@ -1543,7 +1567,7 @@ async function gradeActivityForLearner(
   activityId,
   learnerId,
   user = {},
-  data = {},
+  data = {}
 ) {
   const activity = await assertActivityReviewAccess(activityId, user);
   const allocation = await query(
@@ -1555,7 +1579,7 @@ async function gradeActivityForLearner(
        AND ca.status IN ('active', 'in_progress', 'completed')
        AND l.is_active = true
      LIMIT 1`,
-    [activity.course_id, learnerId],
+    [activity.course_id, learnerId]
   );
   if (!allocation.rows[0])
     throw new Error("Learner is not allocated to this course.");
@@ -1568,14 +1592,14 @@ async function gradeActivityForLearner(
      WHERE learner_id = $1::integer
        AND activity_id = $2::integer
      LIMIT 1`,
-    [learnerId, activityId],
+    [learnerId, activityId]
   );
   const submissionId = submission.rows[0]?.id || null;
   const progressScore = gradeToProgressScore(score, activity.points);
 
   const grade = await query(
     `INSERT INTO activity_grades (
-       submission_id, learner_id, activity_id, score, performance_level,
+       submission_id, learner_id, activity_id, score, question_marks, performance_level,
        teacher_remarks, graded_by_user_id, graded_at
      )
      VALUES (
@@ -1583,15 +1607,17 @@ async function gradeActivityForLearner(
        $2::integer,
        $3::integer,
        $4::numeric,
-       NULLIF($5::text, '')::varchar,
-       NULLIF($6::text, ''),
-       NULLIF($7::text, '')::integer,
+       $5::jsonb,
+       NULLIF($6::text, '')::varchar,
+       NULLIF($7::text, ''),
+       NULLIF($8::text, '')::integer,
        CURRENT_TIMESTAMP
      )
      ON CONFLICT (learner_id, activity_id)
      DO UPDATE SET
        submission_id = COALESCE(EXCLUDED.submission_id, activity_grades.submission_id),
        score = EXCLUDED.score,
+       question_marks = EXCLUDED.question_marks,
        performance_level = EXCLUDED.performance_level,
        teacher_remarks = EXCLUDED.teacher_remarks,
        graded_by_user_id = EXCLUDED.graded_by_user_id,
@@ -1602,10 +1628,11 @@ async function gradeActivityForLearner(
       learnerId,
       activityId,
       score,
+      JSON.stringify(data.question_marks || {}),
       data.performance_level || "",
       data.teacher_remarks || "",
       user.userId ? String(user.userId) : "",
-    ],
+    ]
   );
 
   await query(
@@ -1630,7 +1657,7 @@ async function gradeActivityForLearner(
        completed_at = COALESCE(activity_progress.completed_at, NOW()),
        graded_at = NOW(),
        updated_at = NOW()`,
-    [learnerId, activityId, progressScore],
+    [learnerId, activityId, progressScore]
   );
 
   if (submissionId) {
@@ -1638,7 +1665,7 @@ async function gradeActivityForLearner(
       `UPDATE activity_submissions
        SET status = 'graded'::varchar
        WHERE id = $1::integer`,
-      [submissionId],
+      [submissionId]
     );
   }
 
@@ -1655,7 +1682,7 @@ async function saveModuleSchedule(moduleId, user = {}, data = {}) {
   if (!data.schedule_term_id || !data.schedule_week_number) {
     await query(
       "DELETE FROM school_module_schedules WHERE module_id = $1::integer",
-      [moduleId],
+      [moduleId]
     );
     return null;
   }
@@ -1667,7 +1694,7 @@ async function saveModuleSchedule(moduleId, user = {}, data = {}) {
        AND tw.week_number = $2::integer
        AND t.is_active = true
      LIMIT 1`,
-    [data.schedule_term_id, data.schedule_week_number],
+    [data.schedule_term_id, data.schedule_week_number]
   );
   if (!week.rows[0]) throw new Error("Choose a valid week in the active term.");
   const result = await query(
@@ -1689,7 +1716,7 @@ async function saveModuleSchedule(moduleId, user = {}, data = {}) {
       data.schedule_week_number,
       week.rows[0].start_date,
       user.userId,
-    ],
+    ]
   );
   return result.rows[0];
 }
@@ -1713,7 +1740,7 @@ async function createModule(courseId, data = {}) {
       data.position || null,
       data.is_published !== false,
       data.unlock_at || null,
-    ],
+    ]
   );
   return result.rows[0];
 }
@@ -1731,7 +1758,7 @@ async function createManagedModule(courseId, user = {}, data = {}) {
 async function updateModule(moduleId, user = {}, data = {}) {
   const moduleCourse = await query(
     "SELECT course_id FROM course_modules WHERE id = $1",
-    [moduleId],
+    [moduleId]
   );
   const courseId = moduleCourse.rows[0]?.course_id;
   if (!courseId) return null;
@@ -1758,7 +1785,7 @@ async function updateModule(moduleId, user = {}, data = {}) {
       data.is_published !== false,
       data.unlock_at || null,
       moduleId,
-    ],
+    ]
   );
   await bumpSchoolCourseVersion(courseId);
   if (user.role !== "system_admin")
@@ -1769,7 +1796,7 @@ async function updateModule(moduleId, user = {}, data = {}) {
 async function deleteModule(moduleId, user = {}) {
   const moduleCourse = await query(
     "SELECT course_id FROM course_modules WHERE id = $1",
-    [moduleId],
+    [moduleId]
   );
   const courseId = moduleCourse.rows[0]?.course_id;
   if (!courseId) return;
@@ -1806,7 +1833,7 @@ async function createActivity(moduleId, data = {}) {
       data.completion_rule || "manual",
       data.pass_score || null,
       data.is_published !== false,
-    ],
+    ]
   );
   return result.rows[0];
 }
@@ -1814,7 +1841,7 @@ async function createActivity(moduleId, data = {}) {
 async function createManagedActivity(moduleId, user = {}, data = {}) {
   const moduleCourse = await query(
     "SELECT course_id FROM course_modules WHERE id = $1",
-    [moduleId],
+    [moduleId]
   );
   const courseId = moduleCourse.rows[0]?.course_id;
   if (!courseId) throw new Error("Module not found.");
@@ -1836,7 +1863,7 @@ async function updateActivity(activityId, user = {}, data = {}) {
      FROM learning_activities la
      JOIN course_modules cm ON cm.id = la.module_id
      WHERE la.id = $1`,
-    [activityId],
+    [activityId]
   );
   const courseId = activityCourse.rows[0]?.course_id;
   if (!courseId) return null;
@@ -1874,7 +1901,7 @@ async function updateActivity(activityId, user = {}, data = {}) {
       data.pass_score || null,
       data.is_published !== false,
       activityId,
-    ],
+    ]
   );
   if (result.rows[0]) {
     await syncDiscussionSetup(result.rows[0], user);
@@ -1889,7 +1916,7 @@ async function deleteActivity(activityId, user = {}) {
      FROM learning_activities la
      JOIN course_modules cm ON cm.id = la.module_id
      WHERE la.id = $1`,
-    [activityId],
+    [activityId]
   );
   const courseId = activityCourse.rows[0]?.course_id;
   if (!courseId) return;
@@ -1904,13 +1931,14 @@ async function deleteActivity(activityId, user = {}) {
 async function reorderActivities(moduleId, user = {}, activityIds = []) {
   const moduleCourse = await query(
     "SELECT course_id FROM course_modules WHERE id = $1",
-    [moduleId],
+    [moduleId]
   );
   const courseId = moduleCourse.rows[0]?.course_id;
   if (!courseId) throw new Error("Module not found.");
 
   const allowed = await assertCourseManageAccess(courseId, user);
-  if (!allowed) throw new Error("You cannot reorder activities in this module.");
+  if (!allowed)
+    throw new Error("You cannot reorder activities in this module.");
 
   const orderedIds = (Array.isArray(activityIds) ? activityIds : [])
     .map((id) => Number(id))
@@ -1922,7 +1950,7 @@ async function reorderActivities(moduleId, user = {}, activityIds = []) {
      FROM learning_activities
      WHERE module_id = $1::integer
        AND id = ANY($2::integer[])`,
-    [moduleId, orderedIds],
+    [moduleId, orderedIds]
   );
   if (existing.rows.length !== orderedIds.length) {
     throw new Error("Activity order contains an item outside this module.");
@@ -1933,7 +1961,7 @@ async function reorderActivities(moduleId, user = {}, activityIds = []) {
      SET position = -100000 - position
      WHERE module_id = $1::integer
        AND id = ANY($2::integer[])`,
-    [moduleId, orderedIds],
+    [moduleId, orderedIds]
   );
 
   for (const [index, activityId] of orderedIds.entries()) {
@@ -1943,7 +1971,7 @@ async function reorderActivities(moduleId, user = {}, activityIds = []) {
            updated_at = CURRENT_TIMESTAMP
        WHERE module_id = $2::integer
          AND id = $3::integer`,
-      [index + 1, moduleId, activityId],
+      [index + 1, moduleId, activityId]
     );
   }
 
@@ -1954,7 +1982,7 @@ async function reorderActivities(moduleId, user = {}, activityIds = []) {
      FROM learning_activities
      WHERE module_id = $1::integer
      ORDER BY position`,
-    [moduleId],
+    [moduleId]
   );
   return result.rows;
 }
@@ -1994,7 +2022,7 @@ async function createAvailabilityOverride(courseId, user = {}, data = {}) {
       data.stream || "",
       reason,
       user.userId,
-    ],
+    ]
   );
   return result.rows[0];
 }
@@ -2009,7 +2037,7 @@ async function listAvailabilityOverrides(courseId, user = {}) {
      WHERE o.course_id = $1::integer
        AND o.revoked_at IS NULL
      ORDER BY o.created_at DESC`,
-    [courseId],
+    [courseId]
   );
   return result.rows;
 }
@@ -2023,7 +2051,7 @@ async function revokeAvailabilityOverride(overrideId, user = {}) {
      WHERE id = $1::integer
        AND school_id = $2::integer
      RETURNING *`,
-    [overrideId, user.schoolId],
+    [overrideId, user.schoolId]
   );
   if (!result.rows[0]) throw new Error("Unlock override not found.");
   return result.rows[0];
@@ -2045,11 +2073,11 @@ async function getModuleFeedbackSummary(moduleId, user = {}) {
   if (!isStaff(user)) throw new Error("Staff access is required.");
   const moduleResult = await query(
     "SELECT course_id FROM course_modules WHERE id = $1",
-    [moduleId],
+    [moduleId]
   );
   const allowed = await assertCourseManageAccess(
     moduleResult.rows[0]?.course_id,
-    user,
+    user
   );
   if (!allowed) throw new Error("You cannot view feedback for this module.");
   return moduleFeedbackService.getModuleFeedbackSummary(moduleId, user);
@@ -2059,7 +2087,7 @@ async function getTemplateFeedbackReport(templateId, user = {}, filters = {}) {
   return moduleFeedbackService.getTemplateFeedbackReport(
     templateId,
     user,
-    filters,
+    filters
   );
 }
 
@@ -2074,7 +2102,7 @@ async function revealModuleFeedbackIdentity(feedbackId, user = {}, data = {}) {
   return moduleFeedbackService.revealFeedbackIdentity(
     feedbackId,
     user,
-    data.reason,
+    data.reason
   );
 }
 

@@ -421,6 +421,7 @@ CREATE TABLE IF NOT EXISTS activity_grades (
   learner_id INTEGER REFERENCES learners(id) ON DELETE CASCADE,
   activity_id INTEGER REFERENCES learning_activities(id) ON DELETE CASCADE,
   score NUMERIC(8, 2) CHECK (score >= 0),
+  question_marks JSONB DEFAULT '{}'::jsonb,
   performance_level VARCHAR(80),
   teacher_remarks TEXT,
   graded_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -737,6 +738,9 @@ CREATE TABLE IF NOT EXISTS typing_attempts (
   submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(typing_lesson_id, learner_id, attempt_number)
 );
+
+ALTER TABLE activity_grades
+  ADD COLUMN IF NOT EXISTS question_marks JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE course_allocations ADD COLUMN IF NOT EXISTS access_level VARCHAR(20) DEFAULT 'paid';
 ALTER TABLE course_allocations DROP CONSTRAINT IF EXISTS course_allocations_access_level_check;
 ALTER TABLE course_allocations ADD CONSTRAINT course_allocations_access_level_check

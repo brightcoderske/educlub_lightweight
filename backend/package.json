@@ -11,6 +11,7 @@
     "schema:ensure": "node scripts/ensure-startup-schema.js",
     "migrate": "node ../scripts/migrate.js",
     "seed": "node ../scripts/seed-admin.js",
+    "seed:weekly-learning": "node scripts/seed-weekly-learning-content.js",
     "import:web-development-1": "node scripts/import-web-development-1.js",
     "import:scratch-pathway": "node scripts/import-scratch-pathway.js"
   },
