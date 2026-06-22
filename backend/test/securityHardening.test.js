@@ -100,6 +100,25 @@ test("course payment webhook requires Flutterwave signature and reuses payment v
   assert.match(service, /verifyCoursePayment\(\{ transactionId, txRef \}\)/);
 });
 
+test("unified Flutterwave webhook routes eduClub payment types after signature validation", () => {
+  const server = fs.readFileSync(path.join(__dirname, "../src/server.js"), "utf8");
+  const routes = fs.readFileSync(
+    path.join(__dirname, "../src/routes/payments.routes.js"),
+    "utf8",
+  );
+  const controller = fs.readFileSync(
+    path.join(__dirname, "../src/controllers/payments.controller.js"),
+    "utf8",
+  );
+
+  assert.match(server, /app\.use\("\/api\/payments", paymentsRoutes\)/);
+  assert.match(routes, /"\/flutterwave\/webhook"/);
+  assert.match(controller, /isValidWebhookSignature/);
+  assert.match(controller, /processCoursePaymentWebhook/);
+  assert.match(controller, /processFlutterwaveWebhook/);
+  assert.match(controller, /Webhook payment type is not handled by eduClub/);
+});
+
 test("file submission policy rejects dangerous extension spoofing", () => {
   assert.equal(isAllowedSubmissionFile("avatar.php", "image/png"), false);
   assert.equal(isAllowedSubmissionFile("installer.exe", "application/pdf"), false);
