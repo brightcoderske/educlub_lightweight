@@ -43,6 +43,7 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [message, setMessage] = useState("");
+  const [temporaryPassword, setTemporaryPassword] = useState("");
 
   const reportTerm = selectedTerm || learner?.term || "Term 1";
   const reportYear = selectedYear || learner?.academic_year || new Date().getFullYear();
@@ -140,8 +141,9 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
   const handleResetPassword = async () => {
     if (!onResetPassword) return;
     try {
-      const result = await onResetPassword(learnerId);
+      const result = await onResetPassword(learnerId, temporaryPassword);
       setMessage(result || "Password reset completed.");
+      setTemporaryPassword("");
     } catch (error) {
       setMessage(error.message || "Password reset failed.");
     }
@@ -233,6 +235,18 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
                       Username: {learner.username || "-"} | Email: {learner.email || "-"}
                     </MDTypography>
                   </MDBox>
+                </MDBox>
+                <MDBox minWidth={{ xs: "100%", md: 260 }}>
+                  <MDInput
+                    label="Temporary password"
+                    fullWidth
+                    type="text"
+                    value={temporaryPassword}
+                    onChange={(event) => setTemporaryPassword(event.target.value)}
+                  />
+                  <MDTypography variant="caption" color="text">
+                    Leave blank to send email or generate one if email is unreachable.
+                  </MDTypography>
                 </MDBox>
                 <MDBox display="flex" gap={1} flexWrap="wrap" justifyContent="flex-end">
                   <MDButton variant="outlined" color="info" size="small" onClick={printReportCard}>

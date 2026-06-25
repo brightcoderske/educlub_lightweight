@@ -112,6 +112,24 @@ function SystemAdminLearners() {
     }
   };
 
+  const resetLearnerPassword = async (learnerId, temporaryPassword = "") => {
+    setError("");
+    setMessage("");
+    try {
+      const result = await apiClient.put(`/learners/${learnerId}/reset-password`, {
+        temporary_password: temporaryPassword,
+      });
+      const nextMessage = result.temporaryPassword
+        ? `${result.message} Temporary password: ${result.temporaryPassword}`
+        : result.message;
+      setMessage(nextMessage);
+      return nextMessage;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
   const loadSupportAllocations = async (learner) => {
     setSupportLearner(learner);
     setSupportAllocations([]);
@@ -167,7 +185,9 @@ function SystemAdminLearners() {
       setSupportAllocations((current) =>
         current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
       );
-      setSupportMessage(`${allocation.course_name} access updated for ${supportLearner?.full_name}.`);
+      setSupportMessage(
+        `${allocation.course_name} access updated for ${supportLearner?.full_name}.`
+      );
     } catch (err) {
       setSupportError(err.message);
     }
@@ -489,6 +509,7 @@ function SystemAdminLearners() {
         open={Boolean(selectedLearnerId)}
         learnerId={selectedLearnerId}
         onClose={() => setSelectedLearnerId(null)}
+        onResetPassword={resetLearnerPassword}
       />
       <Footer />
     </DashboardLayout>

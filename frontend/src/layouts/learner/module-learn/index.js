@@ -236,7 +236,11 @@ function ExecutableRichContent({ html }) {
       const check = () => {
         const ordered = isOrdered();
         sorter.classList.toggle("answered", ordered);
-        setStatus(ordered ? "Correct order. Now build it in Scratch." : "Almost. Read the steps like a story from start to finish.");
+        setStatus(
+          ordered
+            ? "Correct order. Now build it in Scratch."
+            : "Almost. Read the steps like a story from start to finish."
+        );
         updateProgress();
       };
       const reset = () => {
@@ -1251,6 +1255,7 @@ function ModuleLearn() {
   const templatePreviewMode = previewMode && pathname.startsWith("/system-admin");
   const entityId = templatePreviewMode ? templateId : courseId;
   const contentTopRef = useRef(null);
+  const completionRef = useRef(null);
   const [data, setData] = useState(null);
   const [activeActivityId, setActiveActivityId] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -1375,6 +1380,29 @@ function ModuleLearn() {
     });
   };
 
+  const activitiesAfterProgress = (activityId, status) => {
+    let previousRequiredComplete = true;
+    return (data?.module?.activities || [])
+      .map((activity) =>
+        activity.id === activityId
+          ? {
+              ...activity,
+              status: status || activity.status,
+            }
+          : activity
+      )
+      .map((activity) => {
+        if (activity.availability_mode === "try_more") return activity;
+        const unlocked = previousRequiredComplete;
+        previousRequiredComplete = done(activity.status);
+        return {
+          ...activity,
+          is_unlocked: unlocked,
+          lock_reason: unlocked ? null : activity.lock_reason,
+        };
+      });
+  };
+
   useEffect(() => {
     setActiveActivityId(null);
     loadModule();
@@ -1439,7 +1467,7 @@ function ModuleLearn() {
     if (!activity) return;
     if (previewMode) {
       patchActivityProgress(activity.id, { status });
-      return;
+      return { status };
     }
     setSaving(true);
     try {
@@ -1447,9 +1475,11 @@ function ModuleLearn() {
         status,
       });
       patchActivityProgress(activity.id, progress);
+      return progress;
     } catch (err) {
       setError(err.message || "Failed to save progress");
       await loadModule(true);
+      return null;
     } finally {
       setSaving(false);
     }
@@ -1634,6 +1664,19 @@ function ModuleLearn() {
     if (previous) {
       selectActivity(previous);
     }
+  };
+
+  const completeAndContinue = async () => {
+    if (!activeActivity) return;
+    const progress = await updateProgress(activeActivity, "completed");
+    if (!progress) return;
+    const activities = activitiesAfterProgress(activeActivity.id, progress.status || "completed");
+    const { next } = findActivityNavigation(activities, activeActivity.id);
+    if (next) {
+      selectActivity(next);
+      return;
+    }
+    completionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const activityNavigation = findActivityNavigation(
@@ -1930,7 +1973,7 @@ function ModuleLearn() {
                           done(activeActivity.status) ||
                           (!previewMode && activeActivity.activity_type === "quiz")
                         }
-                        onClick={() => updateProgress(activeActivity, "completed")}
+                        onClick={completeAndContinue}
                       >
                         {previewMode
                           ? done(activeActivity.status)
@@ -1953,19 +1996,21 @@ function ModuleLearn() {
             </Card>
 
             {!previewMode && (
-              <CompletionCelebration
-                data={data}
-                feedbackComment={feedbackComment}
-                feedbackRating={feedbackRating}
-                feedbackSaving={feedbackSaving}
-                onFeedbackCommentChange={setFeedbackComment}
-                onFeedbackRatingChange={setFeedbackRating}
-                onSubmitFeedback={submitFeedback}
-                onNext={() =>
-                  navigate(moduleLearningPath(courseId, data.next_module.id, null, false))
-                }
-                onClose={() => navigate(courseOverviewPath(courseId, false))}
-              />
+              <MDBox ref={completionRef} sx={{ scrollMarginTop: "24px" }}>
+                <CompletionCelebration
+                  data={data}
+                  feedbackComment={feedbackComment}
+                  feedbackRating={feedbackRating}
+                  feedbackSaving={feedbackSaving}
+                  onFeedbackCommentChange={setFeedbackComment}
+                  onFeedbackRatingChange={setFeedbackRating}
+                  onSubmitFeedback={submitFeedback}
+                  onNext={() =>
+                    navigate(moduleLearningPath(courseId, data.next_module.id, null, false))
+                  }
+                  onClose={() => navigate(courseOverviewPath(courseId, false))}
+                />
+              </MDBox>
             )}
           </Grid>
         </Grid>

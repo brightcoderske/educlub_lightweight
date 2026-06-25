@@ -229,7 +229,7 @@ async function getLearnerById(req, res) {
        FROM learners l
        LEFT JOIN users u ON u.id = l.user_id
        WHERE l.id = $1`,
-      [req.params.id],
+      [req.params.id]
     );
     const learner = result.rows[0];
 
@@ -239,11 +239,13 @@ async function getLearnerById(req, res) {
 
     if (!canManageLearner(req.user, learner)) {
       if (req.user.role !== "teacher") {
-        return res.status(403).json({ error: "Learner is outside your access" });
+        return res
+          .status(403)
+          .json({ error: "Learner is outside your access" });
       }
       await teacherAssignmentsService.assertTeacherLearnerAccess(
         req.user,
-        learner.id,
+        learner.id
       );
     }
 
@@ -309,7 +311,7 @@ async function updateLearner(req, res) {
         req.user.role === "learner" ? existingLearner.next_grade : next_grade,
         req.user.role === "learner" ? existingLearner.next_term : next_term,
         req.params.id,
-      ],
+      ]
     );
 
     if (result.rows.length === 0) {
@@ -410,7 +412,7 @@ async function graduateLearner(req, res) {
   try {
     const learnerResult = await query(
       "SELECT id, school_id, full_name FROM learners WHERE id = $1",
-      [req.params.id],
+      [req.params.id]
     );
     const learner = learnerResult.rows[0];
     if (!learner) {
@@ -425,7 +427,7 @@ async function graduateLearner(req, res) {
     if (req.user.role === "teacher") {
       await teacherAssignmentsService.assertTeacherLearnerAccess(
         req.user,
-        learner.id,
+        learner.id
       );
     }
     const graduated = await query(
@@ -437,12 +439,14 @@ async function graduateLearner(req, res) {
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $1
        RETURNING *`,
-      [learner.id, req.user.userId, req.body.note || ""],
+      [learner.id, req.user.userId, req.body.note || ""]
     );
     res.json(graduated.rows[0]);
   } catch (error) {
     console.error("Graduate learner error:", error);
-    res.status(400).json({ error: error.message || "Failed to graduate learner" });
+    res
+      .status(400)
+      .json({ error: error.message || "Failed to graduate learner" });
   }
 }
 
@@ -450,7 +454,7 @@ async function deleteLearner(req, res) {
   try {
     const result = await query(
       "DELETE FROM learners WHERE id = $1 RETURNING *",
-      [req.params.id],
+      [req.params.id]
     );
 
     if (result.rows.length === 0) {
@@ -493,7 +497,7 @@ async function resetLearnerPassword(req, res) {
       `SELECT id, email, full_name, username, role, school_id
        FROM users
        WHERE id = $1 AND is_active = true`,
-      [learner.user_id],
+      [learner.user_id]
     );
     const user = userResult.rows[0];
 
@@ -501,23 +505,37 @@ async function resetLearnerPassword(req, res) {
       return res.status(404).json({ error: "Learner login account not found" });
     }
 
-    if (authService.isDeliverableEmail(user.email)) {
+    const providedTemporaryPassword = String(
+      req.body.temporary_password || ""
+    ).trim();
+
+    if (providedTemporaryPassword && providedTemporaryPassword.length < 8) {
+      return res
+        .status(400)
+        .json({ error: "Temporary password must be at least 8 characters." });
+    }
+
+    if (
+      !providedTemporaryPassword &&
+      authService.isDeliverableEmail(user.email)
+    ) {
       const result = await authService.sendPasswordResetLinkForUser(
         user,
         req.user.userId,
         req.ip,
-        req.get("user-agent"),
+        req.get("user-agent")
       );
       return res.json(result);
     }
 
-    const temporaryPassword = generateRandomPassword(14);
+    const temporaryPassword =
+      providedTemporaryPassword || generateRandomPassword(14);
     const hashedPassword = await hashPassword(temporaryPassword);
     await query(
       `UPDATE users
        SET password = $1, force_password_reset = true, updated_at = NOW()
        WHERE id = $2`,
-      [hashedPassword, learner.user_id],
+      [hashedPassword, learner.user_id]
     );
 
     await query(
@@ -527,16 +545,21 @@ async function resetLearnerPassword(req, res) {
         learner.user_id,
         JSON.stringify({
           requestedBy: req.user.userId,
-          reason: "no_deliverable_email",
+          reason: providedTemporaryPassword
+            ? "staff_entered_temporary_password"
+            : "no_deliverable_email",
         }),
         req.ip || null,
-      ],
+      ]
     );
 
     res.json({
-      message:
-        "Learner has no reachable email. A one-time temporary password was generated and must be changed at next sign-in.",
-      temporaryPassword,
+      message: providedTemporaryPassword
+        ? "Temporary password saved. The learner must change it at next sign-in."
+        : "Learner has no reachable email. A one-time temporary password was generated and must be changed at next sign-in.",
+      temporaryPassword: providedTemporaryPassword
+        ? undefined
+        : temporaryPassword,
     });
   } catch (error) {
     console.error("Reset learner password error:", error);

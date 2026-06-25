@@ -153,10 +153,12 @@ function SchoolAdminLearners() {
     }
   };
 
-  const resetLearnerPassword = async (learnerId) => {
+  const resetLearnerPassword = async (learnerId, temporaryPassword = "") => {
     setError("");
     try {
-      const result = await apiClient.put(`/learners/${learnerId}/reset-password`, {});
+      const result = await apiClient.put(`/learners/${learnerId}/reset-password`, {
+        temporary_password: temporaryPassword,
+      });
       const message = result.temporaryPassword
         ? `${result.message} Temporary password: ${result.temporaryPassword}`
         : result.message;
