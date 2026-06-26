@@ -28,6 +28,20 @@ async function generateCourseBuilderDraft(req, res) {
   }
 }
 
+async function generateActivityContentDraft(req, res) {
+  try {
+    const draft = await aiCourseBuilderService.generateActivityContentDraft(
+      req.body,
+      req.user,
+    );
+    res.json(draft);
+  } catch (error) {
+    res
+      .status(400)
+      .json({ error: error.message || "AI activity generation failed." });
+  }
+}
+
 async function applyCourseBuilderDraft(req, res) {
   try {
     const result = await aiCourseBuilderService.applyCourseBuilderDraft(
@@ -44,6 +58,7 @@ async function applyCourseBuilderDraft(req, res) {
 
 module.exports = {
   applyCourseBuilderDraft,
+  generateActivityContentDraft,
   generateCourseBuilderDraft,
   getAvailability,
   getSettings,

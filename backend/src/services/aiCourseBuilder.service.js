@@ -27,6 +27,33 @@ const SUPPORTED_MODES = new Set([
   "try_more",
 ]);
 
+const ACTIVITY_OUTPUT_SCHEMA = `Return JSON only with this shape:
+{
+  "title": "activity title",
+  "activity_type": "lesson|quiz|assignment|discussion|coding|typing|project|reflection",
+  "points": 0,
+  "completion_rule": "manual|score|submission",
+  "pass_score": 50,
+  "content": {
+    "purpose": "why learners are doing this",
+    "description": "short teacher-facing description",
+    "rich_html": "rich learner HTML using lightweight vanilla HTML/CSS/JS only",
+    "discussion_prompt": "for discussion activities",
+    "project_brief": "for project activities",
+    "submission_instructions": "for assignment/project activities",
+    "reflection_prompt": "for reflection activities",
+    "teacher_notes": "teacher guide",
+    "friendly_hints": ["hint one"],
+    "starter_html": "",
+    "starter_css": "",
+    "starter_js": "",
+    "language": "html_css",
+    "challenge_mode": "build",
+    "validation_checks": [],
+    "questions": []
+  }
+}`;
+
 function clampNumber(value, fallback, min, max) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -221,6 +248,50 @@ Quality rules:
   ];
 }
 
+function buildActivityBuilderMessages(options = {}) {
+  const activity = options.activity || {};
+  const activityType = ALLOWED_ACTIVITY_TYPES.has(activity.activity_type)
+    ? activity.activity_type
+    : "lesson";
+  const customPrompt = String(options.prompt || "").trim();
+  return [
+    {
+      role: "system",
+      content:
+        "You are eduClub's expert activity author for young learners. Produce JSON only. Keep content child-safe, age-aware, objective-aware, interactive, project-based, and lightweight. Never ask for personal information. Avoid unsafe external links and heavy libraries.",
+    },
+    {
+      role: "user",
+      content: `Create content for one existing eduClub activity only.
+Course: ${options.course_name || "Current course"}
+Module: ${options.module_title || "Current module"}
+Activity title: ${activity.title || "Untitled activity"}
+Activity type: ${activityType}
+Learner age: ${options.learner_age || "8 years old beginner"}
+Marks/points: ${activity.points || 0}
+
+Teacher fine-tuning prompt:
+${customPrompt || "Create rich, step-by-step, beginner-friendly activity content."}
+
+Requirements:
+- Do not create modules or other activities.
+- Keep the generated content focused on this activity only.
+- Use rich_html for learner-facing content.
+- rich_html should teach step by step: explain, show, let the learner try, give hints, then check understanding.
+- Use vanilla HTML, CSS, and tiny vanilla JavaScript only where needed.
+- Include visuals, simple diagrams, click-to-reveal sections, flashcards, checkboxes, mini-checks, and slide-style step panels where useful.
+- Make the activity project based and practical for an 8-year-old beginner.
+- For quiz activities, include questions with points, correct answers, hints, and explanations.
+- For discussion activities, include a discussion_prompt.
+- For coding activities, include starter_html, starter_css, starter_js, validation_checks, and clear instructions.
+- Include teacher_notes, friendly_hints, and common mistakes.
+- The teacher must still click Save in the editor after reviewing.
+
+${ACTIVITY_OUTPUT_SCHEMA}`,
+    },
+  ];
+}
+
 async function checkUsageLimits(user, settings) {
   const roleLimitResult = await query(
     "SELECT * FROM ai_role_limits WHERE role = $1 AND is_enabled = true",
@@ -364,6 +435,58 @@ async function generateCourseBuilderDraft(payload = {}, user = {}) {
   }
 }
 
+async function generateActivityContentDraft(payload = {}, user = {}) {
+  const { settings, provider } = await getActiveProvider(payload.provider_key);
+  await checkUsageLimits(user, settings);
+  const messages = buildActivityBuilderMessages(payload);
+  const pendingLog = await logUsage(user, {
+    provider_key: provider.provider_key,
+    model: provider.default_model,
+    feature: "activity_content_generate",
+    activity_id: payload.activity?.id || null,
+    status: "pending",
+  });
+
+  try {
+    const providerResult = await callOpenAiCompatibleProvider({
+      provider,
+      messages,
+    });
+    const activity = normalizeActivity({
+      ...(payload.activity || {}),
+      ...parseJsonDraft(providerResult.text),
+    });
+    const usage = providerResult.usage || {};
+    await query(
+      `UPDATE ai_usage_logs
+       SET status = 'success',
+           prompt_tokens = $1,
+           completion_tokens = $2,
+           total_tokens = $3
+       WHERE id = $4`,
+      [
+        usage.prompt_tokens || 0,
+        usage.completion_tokens || 0,
+        usage.total_tokens || 0,
+        pendingLog.id,
+      ],
+    );
+    return {
+      activity,
+      prompt: messages.map((message) => message.content).join("\n\n"),
+      inserted: false,
+      provider: provider.provider_key,
+      model: provider.default_model,
+    };
+  } catch (error) {
+    await query(
+      "UPDATE ai_usage_logs SET status = 'failed', error_message = $1 WHERE id = $2",
+      [error.message, pendingLog.id],
+    );
+    throw error;
+  }
+}
+
 async function applyCourseBuilderDraft(payload = {}) {
   const templateId = Number(payload.template_id);
   if (!templateId) throw new Error("Template is required.");
@@ -394,7 +517,9 @@ async function applyCourseBuilderDraft(payload = {}) {
 }
 
 module.exports = {
+  buildActivityBuilderMessages,
   buildCourseBuilderMessages,
+  generateActivityContentDraft,
   generateCourseBuilderDraft,
   applyCourseBuilderDraft,
   normalizeCourseDraft,

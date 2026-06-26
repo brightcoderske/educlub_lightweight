@@ -21,6 +21,11 @@ test("AI course builder routes are system-admin only and preview before insert",
   );
   assert.match(controller, /generateCourseBuilderDraft/);
   assert.match(controller, /applyCourseBuilderDraft/);
+  assert.match(
+    routes,
+    /router\.post\([\s\S]*"\/course-builder\/activity"[\s\S]*requireRole\("system_admin"\)/,
+  );
+  assert.match(controller, /generateActivityContentDraft/);
 });
 
 test("AI course prompt is child-safe, objective-aware, and JSON-only", () => {
@@ -108,6 +113,41 @@ test("AI course drafts are normalized into safe template module and activity sha
   assert.equal(draft.modules[0].activities[1].completion_rule, "score");
   assert.equal(draft.modules[0].activities[1].pass_score, 50);
   assert.doesNotMatch(draft.modules[0].activities[0].content.body, /script/i);
+
+  if (previousDatabaseUrl === undefined) {
+    delete process.env.DATABASE_URL;
+  } else {
+    process.env.DATABASE_URL = previousDatabaseUrl;
+  }
+});
+
+test("AI activity prompt is activity-aware and requests rich vanilla interactive content", () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
+  delete require.cache[require.resolve("../src/services/aiCourseBuilder.service")];
+  const { buildActivityBuilderMessages } = require("../src/services/aiCourseBuilder.service");
+
+  const messages = buildActivityBuilderMessages({
+    course_name: "Computer Basics",
+    module_title: "Mouse Skills",
+    activity: {
+      title: "Click Practice",
+      activity_type: "lesson",
+      points: 5,
+    },
+    learner_age: "8 years old beginner",
+    prompt: "Make it visual and project based.",
+  });
+  const prompt = messages.map((message) => message.content).join("\n");
+
+  assert.match(prompt, /Click Practice/);
+  assert.match(prompt, /lesson/);
+  assert.match(prompt, /rich_html/);
+  assert.match(prompt, /vanilla/i);
+  assert.match(prompt, /flashcards/i);
+  assert.match(prompt, /click-to-reveal/i);
+  assert.match(prompt, /checkbox/i);
+  assert.match(prompt, /Save/i);
 
   if (previousDatabaseUrl === undefined) {
     delete process.env.DATABASE_URL;

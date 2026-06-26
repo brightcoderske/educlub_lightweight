@@ -23,6 +23,12 @@ router.post(
   aiController.generateCourseBuilderDraft,
 );
 router.post(
+  "/course-builder/activity",
+  authenticateToken,
+  requireRole("system_admin"),
+  aiController.generateActivityContentDraft,
+);
+router.post(
   "/course-builder/apply",
   authenticateToken,
   requireRole("system_admin"),

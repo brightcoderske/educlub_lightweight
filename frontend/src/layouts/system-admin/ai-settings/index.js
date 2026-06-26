@@ -392,23 +392,45 @@ function SystemAdminAiSettings() {
                 <MDTypography variant="h5" mb={2}>
                   Role Permissions & Limits
                 </MDTypography>
-                <TableContainer>
-                  <Table>
-                    <TableHead>
+                <TableContainer sx={{ overflowX: "auto" }}>
+                  <Table
+                    sx={{
+                      minWidth: 820,
+                      tableLayout: "fixed",
+                      "& th, & td": {
+                        verticalAlign: "middle",
+                        borderBottom: "1px solid #eef2f7",
+                      },
+                      "& th": {
+                        color: "#475569",
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        whiteSpace: "nowrap",
+                      },
+                    }}
+                  >
+                    <TableHead sx={{ display: "table-header-group" }}>
                       <TableRow>
-                        <TableCell>Role</TableCell>
-                        <TableCell>Enabled</TableCell>
-                        <TableCell>Requests/hour</TableCell>
-                        <TableCell>Tokens/hour</TableCell>
-                        <TableCell>Requests/day</TableCell>
-                        <TableCell>Tokens/day</TableCell>
+                        <TableCell sx={{ width: 180 }}>Role</TableCell>
+                        <TableCell align="center" sx={{ width: 96 }}>
+                          Enabled
+                        </TableCell>
+                        <TableCell align="right">Requests/hour</TableCell>
+                        <TableCell align="right">Tokens/hour</TableCell>
+                        <TableCell align="right">Requests/day</TableCell>
+                        <TableCell align="right">Tokens/day</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {roleLimits.map((limit) => (
                         <TableRow key={limit.role}>
-                          <TableCell>{roleLabels[limit.role] || limit.role}</TableCell>
                           <TableCell>
+                            <MDTypography variant="button" fontWeight="medium">
+                              {roleLabels[limit.role] || limit.role}
+                            </MDTypography>
+                          </TableCell>
+                          <TableCell align="center">
                             <Checkbox
                               checked={Boolean(limit.is_enabled)}
                               onChange={(event) =>
@@ -424,15 +446,23 @@ function SystemAdminAiSettings() {
                             "requests_per_day",
                             "tokens_per_day",
                           ].map((field) => (
-                            <TableCell key={field}>
+                            <TableCell key={field} align="right">
                               <MDInput
                                 type="number"
+                                fullWidth
                                 value={limit[field]}
                                 onChange={(event) =>
                                   updateRoleLimit(limit.role, {
                                     [field]: event.target.value,
                                   })
                                 }
+                                sx={{
+                                  maxWidth: 132,
+                                  "& input": {
+                                    textAlign: "right",
+                                    py: 1,
+                                  },
+                                }}
                               />
                             </TableCell>
                           ))}

@@ -216,6 +216,66 @@ function activityToManagerForm(activity) {
   };
 }
 
+function defaultActivityAiPrompt(form = {}) {
+  const activityType = String(form.activity_type || "lesson").replace(/_/g, " ");
+  return [
+    `Generate rich ${activityType} content for this one activity only.`,
+    "Teach an 8-year-old beginner step by step using a warm, practical, project-based style.",
+    "Use rich HTML with small visual blocks, click-to-reveal hints, flashcards, checkboxes, and simple slide-style sections where useful.",
+    "Use only lightweight vanilla HTML, CSS, and tiny JavaScript interactions that can run inside the lesson safely.",
+    "Keep the content focused on this activity title and avoid creating extra modules or unrelated activities.",
+  ].join("\n");
+}
+
+function stringifyChecks(checks) {
+  if (!checks) return "[]";
+  if (typeof checks === "string") return checks;
+  try {
+    return JSON.stringify(Array.isArray(checks) ? checks : [], null, 2);
+  } catch {
+    return "[]";
+  }
+}
+
+function mergeGeneratedActivityForm(current, generated = {}) {
+  const content = generated.content || {};
+  const questions = Array.isArray(content.questions) ? content.questions : generated.questions;
+
+  return {
+    ...current,
+    title: generated.title || current.title,
+    activity_type: generated.activity_type || current.activity_type,
+    points:
+      generated.points === 0 || generated.points
+        ? Number(generated.points)
+        : current.points,
+    completion_rule: generated.completion_rule || current.completion_rule,
+    pass_score:
+      generated.pass_score === 0 || generated.pass_score ? generated.pass_score : current.pass_score,
+    purpose: content.purpose || current.purpose,
+    description: content.description || current.description,
+    rich_html: content.rich_html || current.rich_html,
+    discussion_prompt: content.discussion_prompt || current.discussion_prompt,
+    starter_code: content.starter_code || current.starter_code,
+    starter_html: content.starter_html || current.starter_html,
+    starter_css: content.starter_css || current.starter_css,
+    starter_js: content.starter_js || current.starter_js,
+    language: content.language || current.language,
+    challenge_mode: content.challenge_mode || current.challenge_mode,
+    validation_checks_text: stringifyChecks(content.validation_checks || current.validation_checks_text),
+    submission_instructions: content.submission_instructions || current.submission_instructions,
+    reflection_prompt: content.reflection_prompt || current.reflection_prompt,
+    project_brief: content.project_brief || current.project_brief,
+    friendly_hints_text: Array.isArray(content.friendly_hints)
+      ? content.friendly_hints.join("\n")
+      : current.friendly_hints_text,
+    teacher_notes: content.teacher_notes || current.teacher_notes,
+    questions: Array.isArray(questions)
+      ? questions.map((question, index) => normalizeQuestionForm(question, index))
+      : current.questions,
+  };
+}
+
 function RichContentEditor({ value, onChange, onImageUpload }) {
   const editorRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -966,13 +1026,31 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
   );
 }
 
-function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload, onSave }) {
+function ActivityManagerDialog({
+  activity,
+  courseName,
+  moduleTitle,
+  open,
+  saving,
+  onClose,
+  onImageUpload,
+  onSave,
+}) {
   const [form, setForm] = useState(activityToManagerForm(activity));
   const [csvText, setCsvText] = useState("");
   const [validationError, setValidationError] = useState("");
+  const [aiPrompt, setAiPrompt] = useState(defaultActivityAiPrompt(activityToManagerForm(activity)));
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
 
   useEffect(() => {
-    setForm(activityToManagerForm(activity));
+    const nextForm = activityToManagerForm(activity);
+    setForm(nextForm);
+    setAiPrompt(defaultActivityAiPrompt(nextForm));
+    setAiPanelOpen(false);
+    setAiGenerating(false);
+    setAiMessage("");
     setCsvText("");
     setValidationError("");
   }, [activity?.id, open]);
@@ -1045,6 +1123,36 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
       setValidationError("");
     } catch (error) {
       setValidationError(error.message || "Could not upload question image.");
+    }
+  };
+
+  const generateActivityDraft = async () => {
+    setAiGenerating(true);
+    setAiMessage("");
+    setValidationError("");
+    try {
+      const content = structuredFormContent(form, form.questions || []);
+      const response = await apiClient.post("/ai/course-builder/activity", {
+        course_name: courseName,
+        module_title: moduleTitle,
+        learner_age: 8,
+        prompt: aiPrompt,
+        activity: {
+          id: activity?.id,
+          title: form.title,
+          activity_type: form.activity_type,
+          points: Number(form.points || 0),
+          completion_rule: form.completion_rule,
+          pass_score: form.pass_score || null,
+          content,
+        },
+      });
+      setForm((current) => mergeGeneratedActivityForm(current, response.activity || {}));
+      setAiMessage("AI draft inserted into this activity. Review it, adjust anything, then save.");
+    } catch (error) {
+      setValidationError(error.message || "AI could not generate this activity right now.");
+    } finally {
+      setAiGenerating(false);
     }
   };
 
@@ -1140,6 +1248,83 @@ function ActivityManagerDialog({ activity, open, saving, onClose, onImageUpload,
             </MDTypography>
           </MDBox>
         )}
+        <MDBox
+          mb={2}
+          p={2}
+          borderRadius="md"
+          sx={{
+            bgcolor: "#fffbeb",
+            border: "1px solid #fde68a",
+          }}
+        >
+          <MDBox
+            display="flex"
+            alignItems={{ xs: "flex-start", md: "center" }}
+            justifyContent="space-between"
+            gap={1.5}
+            flexDirection={{ xs: "column", md: "row" }}
+          >
+            <MDBox>
+              <MDTypography variant="h6" fontWeight="bold">
+                AI Activity Helper
+              </MDTypography>
+              <MDTypography variant="caption" color="text">
+                Generates draft content only for this {form.activity_type} activity. It will not
+                save until you review and click Save Activity.
+              </MDTypography>
+            </MDBox>
+            <MDBox display="flex" gap={1} flexWrap="wrap">
+              <MDButton
+                variant="outlined"
+                color="warning"
+                size="small"
+                onClick={() => setAiPanelOpen((current) => !current)}
+              >
+                <Icon>{aiPanelOpen ? "expand_less" : "auto_awesome"}</Icon>&nbsp;
+                {aiPanelOpen ? "Hide Prompt" : "Generate Content"}
+              </MDButton>
+            </MDBox>
+          </MDBox>
+          <Collapse in={aiPanelOpen}>
+            <MDBox mt={2}>
+              <MDInput
+                label="Editable AI prompt"
+                multiline
+                rows={5}
+                fullWidth
+                value={aiPrompt}
+                onChange={(event) => setAiPrompt(event.target.value)}
+              />
+              <MDBox
+                mt={1.5}
+                display="flex"
+                alignItems={{ xs: "stretch", md: "center" }}
+                justifyContent="space-between"
+                gap={1}
+                flexDirection={{ xs: "column", md: "row" }}
+              >
+                <MDTypography variant="caption" color="text">
+                  Output is rich HTML plus activity-specific fields such as quiz questions, coding
+                  starter files, prompts, hints, and teacher notes.
+                </MDTypography>
+                <MDButton
+                  variant="gradient"
+                  color="warning"
+                  disabled={aiGenerating || !form.title}
+                  onClick={generateActivityDraft}
+                >
+                  <Icon>auto_awesome</Icon>&nbsp;
+                  {aiGenerating ? "Generating..." : "Insert AI Draft"}
+                </MDButton>
+              </MDBox>
+              {aiMessage && (
+                <MDTypography variant="caption" color="success" display="block" mt={1}>
+                  {aiMessage}
+                </MDTypography>
+              )}
+            </MDBox>
+          </Collapse>
+        </MDBox>
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <MDInput
@@ -1769,6 +1954,8 @@ ActivityManagerDialog.propTypes = {
     position: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     title: PropTypes.string,
   }),
+  courseName: PropTypes.string,
+  moduleTitle: PropTypes.string,
   onClose: PropTypes.func.isRequired,
   onImageUpload: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
@@ -1778,6 +1965,8 @@ ActivityManagerDialog.propTypes = {
 
 ActivityManagerDialog.defaultProps = {
   activity: null,
+  courseName: "",
+  moduleTitle: "",
 };
 
 function getAnswerValue(answers, question) {
@@ -3122,7 +3311,11 @@ function CourseBuilder() {
             {message}
           </MDTypography>
         )}
-        {isTemplate && (
+        {isTemplate &&
+          !activityManagerOpen &&
+          !activityReviewOpen &&
+          !earlyUnlockTarget &&
+          !aiDialogOpen && (
           <MDButton
             variant="gradient"
             color="warning"
@@ -4014,6 +4207,8 @@ function CourseBuilder() {
         />
         <ActivityManagerDialog
           activity={selectedActivity}
+          courseName={course?.name || ""}
+          moduleTitle={selectedModule?.title || ""}
           open={activityManagerOpen}
           saving={saving}
           onClose={() => setActivityManagerOpen(false)}
