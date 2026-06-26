@@ -2656,6 +2656,7 @@ function CourseBuilder() {
   const [activityManagerOpen, setActivityManagerOpen] = useState(false);
   const [activityReviewOpen, setActivityReviewOpen] = useState(false);
   const [earlyUnlockTarget, setEarlyUnlockTarget] = useState(null);
+  const [addActivityOpen, setAddActivityOpen] = useState(false);
   const [draggingOrderItem, setDraggingOrderItem] = useState(null);
   const [activityReview, setActivityReview] = useState(null);
   const [activityReviewLoading, setActivityReviewLoading] = useState(false);
@@ -2801,6 +2802,7 @@ function CourseBuilder() {
     if (selectedModule) {
       setModuleEditForm(moduleToForm(selectedModule));
       setActivityForm(emptyActivity((selectedModule.activities?.length || 0) + 1));
+      setAddActivityOpen(false);
       if (
         editorMode === "edit-activity" &&
         !selectedModule.activities?.some(
@@ -3139,6 +3141,7 @@ function CourseBuilder() {
         : `/courses/modules/${selectedModule.id}/activities`;
       await apiClient.post(endpoint, parseActivityPayload(activityForm));
       setMessage("Activity added.");
+      setAddActivityOpen(false);
       await loadBuilder();
     } catch (err) {
       setError(err.message);
@@ -4171,82 +4174,116 @@ function CourseBuilder() {
                         {selectedModule.title}
                       </MDTypography>
                       <MDTypography variant="body2" color="text">
-                        Choose an action from the module list, or add an activity below.
+                        Choose an action from the module list, or add a quick activity when needed.
                       </MDTypography>
 
-                      <MDBox mt={3} pt={2} borderTop="1px solid #e5e7eb">
-                        <MDTypography variant="button" fontWeight="bold">
-                          Add Activity
-                        </MDTypography>
-                        <Grid container spacing={1.5} mt={0.5}>
-                          <Grid item xs={12} md={6}>
-                            <MDInput
-                              label="Activity title"
-                              fullWidth
-                              value={activityForm.title}
-                              onChange={(event) =>
-                                setActivityForm({ ...activityForm, title: event.target.value })
-                              }
-                            />
-                          </Grid>
-                          <Grid item xs={12} md={3}>
-                            <MDInput
-                              select
-                              label="Type"
-                              fullWidth
-                              value={activityForm.activity_type}
-                              onChange={(event) =>
-                                setActivityForm({
-                                  ...activityForm,
-                                  activity_type: event.target.value,
-                                })
-                              }
-                              SelectProps={{ native: true }}
-                            >
-                              {activityTypes.map((type) => (
-                                <option key={type} value={type}>
-                                  {type}
-                                </option>
-                              ))}
-                            </MDInput>
-                          </Grid>
-                          <Grid item xs={12} md={3}>
-                            <MDInput
-                              label="Marks"
-                              type="number"
-                              fullWidth
-                              value={activityForm.points}
-                              onChange={(event) =>
-                                setActivityForm({ ...activityForm, points: event.target.value })
-                              }
-                            />
-                          </Grid>
-                          <Grid item xs={12}>
-                            <MDInput
-                              label="Content or JSON"
-                              multiline
-                              rows={4}
-                              fullWidth
-                              value={activityForm.content_text}
-                              onChange={(event) =>
-                                setActivityForm({
-                                  ...activityForm,
-                                  content_text: event.target.value,
-                                })
-                              }
-                            />
-                          </Grid>
-                        </Grid>
-                        <MDBox mt={2}>
+                      <MDBox
+                        mt={2.5}
+                        p={1.5}
+                        border="1px solid #e5e7eb"
+                        borderRadius="md"
+                        sx={{ bgcolor: addActivityOpen ? "#ffffff" : "#f8fafc" }}
+                      >
+                        <MDBox
+                          display="flex"
+                          justifyContent="space-between"
+                          alignItems={{ xs: "flex-start", md: "center" }}
+                          gap={1}
+                          flexDirection={{ xs: "column", md: "row" }}
+                        >
+                          <MDBox>
+                            <MDTypography variant="button" fontWeight="bold">
+                              Quick Add Activity
+                            </MDTypography>
+                            <MDTypography variant="caption" color="text" display="block">
+                              Keep this compact; use Manage Activity for rich content and quizzes.
+                            </MDTypography>
+                          </MDBox>
                           <MDButton
-                            variant="gradient"
-                            color="success"
-                            disabled={saving || !activityForm.title}
-                            onClick={createActivity}
+                            variant={addActivityOpen ? "outlined" : "gradient"}
+                            color={addActivityOpen ? "dark" : "success"}
+                            size="small"
+                            onClick={() => setAddActivityOpen((current) => !current)}
                           >
-                            Add Activity
+                            <Icon>{addActivityOpen ? "expand_less" : "add"}</Icon>&nbsp;
+                            {addActivityOpen ? "Hide" : "Add Activity"}
                           </MDButton>
                         </MDBox>
+
+                        <Collapse in={addActivityOpen}>
+                          <MDBox mt={1.5}>
+                            <Grid container spacing={1.25}>
+                              <Grid item xs={12} md={6}>
+                                <MDInput
+                                  label="Activity title"
+                                  fullWidth
+                                  value={activityForm.title}
+                                  onChange={(event) =>
+                                    setActivityForm({ ...activityForm, title: event.target.value })
+                                  }
+                                />
+                              </Grid>
+                              <Grid item xs={7} md={3}>
+                                <MDInput
+                                  select
+                                  label="Type"
+                                  fullWidth
+                                  value={activityForm.activity_type}
+                                  onChange={(event) =>
+                                    setActivityForm({
+                                      ...activityForm,
+                                      activity_type: event.target.value,
+                                    })
+                                  }
+                                  SelectProps={{ native: true }}
+                                >
+                                  {activityTypes.map((type) => (
+                                    <option key={type} value={type}>
+                                      {type}
+                                    </option>
+                                  ))}
+                                </MDInput>
+                              </Grid>
+                              <Grid item xs={5} md={3}>
+                                <MDInput
+                                  label="Marks"
+                                  type="number"
+                                  fullWidth
+                                  value={activityForm.points}
+                                  onChange={(event) =>
+                                    setActivityForm({ ...activityForm, points: event.target.value })
+                                  }
+                                />
+                              </Grid>
+                              <Grid item xs={12}>
+                                <MDInput
+                                  label="Optional short content or JSON"
+                                  multiline
+                                  rows={2}
+                                  fullWidth
+                                  value={activityForm.content_text}
+                                  onChange={(event) =>
+                                    setActivityForm({
+                                      ...activityForm,
+                                      content_text: event.target.value,
+                                    })
+                                  }
+                                />
+                              </Grid>
+                            </Grid>
+                            <MDBox mt={1.5} display="flex" justifyContent="flex-end">
+                              <MDButton
+                                variant="gradient"
+                                color="success"
+                                size="small"
+                                disabled={saving || !activityForm.title}
+                                onClick={createActivity}
+                              >
+                                Add Activity
+                              </MDButton>
+                            </MDBox>
+                          </MDBox>
+                        </Collapse>
                       </MDBox>
                     </MDBox>
                   ) : (
