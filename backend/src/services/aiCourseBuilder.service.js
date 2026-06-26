@@ -395,6 +395,34 @@ ${JSON.stringify(activity.content || {}, null, 2).slice(0, 4000)}
 Teacher fine-tuning prompt:
 ${customPrompt || "Create rich, step-by-step, beginner-friendly activity content."}
 
+EduClub Master Course Builder principles to follow:
+- You are teaching like the world's best coding teacher for children.
+- There is no teacher present during the learner experience, so every section must anticipate learner questions, explain difficult ideas simply, and gradually build confidence.
+- Do not rush. Learning should feel fun, visual, interactive, encouraging, and original to EduClub.
+- The learner should never feel lost.
+- Learner profile: age 8-14, complete beginner, curious, learns by doing, learns independently, may make mistakes frequently, and needs constant encouragement.
+- EduClub teaching philosophy: Explain -> Show -> Practice Together -> Practice Independently -> Create -> Improve -> Reflect.
+- Never introduce a concept before enough background exists.
+- Every new idea should connect naturally to previous learning and the current module position.
+
+EduClub Master Prompt for this one activity:
+- Generate only one EduClub activity.
+- Do not generate any other activities.
+- Build this activity as if it is the most important lesson in the module.
+- The learner must finish the activity fully understanding the concept without requiring outside help.
+- Include an engaging introduction, learning journey, step-by-step explanation, visual examples, code walkthroughs where useful, prediction questions, click-to-reveal hints, common mistakes, debugging moments, quick recap, mini challenge, encouragement, "Did you know?" facts, checkpoints, and reflection.
+- The activity must be interactive rather than text-heavy.
+- Every explanation should answer: What is this? Why do we use it? When should we use it? What happens if we don't? How does it connect to what we already know?
+
+EduClub Knowledge Check rules when the activity is a quiz or Generation mode is quiz_builder:
+- Generate a complete EduClub Knowledge Check.
+- Measure understanding rather than memorisation.
+- Use a balanced mix of multiple choice, drag-and-match, true/false, identify the mistake, complete the code, predict the output, debugging questions, and short practical coding tasks where suitable.
+- Every answer should include immediate feedback explaining why it is correct or incorrect.
+- Difficulty should gradually increase.
+- Celebrate progress and encourage another attempt when needed.
+- The experience should feel like a fun coding game rather than a traditional exam.
+
 Requirements:
 - Do not create modules or other activities.
 - Keep the generated content focused on this activity only.
