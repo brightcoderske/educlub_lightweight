@@ -16,6 +16,18 @@ router.put(
   requireRole("system_admin"),
   aiController.updateSettings,
 );
+router.get(
+  "/school-settings",
+  authenticateToken,
+  requireRole("school_admin", "teacher"),
+  aiController.getSchoolSettings,
+);
+router.put(
+  "/school-settings",
+  authenticateToken,
+  requireRole("school_admin"),
+  aiController.updateSchoolSettings,
+);
 router.post(
   "/course-builder/generate",
   authenticateToken,
@@ -25,7 +37,7 @@ router.post(
 router.post(
   "/course-builder/activity",
   authenticateToken,
-  requireRole("system_admin"),
+  requireRole("system_admin", "school_admin", "teacher"),
   aiController.generateActivityContentDraft,
 );
 router.post(

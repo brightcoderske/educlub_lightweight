@@ -185,26 +185,46 @@ function normalizeSettings(row) {
   };
 }
 
+function getUserSchoolId(user = {}) {
+  const value = user.schoolId || user.school_id || user.schoolID;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeSchoolAiSettings(row = {}, schoolId = null) {
+  return {
+    school_id: Number(row.school_id || schoolId || 0) || null,
+    is_enabled: Boolean(row.is_enabled),
+    school_admin_enabled: row.school_admin_enabled !== false,
+    teacher_enabled: Boolean(row.teacher_enabled),
+    learner_enabled: Boolean(row.learner_enabled),
+    notes: row.notes || "",
+    updated_at: row.updated_at || null,
+  };
+}
+
 async function getAiSettings() {
   await ensureAiDefaults();
-  const [settingsResult, providersResult, roleLimitsResult] = await Promise.all([
-    query("SELECT * FROM ai_settings WHERE id = 1"),
-    query(
-      `SELECT
+  const [settingsResult, providersResult, roleLimitsResult] = await Promise.all(
+    [
+      query("SELECT * FROM ai_settings WHERE id = 1"),
+      query(
+        `SELECT
         id, provider_key, display_name, base_url, default_model, fallback_model,
         is_enabled, is_default, api_key_ciphertext IS NOT NULL AS api_key_configured,
         updated_at
        FROM ai_providers
        ORDER BY display_name`,
-    ),
-    query(
-      `SELECT role, is_enabled, requests_per_hour, tokens_per_hour,
+      ),
+      query(
+        `SELECT role, is_enabled, requests_per_hour, tokens_per_hour,
         requests_per_day, tokens_per_day, updated_at
        FROM ai_role_limits
        ORDER BY array_position($1::text[], role)`,
-      [VALID_ROLES],
-    ),
-  ]);
+        [VALID_ROLES],
+      ),
+    ],
+  );
 
   return {
     settings: normalizeSettings(settingsResult.rows[0]),
@@ -325,6 +345,78 @@ async function updateAiSettings(payload, user) {
   return getAiSettings();
 }
 
+async function getSchoolAiSettings(user = {}) {
+  await ensureAiDefaults();
+  const schoolId = getUserSchoolId(user);
+  if (!schoolId) {
+    throw new Error("School context is required for school AI settings.");
+  }
+
+  let result = await query(
+    `SELECT school_id, is_enabled, school_admin_enabled, teacher_enabled,
+      learner_enabled, notes, updated_at
+     FROM school_ai_settings
+     WHERE school_id = $1`,
+    [schoolId],
+  );
+
+  if (!result.rows[0] && user.role === "school_admin") {
+    result = await query(
+      `INSERT INTO school_ai_settings (
+        school_id, updated_by_user_id
+       )
+       VALUES ($1, $2)
+       ON CONFLICT (school_id) DO UPDATE SET updated_at = school_ai_settings.updated_at
+       RETURNING school_id, is_enabled, school_admin_enabled, teacher_enabled,
+        learner_enabled, notes, updated_at`,
+      [schoolId, user.userId || user.id || null],
+    );
+  }
+
+  const settings = normalizeSchoolAiSettings(result.rows[0], schoolId);
+  const availability = await getAiAvailability(user);
+  return { settings, availability };
+}
+
+async function updateSchoolAiSettings(payload = {}, user = {}) {
+  await ensureAiDefaults();
+  const schoolId = getUserSchoolId(user);
+  if (!schoolId) {
+    throw new Error("School context is required for school AI settings.");
+  }
+
+  const result = await query(
+    `INSERT INTO school_ai_settings (
+      school_id, is_enabled, school_admin_enabled, teacher_enabled,
+      learner_enabled, notes, updated_by_user_id, updated_at
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+     ON CONFLICT (school_id) DO UPDATE SET
+       is_enabled = EXCLUDED.is_enabled,
+       school_admin_enabled = EXCLUDED.school_admin_enabled,
+       teacher_enabled = EXCLUDED.teacher_enabled,
+       learner_enabled = EXCLUDED.learner_enabled,
+       notes = EXCLUDED.notes,
+       updated_by_user_id = EXCLUDED.updated_by_user_id,
+       updated_at = CURRENT_TIMESTAMP
+     RETURNING school_id, is_enabled, school_admin_enabled, teacher_enabled,
+      learner_enabled, notes, updated_at`,
+    [
+      schoolId,
+      Boolean(payload.is_enabled),
+      payload.school_admin_enabled !== false,
+      Boolean(payload.teacher_enabled),
+      Boolean(payload.learner_enabled),
+      String(payload.notes || "").trim() || null,
+      user.userId || user.id || null,
+    ],
+  );
+
+  const settings = normalizeSchoolAiSettings(result.rows[0], schoolId);
+  const availability = await getAiAvailability(user);
+  return { settings, availability };
+}
+
 async function getAiAvailability(user) {
   await ensureAiDefaults();
   const result = await query(
@@ -336,9 +428,62 @@ async function getAiAvailability(user) {
     [user?.role || ""],
   );
   const row = result.rows[0] || {};
+  const role = user?.role || "";
+  const schoolRoles = ["school_admin", "teacher", "learner"];
+  const schoolId = getUserSchoolId(user);
+  let schoolSettings = null;
+  let schoolRoleEnabled = true;
+  let schoolGateRequired = false;
+
+  if (schoolRoles.includes(role)) {
+    schoolGateRequired = true;
+    if (schoolId) {
+      const schoolResult = await query(
+        `SELECT school_id, is_enabled, school_admin_enabled, teacher_enabled,
+          learner_enabled, notes, updated_at
+         FROM school_ai_settings
+         WHERE school_id = $1`,
+        [schoolId],
+      );
+      schoolSettings = normalizeSchoolAiSettings(
+        schoolResult.rows[0],
+        schoolId,
+      );
+      const roleField =
+        role === "school_admin"
+          ? "school_admin_enabled"
+          : role === "teacher"
+            ? "teacher_enabled"
+            : "learner_enabled";
+      schoolRoleEnabled = Boolean(
+        schoolSettings.is_enabled && schoolSettings[roleField],
+      );
+    } else {
+      schoolSettings = normalizeSchoolAiSettings({}, null);
+      schoolRoleEnabled = false;
+    }
+  }
+
+  const globalEnabled = Boolean(row.global_enabled);
+  const roleEnabled = Boolean(row.role_enabled);
+  const enabled =
+    globalEnabled && roleEnabled && (!schoolGateRequired || schoolRoleEnabled);
+  let reason = "";
+  if (!globalEnabled) reason = "AI is currently disabled by the system admin.";
+  else if (!roleEnabled) reason = "AI is not enabled for your role.";
+  else if (schoolGateRequired && !schoolRoleEnabled) {
+    reason = "AI is not enabled for your school role.";
+  }
+
   return {
-    enabled: Boolean(row.global_enabled && row.role_enabled),
-    role: user?.role || "",
+    enabled,
+    reason,
+    role,
+    global_enabled: globalEnabled,
+    role_enabled: roleEnabled,
+    school_gate_required: schoolGateRequired,
+    school_role_enabled: schoolRoleEnabled,
+    school_settings: schoolSettings,
     limits: {
       requests_per_hour: Number(row.requests_per_hour || 0),
       tokens_per_hour: Number(row.tokens_per_hour || 0),
@@ -357,6 +502,8 @@ module.exports = {
   getActiveProvider,
   getAiAvailability,
   getAiSettings,
+  getSchoolAiSettings,
   sanitizeProviderForClient,
+  updateSchoolAiSettings,
   updateAiSettings,
 };

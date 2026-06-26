@@ -21,6 +21,18 @@ test("AI settings routes are authenticated and system-admin controlled", () => {
     routes,
     /router\.put\([\s\S]*"\/settings"[\s\S]*requireRole\("system_admin"\)/,
   );
+  assert.match(
+    routes,
+    /router\.get\([\s\S]*"\/school-settings"[\s\S]*requireRole\("school_admin", "teacher"\)/,
+  );
+  assert.match(
+    routes,
+    /router\.put\([\s\S]*"\/school-settings"[\s\S]*requireRole\("school_admin"\)/,
+  );
+  assert.match(
+    routes,
+    /router\.post\([\s\S]*"\/course-builder\/activity"[\s\S]*requireRole\("system_admin", "school_admin", "teacher"\)/,
+  );
 });
 
 test("AI startup schema is additive and keeps provider secrets server-side", () => {
@@ -31,10 +43,15 @@ test("AI startup schema is additive and keeps provider secrets server-side", () 
   assert.match(startupSchema, /CREATE TABLE IF NOT EXISTS ai_settings/);
   assert.match(startupSchema, /CREATE TABLE IF NOT EXISTS ai_providers/);
   assert.match(startupSchema, /CREATE TABLE IF NOT EXISTS ai_role_limits/);
+  assert.match(startupSchema, /CREATE TABLE IF NOT EXISTS school_ai_settings/);
   assert.match(startupSchema, /CREATE TABLE IF NOT EXISTS ai_usage_logs/);
   assert.match(startupSchema, /ENABLE ROW LEVEL SECURITY/);
   assert.match(startupSchema, /ai_settings_authenticated_read/);
+  assert.match(startupSchema, /school_ai_settings_school_admin_update/);
+  assert.match(startupSchema, /school_ai_settings_school_read/);
   assert.match(service, /api_key_ciphertext IS NOT NULL AS api_key_configured/);
+  assert.match(service, /teacher_enabled/);
+  assert.match(service, /learner_enabled/);
   assert.match(service, /createCipheriv\("aes-256-gcm"/);
   assert.doesNotMatch(controller, /api_key_ciphertext/);
 });
@@ -43,7 +60,8 @@ test("AI provider secrets are encrypted for storage and stripped from client pay
   const previousSecret = process.env.AI_KEY_ENCRYPTION_SECRET;
   const previousDatabaseUrl = process.env.DATABASE_URL;
   process.env.AI_KEY_ENCRYPTION_SECRET = "a".repeat(40);
-  process.env.DATABASE_URL = previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
+  process.env.DATABASE_URL =
+    previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
   delete require.cache[require.resolve("../src/services/aiSettings.service")];
   const {
     encryptSecretForStorage,

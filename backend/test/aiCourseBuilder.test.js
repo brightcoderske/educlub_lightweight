@@ -7,7 +7,7 @@ function read(relativePath) {
   return fs.readFileSync(path.join(__dirname, relativePath), "utf8");
 }
 
-test("AI course builder routes are system-admin only and preview before insert", () => {
+test("AI course builder routes keep templates system-admin while activity authoring supports staff", () => {
   const routes = read("../src/routes/ai.routes.js");
   const controller = read("../src/controllers/ai.controller.js");
 
@@ -23,16 +23,21 @@ test("AI course builder routes are system-admin only and preview before insert",
   assert.match(controller, /applyCourseBuilderDraft/);
   assert.match(
     routes,
-    /router\.post\([\s\S]*"\/course-builder\/activity"[\s\S]*requireRole\("system_admin"\)/,
+    /router\.post\([\s\S]*"\/course-builder\/activity"[\s\S]*requireRole\("system_admin", "school_admin", "teacher"\)/,
   );
   assert.match(controller, /generateActivityContentDraft/);
 });
 
 test("AI course prompt is child-safe, objective-aware, and JSON-only", () => {
   const previousDatabaseUrl = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
-  delete require.cache[require.resolve("../src/services/aiCourseBuilder.service")];
-  const { buildCourseBuilderMessages } = require("../src/services/aiCourseBuilder.service");
+  process.env.DATABASE_URL =
+    previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
+  delete require.cache[
+    require.resolve("../src/services/aiCourseBuilder.service")
+  ];
+  const {
+    buildCourseBuilderMessages,
+  } = require("../src/services/aiCourseBuilder.service");
 
   const messages = buildCourseBuilderMessages({
     template: { name: "Computer Basics", target_level: "Grade 4" },
@@ -60,7 +65,10 @@ test("AI course prompt is child-safe, objective-aware, and JSON-only", () => {
   assert.match(prompt, /checkboxes/i);
   assert.match(prompt, /slide-style/i);
   assert.match(prompt, /eduClub-safe/i);
-  assert.match(prompt, /completion_rule must be one of manual, viewed, scrolled, submitted, graded, score_at_least/i);
+  assert.match(
+    prompt,
+    /completion_rule must be one of manual, viewed, scrolled, submitted, graded, score_at_least/i,
+  );
   assert.match(prompt, /learning_objectives must be specific/i);
 
   if (previousDatabaseUrl === undefined) {
@@ -72,9 +80,14 @@ test("AI course prompt is child-safe, objective-aware, and JSON-only", () => {
 
 test("AI course drafts are normalized into safe template module and activity shapes", () => {
   const previousDatabaseUrl = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
-  delete require.cache[require.resolve("../src/services/aiCourseBuilder.service")];
-  const { normalizeCourseDraft } = require("../src/services/aiCourseBuilder.service");
+  process.env.DATABASE_URL =
+    previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
+  delete require.cache[
+    require.resolve("../src/services/aiCourseBuilder.service")
+  ];
+  const {
+    normalizeCourseDraft,
+  } = require("../src/services/aiCourseBuilder.service");
 
   const draft = normalizeCourseDraft({
     title: "Fun Computing",
@@ -87,7 +100,9 @@ test("AI course drafts are normalized into safe template module and activity sha
             title: "Click practice",
             activity_type: "lesson",
             points: 0,
-            content: { body: "<script>alert(1)</script><p>Practice clicking.</p>" },
+            content: {
+              body: "<script>alert(1)</script><p>Practice clicking.</p>",
+            },
           },
           {
             title: "Check",
@@ -113,7 +128,10 @@ test("AI course drafts are normalized into safe template module and activity sha
   assert.equal(draft.modules[0].position, 1);
   assert.equal(draft.modules[0].activities[0].position, 1);
   assert.equal(draft.modules[0].activities[0].completion_rule, "manual");
-  assert.equal(draft.modules[0].activities[1].completion_rule, "score_at_least");
+  assert.equal(
+    draft.modules[0].activities[1].completion_rule,
+    "score_at_least",
+  );
   assert.equal(draft.modules[0].activities[1].pass_score, 50);
   assert.doesNotMatch(draft.modules[0].activities[0].content.body, /script/i);
 
@@ -126,9 +144,14 @@ test("AI course drafts are normalized into safe template module and activity sha
 
 test("AI generated outlines append after existing template modules", () => {
   const previousDatabaseUrl = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
-  delete require.cache[require.resolve("../src/services/aiCourseBuilder.service")];
-  const { prepareDraftForAppend } = require("../src/services/aiCourseBuilder.service");
+  process.env.DATABASE_URL =
+    previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
+  delete require.cache[
+    require.resolve("../src/services/aiCourseBuilder.service")
+  ];
+  const {
+    prepareDraftForAppend,
+  } = require("../src/services/aiCourseBuilder.service");
 
   const draft = prepareDraftForAppend(
     {
@@ -143,19 +166,24 @@ test("AI generated outlines append after existing template modules", () => {
               title: "Generated quiz",
               activity_type: "quiz",
               completion_rule: "score",
-              content: { questions: [{ prompt: "Ready?", correct_answer: "Yes" }] },
+              content: {
+                questions: [{ prompt: "Ready?", correct_answer: "Yes" }],
+              },
             },
           ],
         },
       ],
     },
-    3
+    3,
   );
 
   assert.equal(draft.modules[0].position, 4);
   assert.equal(draft.modules[1].position, 5);
   assert.equal(draft.modules[1].activities[0].position, 1);
-  assert.equal(draft.modules[1].activities[0].completion_rule, "score_at_least");
+  assert.equal(
+    draft.modules[1].activities[0].completion_rule,
+    "score_at_least",
+  );
 
   if (previousDatabaseUrl === undefined) {
     delete process.env.DATABASE_URL;
@@ -166,9 +194,14 @@ test("AI generated outlines append after existing template modules", () => {
 
 test("AI activity prompt is activity-aware and requests rich vanilla interactive content", () => {
   const previousDatabaseUrl = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
-  delete require.cache[require.resolve("../src/services/aiCourseBuilder.service")];
-  const { buildActivityBuilderMessages } = require("../src/services/aiCourseBuilder.service");
+  process.env.DATABASE_URL =
+    previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
+  delete require.cache[
+    require.resolve("../src/services/aiCourseBuilder.service")
+  ];
+  const {
+    buildActivityBuilderMessages,
+  } = require("../src/services/aiCourseBuilder.service");
 
   const messages = buildActivityBuilderMessages({
     course_name: "Computer Basics",

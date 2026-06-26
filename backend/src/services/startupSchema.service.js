@@ -167,6 +167,17 @@ const statements = [
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS school_ai_settings (
+    school_id INTEGER PRIMARY KEY REFERENCES schools(id) ON DELETE CASCADE,
+    is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    school_admin_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    teacher_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    learner_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    notes TEXT,
+    updated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
   `CREATE TABLE IF NOT EXISTS ai_usage_logs (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -188,15 +199,21 @@ const statements = [
   "CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_school_created ON ai_usage_logs(school_id, created_at)",
   "CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_role_created ON ai_usage_logs(role, created_at)",
   "CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_feature_created ON ai_usage_logs(feature, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_school_ai_settings_updated ON school_ai_settings(updated_at)",
   "ALTER TABLE IF EXISTS ai_settings ENABLE ROW LEVEL SECURITY",
   "ALTER TABLE IF EXISTS ai_providers ENABLE ROW LEVEL SECURITY",
   "ALTER TABLE IF EXISTS ai_role_limits ENABLE ROW LEVEL SECURITY",
+  "ALTER TABLE IF EXISTS school_ai_settings ENABLE ROW LEVEL SECURITY",
   "ALTER TABLE IF EXISTS ai_usage_logs ENABLE ROW LEVEL SECURITY",
   "DROP POLICY IF EXISTS ai_settings_system_admin ON ai_settings",
   "DROP POLICY IF EXISTS ai_settings_authenticated_read ON ai_settings",
   "DROP POLICY IF EXISTS ai_providers_system_admin ON ai_providers",
   "DROP POLICY IF EXISTS ai_role_limits_system_admin ON ai_role_limits",
   "DROP POLICY IF EXISTS ai_role_limits_authenticated_read ON ai_role_limits",
+  "DROP POLICY IF EXISTS school_ai_settings_school_read ON school_ai_settings",
+  "DROP POLICY IF EXISTS school_ai_settings_school_admin_insert ON school_ai_settings",
+  "DROP POLICY IF EXISTS school_ai_settings_school_admin_update ON school_ai_settings",
+  "DROP POLICY IF EXISTS school_ai_settings_system_admin_delete ON school_ai_settings",
   "DROP POLICY IF EXISTS ai_usage_logs_scoped_read ON ai_usage_logs",
   "DROP POLICY IF EXISTS ai_usage_logs_scoped_insert ON ai_usage_logs",
   `CREATE POLICY ai_settings_system_admin ON ai_settings
@@ -217,6 +234,40 @@ const statements = [
   `CREATE POLICY ai_role_limits_authenticated_read ON ai_role_limits
     FOR SELECT
     USING ((SELECT public.educlub_role()) <> '')`,
+  `CREATE POLICY school_ai_settings_school_read ON school_ai_settings
+    FOR SELECT
+    USING (
+      (SELECT public.educlub_role()) = 'system_admin'
+      OR school_id = (SELECT public.educlub_school_id())
+    )`,
+  `CREATE POLICY school_ai_settings_school_admin_insert ON school_ai_settings
+    FOR INSERT
+    WITH CHECK (
+      (SELECT public.educlub_role()) = 'system_admin'
+      OR (
+        (SELECT public.educlub_role()) = 'school_admin'
+        AND school_id = (SELECT public.educlub_school_id())
+      )
+    )`,
+  `CREATE POLICY school_ai_settings_school_admin_update ON school_ai_settings
+    FOR UPDATE
+    USING (
+      (SELECT public.educlub_role()) = 'system_admin'
+      OR (
+        (SELECT public.educlub_role()) = 'school_admin'
+        AND school_id = (SELECT public.educlub_school_id())
+      )
+    )
+    WITH CHECK (
+      (SELECT public.educlub_role()) = 'system_admin'
+      OR (
+        (SELECT public.educlub_role()) = 'school_admin'
+        AND school_id = (SELECT public.educlub_school_id())
+      )
+    )`,
+  `CREATE POLICY school_ai_settings_system_admin_delete ON school_ai_settings
+    FOR DELETE
+    USING ((SELECT public.educlub_role()) = 'system_admin')`,
   `CREATE POLICY ai_usage_logs_scoped_read ON ai_usage_logs
     FOR SELECT
     USING (
@@ -240,20 +291,20 @@ async function ensureStartupSchema() {
     await query(statement);
   }
   await query(
-    "UPDATE courses SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''"
+    "UPDATE courses SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''",
   );
   await query(
-    "UPDATE course_templates SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''"
+    "UPDATE course_templates SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''",
   );
   await query("UPDATE courses SET is_active = TRUE WHERE is_active IS NULL");
   await query(
-    "UPDATE course_templates SET is_active = TRUE WHERE is_active IS NULL"
+    "UPDATE course_templates SET is_active = TRUE WHERE is_active IS NULL",
   );
   await query(
     `UPDATE schools
      SET is_independent_school = TRUE
      WHERE LOWER(code) = 'educlub-independent'
-        OR LOWER(name) LIKE '%independent learners%'`
+        OR LOWER(name) LIKE '%independent learners%'`,
   );
   await query(
     `UPDATE courses c
@@ -267,7 +318,7 @@ async function ensureStartupSchema() {
        HAVING COUNT(DISTINCT l.school_id) = 1
      ) source
      WHERE c.id = source.course_id
-       AND c.school_id IS NULL`
+       AND c.school_id IS NULL`,
   );
   await ensureAiDefaults();
 }

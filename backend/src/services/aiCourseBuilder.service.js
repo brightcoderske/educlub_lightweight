@@ -1,6 +1,9 @@
 const { query } = require("../config");
 const courseTemplatesService = require("./courseTemplates.service");
-const { getActiveProvider } = require("./aiSettings.service");
+const {
+  getActiveProvider,
+  getAiAvailability,
+} = require("./aiSettings.service");
 const {
   sanitizeActivityContent,
   sanitizeRichHtml,
@@ -80,7 +83,9 @@ const ACTIVITY_OUTPUT_SCHEMA = `Return JSON only with this shape:
 
 function normalizeCompletionRule(rule, activityType) {
   if (activityType === "quiz") return "score_at_least";
-  const normalized = String(rule || "").trim().toLowerCase();
+  const normalized = String(rule || "")
+    .trim()
+    .toLowerCase();
   if (normalized === "score") return "score_at_least";
   if (normalized === "submission") return "submitted";
   return COMPLETION_RULES.has(normalized) ? normalized : "manual";
@@ -152,17 +157,24 @@ function normalizeActivity(activity = {}, index = 0) {
   const activityType = ALLOWED_ACTIVITY_TYPES.has(activity.activity_type)
     ? activity.activity_type
     : "lesson";
-  const completionRule = normalizeCompletionRule(activity.completion_rule, activityType);
+  const completionRule = normalizeCompletionRule(
+    activity.completion_rule,
+    activityType,
+  );
   const content = sanitizeActivityContent(activity.content || {});
   const questions = Array.isArray(content.questions)
-    ? content.questions.map(normalizeQuestion).filter((question) => question.prompt)
+    ? content.questions
+        .map(normalizeQuestion)
+        .filter((question) => question.prompt)
     : [];
   const normalizedContent = {
     ...content,
     body:
       typeof content.body === "string"
         ? sanitizeRichHtml(content.body)
-        : sanitizeRichHtml(String(activity.description || activity.summary || "")),
+        : sanitizeRichHtml(
+            String(activity.description || activity.summary || ""),
+          ),
     teacher_notes: Array.isArray(content.teacher_notes)
       ? content.teacher_notes
       : Array.isArray(activity.teacher_notes)
@@ -177,13 +189,20 @@ function normalizeActivity(activity = {}, index = 0) {
     content: normalizedContent,
     points: clampNumber(
       activity.points,
-      questions.reduce((total, question) => total + Number(question.points || 0), 0),
+      questions.reduce(
+        (total, question) => total + Number(question.points || 0),
+        0,
+      ),
       0,
       100,
     ),
     position: index + 1,
-    is_required: activity.availability_mode === "try_more" ? false : activity.is_required !== false,
-    availability_mode: activity.availability_mode === "try_more" ? "try_more" : "required",
+    is_required:
+      activity.availability_mode === "try_more"
+        ? false
+        : activity.is_required !== false,
+    availability_mode:
+      activity.availability_mode === "try_more" ? "try_more" : "required",
     completion_rule: completionRule,
     pass_score:
       completionRule === "score_at_least"
@@ -231,10 +250,12 @@ function prepareDraftForAppend(rawDraft = {}, existingModuleCount = 0) {
     modules: draft.modules.map((courseModule, moduleIndex) => ({
       ...courseModule,
       position: existingModuleCount + moduleIndex + 1,
-      activities: (courseModule.activities || []).map((activity, activityIndex) => ({
-        ...activity,
-        position: activityIndex + 1,
-      })),
+      activities: (courseModule.activities || []).map(
+        (activity, activityIndex) => ({
+          ...activity,
+          position: activityIndex + 1,
+        }),
+      ),
     })),
   };
 }
@@ -246,8 +267,9 @@ function buildCourseBuilderMessages(options = {}) {
         .map((courseModule, moduleIndex) => {
           const activities = Array.isArray(courseModule.activities)
             ? courseModule.activities
-                .map((activity, activityIndex) =>
-                  `${activityIndex + 1}. ${activity.title || "Untitled"} (${activity.activity_type || "lesson"})`,
+                .map(
+                  (activity, activityIndex) =>
+                    `${activityIndex + 1}. ${activity.title || "Untitled"} (${activity.activity_type || "lesson"})`,
                 )
                 .join("; ")
             : "";
@@ -258,7 +280,12 @@ function buildCourseBuilderMessages(options = {}) {
         .join("\n")
     : "";
   const moduleCount = clampNumber(options.module_count, 4, 1, 12);
-  const activitiesPerModule = clampNumber(options.activities_per_module, 6, 1, 10);
+  const activitiesPerModule = clampNumber(
+    options.activities_per_module,
+    6,
+    1,
+    10,
+  );
   const mode = SUPPORTED_MODES.has(options.mode) ? options.mode : "full_course";
   const customPrompt = String(options.prompt || "").trim();
   const interactiveOptions = {
@@ -378,6 +405,13 @@ ${ACTIVITY_OUTPUT_SCHEMA}`,
 }
 
 async function checkUsageLimits(user, settings) {
+  const availability = await getAiAvailability(user);
+  if (!availability.enabled) {
+    throw new Error(
+      availability.reason || "AI is not enabled for your account.",
+    );
+  }
+
   const roleLimitResult = await query(
     "SELECT * FROM ai_role_limits WHERE role = $1 AND is_enabled = true",
     [user.role],
@@ -472,7 +506,8 @@ async function callOpenAiCompatibleProvider({ provider, messages }) {
 
 async function generateCourseBuilderDraft(payload = {}, user = {}) {
   const template = payload.template_id
-    ? (await courseTemplatesService.getTemplateBuilder(payload.template_id))?.template
+    ? (await courseTemplatesService.getTemplateBuilder(payload.template_id))
+        ?.template
     : payload.template || {};
   const { settings, provider } = await getActiveProvider(payload.provider_key);
   await checkUsageLimits(user, settings);
@@ -576,7 +611,8 @@ async function generateActivityContentDraft(payload = {}, user = {}) {
 async function applyCourseBuilderDraft(payload = {}) {
   const templateId = Number(payload.template_id);
   if (!templateId) throw new Error("Template is required.");
-  const existingBuilder = await courseTemplatesService.getTemplateBuilder(templateId);
+  const existingBuilder =
+    await courseTemplatesService.getTemplateBuilder(templateId);
   const existingModuleCount = existingBuilder?.modules?.length || 0;
   const draft = prepareDraftForAppend(payload.draft || {}, existingModuleCount);
   const insertedModules = [];
@@ -588,10 +624,11 @@ async function applyCourseBuilderDraft(payload = {}) {
     );
     insertedModule.activities = [];
     for (const activityDraft of moduleDraft.activities) {
-      const insertedActivity = await courseTemplatesService.createTemplateActivity(
-        insertedModule.id,
-        { ...activityDraft, skip_version_bump: true },
-      );
+      const insertedActivity =
+        await courseTemplatesService.createTemplateActivity(insertedModule.id, {
+          ...activityDraft,
+          skip_version_bump: true,
+        });
       insertedModule.activities.push(insertedActivity);
     }
     insertedModules.push(insertedModule);
