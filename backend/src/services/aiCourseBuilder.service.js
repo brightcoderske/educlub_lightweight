@@ -27,12 +27,36 @@ const SUPPORTED_MODES = new Set([
   "try_more",
 ]);
 
+const COMPLETION_RULES = new Set([
+  "manual",
+  "viewed",
+  "scrolled",
+  "submitted",
+  "graded",
+  "score_at_least",
+]);
+
+const EDUCLUB_INTERACTIVE_BLOCK_GUIDE = `Use eduClub-safe interactive HTML only. Do not use <script>, inline event handlers such as onclick, external JavaScript, external CSS, or heavy libraries.
+Allowed interactive patterns:
+- Click-to-reveal/flashcard:
+  <div data-interactive-block="reveal" data-block-title="Title" data-block-prompt="Question" data-block-answer="Answer"><button type="button" data-interactive-toggle="true">Show answer</button><div data-interactive-answer="true" hidden>Answer</div></div>
+- Hint:
+  <button type="button" data-hint-toggle="hint-1" aria-expanded="false">Show hint</button><div data-hint-panel="hint-1">Helpful hint text.</div>
+- Progress and checklist:
+  <div data-rich-root="activity-key"><div data-rich-progress="activity-key"><span data-rich-progress-text>0% complete</span><div><div data-rich-progress-fill style="width:0%"></div></div></div><label><input type="checkbox" data-rich-check data-rich-key="activity-key-step-1"> I tried step 1</label></div>
+- Mini quiz:
+  <div data-rich-quiz="activity-key-q1"><p>Question?</p><button type="button" data-quiz-option data-correct="true">Correct option</button><button type="button" data-quiz-option data-correct="false">Wrong option</button><p data-quiz-feedback></p></div>
+- Reflection:
+  <textarea data-rich-reflection data-rich-key="activity-key-reflection" placeholder="Write your idea here."></textarea>
+- Celebration:
+  <button type="button" data-celebrate="true">Celebrate progress</button>`;
+
 const ACTIVITY_OUTPUT_SCHEMA = `Return JSON only with this shape:
 {
   "title": "activity title",
   "activity_type": "lesson|quiz|assignment|discussion|coding|typing|project|reflection",
   "points": 0,
-  "completion_rule": "manual|score|submission",
+  "completion_rule": "manual|viewed|scrolled|submitted|graded|score_at_least",
   "pass_score": 50,
   "content": {
     "purpose": "why learners are doing this",
@@ -53,6 +77,14 @@ const ACTIVITY_OUTPUT_SCHEMA = `Return JSON only with this shape:
     "questions": []
   }
 }`;
+
+function normalizeCompletionRule(rule, activityType) {
+  if (activityType === "quiz") return "score_at_least";
+  const normalized = String(rule || "").trim().toLowerCase();
+  if (normalized === "score") return "score_at_least";
+  if (normalized === "submission") return "submitted";
+  return COMPLETION_RULES.has(normalized) ? normalized : "manual";
+}
 
 function clampNumber(value, fallback, min, max) {
   const parsed = Number(value);
@@ -120,6 +152,7 @@ function normalizeActivity(activity = {}, index = 0) {
   const activityType = ALLOWED_ACTIVITY_TYPES.has(activity.activity_type)
     ? activity.activity_type
     : "lesson";
+  const completionRule = normalizeCompletionRule(activity.completion_rule, activityType);
   const content = sanitizeActivityContent(activity.content || {});
   const questions = Array.isArray(content.questions)
     ? content.questions.map(normalizeQuestion).filter((question) => question.prompt)
@@ -151,9 +184,9 @@ function normalizeActivity(activity = {}, index = 0) {
     position: index + 1,
     is_required: activity.availability_mode === "try_more" ? false : activity.is_required !== false,
     availability_mode: activity.availability_mode === "try_more" ? "try_more" : "required",
-    completion_rule: activityType === "quiz" ? "score" : activity.completion_rule || "manual",
+    completion_rule: completionRule,
     pass_score:
-      activityType === "quiz"
+      completionRule === "score_at_least"
         ? clampNumber(activity.pass_score, 50, 1, 100)
         : activity.pass_score || null,
     is_published: activity.is_published !== false,
@@ -193,9 +226,26 @@ function normalizeCourseDraft(rawDraft = {}) {
 
 function buildCourseBuilderMessages(options = {}) {
   const template = options.template || {};
+  const courseStructure = Array.isArray(options.course_structure)
+    ? options.course_structure
+        .map((courseModule, moduleIndex) => {
+          const activities = Array.isArray(courseModule.activities)
+            ? courseModule.activities
+                .map((activity, activityIndex) =>
+                  `${activityIndex + 1}. ${activity.title || "Untitled"} (${activity.activity_type || "lesson"})`,
+                )
+                .join("; ")
+            : "";
+          return `Module ${moduleIndex + 1}: ${courseModule.title || "Untitled"}${
+            activities ? ` | Activities: ${activities}` : ""
+          }`;
+        })
+        .join("\n")
+    : "";
   const moduleCount = clampNumber(options.module_count, 4, 1, 12);
   const activitiesPerModule = clampNumber(options.activities_per_module, 6, 1, 10);
   const mode = SUPPORTED_MODES.has(options.mode) ? options.mode : "full_course";
+  const customPrompt = String(options.prompt || "").trim();
   const interactiveOptions = {
     include_quizzes: options.include_quizzes !== false,
     include_discussions: options.include_discussions !== false,
@@ -215,6 +265,7 @@ function buildCourseBuilderMessages(options = {}) {
       role: "user",
       content: `Generate a ${mode} draft for an eduClub LMS template.
 Course/template: ${template.name || "New course"}
+Course description: ${template.description || options.course_description || "Not provided"}
 Level: ${template.target_level || options.target_level || "Primary learners"}
 Learner age: ${options.learner_age || "8 years old beginner"}
 Objective: ${options.objective || template.description || "Build practical digital skills"}
@@ -226,24 +277,36 @@ Include discussions: ${interactiveOptions.include_discussions ? "yes" : "no"}
 Include try-more activities: ${interactiveOptions.include_try_more ? "yes" : "no"}
 Include coding challenges: ${interactiveOptions.include_coding ? "yes" : "no"}
 Include teacher notes: ${interactiveOptions.include_teacher_notes ? "yes" : "no"}
+Existing course structure to respect:
+${courseStructure || "No existing structure provided."}
+
+Editable teacher prompt:
+${customPrompt || "Create a complete, rich, progressive course draft that fits the course description and structure."}
 
 Quality rules:
 - JSON only, no markdown fences.
 - Structure must be: title, description, learning_objectives, teacher_notes, modules[].
 - Each module needs title, description, learning_outcomes[], activities[].
+- learning_objectives must be specific, observable, measurable, age-appropriate, and connected to the course description.
+- Each module learning_outcomes[] must describe what the learner can do by the end of that module.
+- Each activity content must include purpose and description; the purpose should be a clear activity-level objective.
+- Each activity should teach one focused skill and connect to the module objective.
 - Activities must use activity_type from lesson, quiz, assignment, discussion, coding, typing, project, reflection.
+- completion_rule must be one of manual, viewed, scrolled, submitted, graded, score_at_least. Use score_at_least for quizzes.
 - Include quiz banks with question points, correct answers, hints, explanations, true/false where useful, matching or ordering where useful.
-- Make lesson body content interactive and clickable where useful using simple HTML buttons, hint blocks, reflection prompts, sorting/check questions, and short practice tasks.
+- Make lesson body or rich_html content interactive and clickable where useful using eduClub-safe blocks, hint blocks, reflection prompts, sorting/check questions, and short practice tasks.
 - Include rich beginner-friendly visuals using simple image placeholders, icons, diagrams made with HTML/CSS, click-to-reveal cards, flashcards, checkboxes, mini-checks, and slide-style step panels.
 - Any slide-style content must work as plain lightweight HTML sections without external libraries.
 - For an 8-year-old beginner, use short sentences, concrete examples, playful challenges, and one small skill per step.
 - Teach step by step: explain, show an example, let the learner try, give a hint, then check understanding.
 - Prefer project-based learning: every module should build toward a small visible creation or real-world task.
-- Add lightweight animations or interactive moments only with simple HTML/CSS snippets inside content.body; do not require heavy libraries.
+- Add lightweight interactive moments only with safe eduClub data attributes; do not use scripts or event handlers inside rich content.
 - Include clear learner guides, teacher facilitation notes, common mistakes, and extension ideas.
 - Include teacher_notes and try-more activities for fast learners when enabled.
 - Make the course progressive: each module should build from the previous one.
-- Make learner content interactive but lightweight for fast loading.`,
+- Make learner content interactive but lightweight for fast loading.
+
+${EDUCLUB_INTERACTIVE_BLOCK_GUIDE}`,
     },
   ];
 }
@@ -269,6 +332,8 @@ Activity title: ${activity.title || "Untitled activity"}
 Activity type: ${activityType}
 Learner age: ${options.learner_age || "8 years old beginner"}
 Marks/points: ${activity.points || 0}
+Existing activity description/content:
+${JSON.stringify(activity.content || {}, null, 2).slice(0, 4000)}
 
 Teacher fine-tuning prompt:
 ${customPrompt || "Create rich, step-by-step, beginner-friendly activity content."}
@@ -278,14 +343,19 @@ Requirements:
 - Keep the generated content focused on this activity only.
 - Use rich_html for learner-facing content.
 - rich_html should teach step by step: explain, show, let the learner try, give hints, then check understanding.
-- Use vanilla HTML, CSS, and tiny vanilla JavaScript only where needed.
+- Use eduClub-safe interactive HTML blocks. Do not include <script>, onclick, external libraries, external CSS, or unsafe links inside rich_html.
 - Include visuals, simple diagrams, click-to-reveal sections, flashcards, checkboxes, mini-checks, and slide-style step panels where useful.
 - Make the activity project based and practical for an 8-year-old beginner.
+- Include a clear activity-level objective in content.purpose.
+- Include a short learner-facing overview in content.description.
+- completion_rule must be one of manual, viewed, scrolled, submitted, graded, score_at_least. Use score_at_least for quizzes.
 - For quiz activities, include questions with points, correct answers, hints, and explanations.
 - For discussion activities, include a discussion_prompt.
-- For coding activities, include starter_html, starter_css, starter_js, validation_checks, and clear instructions.
+- For coding activities, include starter_html, starter_css, starter_js, validation_checks, and clear instructions. Code execution belongs in starter fields, not in rich_html scripts.
 - Include teacher_notes, friendly_hints, and common mistakes.
 - The teacher must still click Save in the editor after reviewing.
+
+${EDUCLUB_INTERACTIVE_BLOCK_GUIDE}
 
 ${ACTIVITY_OUTPUT_SCHEMA}`,
     },
@@ -422,6 +492,7 @@ async function generateCourseBuilderDraft(payload = {}, user = {}) {
     );
     return {
       draft,
+      prompt: messages.map((message) => message.content).join("\n\n"),
       provider: provider.provider_key,
       model: provider.default_model,
       inserted: false,

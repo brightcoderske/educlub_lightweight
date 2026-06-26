@@ -59,6 +59,9 @@ test("AI course prompt is child-safe, objective-aware, and JSON-only", () => {
   assert.match(prompt, /flashcards/i);
   assert.match(prompt, /checkboxes/i);
   assert.match(prompt, /slide-style/i);
+  assert.match(prompt, /eduClub-safe/i);
+  assert.match(prompt, /completion_rule must be one of manual, viewed, scrolled, submitted, graded, score_at_least/i);
+  assert.match(prompt, /learning_objectives must be specific/i);
 
   if (previousDatabaseUrl === undefined) {
     delete process.env.DATABASE_URL;
@@ -110,7 +113,7 @@ test("AI course drafts are normalized into safe template module and activity sha
   assert.equal(draft.modules[0].position, 1);
   assert.equal(draft.modules[0].activities[0].position, 1);
   assert.equal(draft.modules[0].activities[0].completion_rule, "manual");
-  assert.equal(draft.modules[0].activities[1].completion_rule, "score");
+  assert.equal(draft.modules[0].activities[1].completion_rule, "score_at_least");
   assert.equal(draft.modules[0].activities[1].pass_score, 50);
   assert.doesNotMatch(draft.modules[0].activities[0].content.body, /script/i);
 
@@ -147,6 +150,8 @@ test("AI activity prompt is activity-aware and requests rich vanilla interactive
   assert.match(prompt, /flashcards/i);
   assert.match(prompt, /click-to-reveal/i);
   assert.match(prompt, /checkbox/i);
+  assert.match(prompt, /eduClub-safe/i);
+  assert.match(prompt, /score_at_least/i);
   assert.match(prompt, /Save/i);
 
   if (previousDatabaseUrl === undefined) {

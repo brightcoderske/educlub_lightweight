@@ -222,8 +222,41 @@ function defaultActivityAiPrompt(form = {}) {
     `Generate rich ${activityType} content for this one activity only.`,
     "Teach an 8-year-old beginner step by step using a warm, practical, project-based style.",
     "Use rich HTML with small visual blocks, click-to-reveal hints, flashcards, checkboxes, and simple slide-style sections where useful.",
-    "Use only lightweight vanilla HTML, CSS, and tiny JavaScript interactions that can run inside the lesson safely.",
+    "Use eduClub-safe interactive blocks only, such as data-interactive-block, data-hint-toggle, data-rich-check, data-rich-quiz, data-rich-reflection, and data-rich-progress.",
+    "Do not use script tags, onclick handlers, external JavaScript, external CSS, or heavy libraries inside rich content.",
     "Keep the content focused on this activity title and avoid creating extra modules or unrelated activities.",
+  ].join("\n");
+}
+
+function courseStructureForPrompt(modules = []) {
+  return modules
+    .map((courseModule, moduleIndex) => {
+      const activities = (courseModule.activities || [])
+        .map(
+          (activity, activityIndex) =>
+            `${activityIndex + 1}. ${activity.title || "Untitled"} (${activity.activity_type || "lesson"})`
+        )
+        .join("; ");
+      return `Module ${moduleIndex + 1}: ${courseModule.title || "Untitled"}${
+        activities ? ` | Activities: ${activities}` : ""
+      }`;
+    })
+    .join("\n");
+}
+
+function defaultCourseAiPrompt(course = {}, modules = [], form = {}) {
+  return [
+    `Build rich eduClub course content for "${course?.name || "this course"}".`,
+    `Course description: ${course?.description || form.objective || "Use the saved course description and objective."}`,
+    `Target learners: ${course?.target_level || form.learner_age || "8-year-old beginners"}.`,
+    `Generation mode: ${form.mode || "full_course"}.`,
+    "Create specific measurable course objectives, module objectives, and activity-level objectives.",
+    "Every activity should teach one focused skill with learner-friendly steps, visuals, hints, practice, and a check for understanding.",
+    "Use eduClub-safe interactive blocks only: data-interactive-block reveal/flash_card/self_check, data-hint-toggle panels, data-rich-check checkboxes, data-rich-quiz buttons, data-rich-reflection textareas, and data-rich-progress indicators.",
+    "Do not use script tags, onclick handlers, external JavaScript, external CSS, or heavy libraries inside rich content.",
+    "For quizzes use score_at_least as the completion rule; otherwise choose only manual, viewed, scrolled, submitted, graded, or score_at_least.",
+    "Respect this existing course structure when adding or extending content:",
+    courseStructureForPrompt(modules) || "No modules yet.",
   ].join("\n");
 }
 
@@ -1043,6 +1076,7 @@ function ActivityManagerDialog({
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
+  const [aiLastPrompt, setAiLastPrompt] = useState("");
 
   useEffect(() => {
     const nextForm = activityToManagerForm(activity);
@@ -1051,6 +1085,7 @@ function ActivityManagerDialog({
     setAiPanelOpen(false);
     setAiGenerating(false);
     setAiMessage("");
+    setAiLastPrompt("");
     setCsvText("");
     setValidationError("");
   }, [activity?.id, open]);
@@ -1148,6 +1183,7 @@ function ActivityManagerDialog({
         },
       });
       setForm((current) => mergeGeneratedActivityForm(current, response.activity || {}));
+      setAiLastPrompt(response.prompt || aiPrompt);
       setAiMessage("AI draft inserted into this activity. Review it, adjust anything, then save.");
     } catch (error) {
       setValidationError(error.message || "AI could not generate this activity right now.");
@@ -1321,6 +1357,24 @@ function ActivityManagerDialog({
                 <MDTypography variant="caption" color="success" display="block" mt={1}>
                   {aiMessage}
                 </MDTypography>
+              )}
+              {aiLastPrompt && (
+                <MDBox
+                  component="pre"
+                  mt={1.5}
+                  p={1.5}
+                  borderRadius="md"
+                  sx={{
+                    bgcolor: "#0f172a",
+                    color: "#e2e8f0",
+                    maxHeight: 180,
+                    overflow: "auto",
+                    whiteSpace: "pre-wrap",
+                    fontSize: "0.75rem",
+                  }}
+                >
+                  {aiLastPrompt}
+                </MDBox>
               )}
             </MDBox>
           </Collapse>
@@ -2324,11 +2378,13 @@ function AiCourseBuilderDialog({
   form,
   generating,
   inserting,
+  lastPrompt,
   open,
   onApply,
   onChange,
   onClose,
   onGenerate,
+  onRegeneratePrompt,
 }) {
   const moduleCount = draft?.modules?.length || 0;
   const activityCount =
@@ -2410,6 +2466,26 @@ function AiCourseBuilderDialog({
             />
           </Grid>
           <Grid item xs={12}>
+            <MDInput
+              label="Editable AI prompt sent to the provider"
+              multiline
+              rows={8}
+              fullWidth
+              value={form.prompt}
+              onChange={(event) => onChange({ prompt: event.target.value })}
+              placeholder="Fine tune the exact course builder prompt before generating."
+            />
+            <MDBox mt={1} display="flex" justifyContent="space-between" gap={1} flexWrap="wrap">
+              <MDTypography variant="caption" color="text">
+                This prompt includes the course description, current structure, objective quality
+                rules, safe interactive blocks, and completion-rule guidance.
+              </MDTypography>
+              <MDButton variant="text" color="info" size="small" onClick={onRegeneratePrompt}>
+                <Icon>refresh</Icon>&nbsp;Regenerate Prompt From Course
+              </MDButton>
+            </MDBox>
+          </Grid>
+          <Grid item xs={12}>
             <MDBox display="flex" gap={1.5} flexWrap="wrap">
               {[
                 ["include_quizzes", "Quizzes"],
@@ -2438,6 +2514,30 @@ function AiCourseBuilderDialog({
             you are satisfied.
           </MDTypography>
         </MDBox>
+
+        {lastPrompt && (
+          <MDBox mt={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
+            <MDTypography variant="caption" color="text" fontWeight="medium">
+              Last prompt sent
+            </MDTypography>
+            <MDBox
+              component="pre"
+              mt={1}
+              p={1.5}
+              borderRadius="md"
+              sx={{
+                bgcolor: "#0f172a",
+                color: "#e2e8f0",
+                maxHeight: 220,
+                overflow: "auto",
+                whiteSpace: "pre-wrap",
+                fontSize: "0.75rem",
+              }}
+            >
+              {lastPrompt}
+            </MDBox>
+          </MDBox>
+        )}
 
         {draft && (
           <MDBox mt={3}>
@@ -2500,10 +2600,6 @@ function AiCourseBuilderDialog({
   );
 }
 
-AiCourseBuilderDialog.defaultProps = {
-  draft: null,
-};
-
 AiCourseBuilderDialog.propTypes = {
   draft: PropTypes.shape({
     title: PropTypes.string,
@@ -2522,14 +2618,22 @@ AiCourseBuilderDialog.propTypes = {
     mode: PropTypes.string.isRequired,
     module_count: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
     objective: PropTypes.string.isRequired,
+    prompt: PropTypes.string.isRequired,
   }).isRequired,
   generating: PropTypes.bool.isRequired,
   inserting: PropTypes.bool.isRequired,
+  lastPrompt: PropTypes.string,
   open: PropTypes.bool.isRequired,
   onApply: PropTypes.func.isRequired,
   onChange: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
   onGenerate: PropTypes.func.isRequired,
+  onRegeneratePrompt: PropTypes.func.isRequired,
+};
+
+AiCourseBuilderDialog.defaultProps = {
+  draft: null,
+  lastPrompt: "",
 };
 
 function CourseBuilder() {
@@ -2570,6 +2674,7 @@ function CourseBuilder() {
   const [termWeeks, setTermWeeks] = useState([]);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [aiDraft, setAiDraft] = useState(null);
+  const [aiLastPrompt, setAiLastPrompt] = useState("");
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiInserting, setAiInserting] = useState(false);
   const [aiForm, setAiForm] = useState({
@@ -2584,6 +2689,7 @@ function CourseBuilder() {
     include_teacher_notes: true,
     include_coding: false,
     objective: "",
+    prompt: "",
   });
 
   const modules = data?.modules || [];
@@ -2599,6 +2705,7 @@ function CourseBuilder() {
     [selectedModule, selectedActivityId]
   );
   const course = data?.course || data?.template;
+  const buildCurrentCourseAiPrompt = (form = aiForm) => defaultCourseAiPrompt(course, modules, form);
   const versionLabel = isTemplate
     ? `Template v${course?.version || 1}`
     : `School v${course?.school_version || 1}${
@@ -2632,11 +2739,18 @@ function CourseBuilder() {
         course_category: (response.course || response.template)?.course_category || "general",
         is_active: (response.course || response.template)?.is_active !== false,
       });
-      setAiForm((current) => ({
-        ...current,
-        learner_age: current.learner_age || (response.course || response.template)?.target_level || "",
-        objective: current.objective || (response.course || response.template)?.description || "",
-      }));
+      const responseCourse = response.course || response.template || {};
+      setAiForm((current) => {
+        const nextForm = {
+          ...current,
+          learner_age: current.learner_age || responseCourse.target_level || "",
+          objective: current.objective || responseCourse.description || "",
+        };
+        return {
+          ...nextForm,
+          prompt: current.prompt || defaultCourseAiPrompt(responseCourse, response.modules || [], nextForm),
+        };
+      });
       setModuleForm(emptyModule((response.modules?.length || 0) + 1));
       setActivityForm(emptyActivity((response.modules?.[0]?.activities?.length || 0) + 1));
     } catch (err) {
@@ -2732,16 +2846,33 @@ function CourseBuilder() {
       const response = await apiClient.post("/ai/course-builder/generate", {
         ...aiForm,
         template_id: Number(entityId),
+        course_description: course?.description || "",
+        course_structure: modules.map((courseModule) => ({
+          title: courseModule.title,
+          description: courseModule.description,
+          activities: (courseModule.activities || []).map((activity) => ({
+            title: activity.title,
+            activity_type: activity.activity_type,
+          })),
+        })),
         module_count: Number(aiForm.module_count || 1),
         activities_per_module: Number(aiForm.activities_per_module || 1),
       });
       setAiDraft(response.draft);
+      setAiLastPrompt(response.prompt || aiForm.prompt || "");
       setMessage("AI draft generated. Review it before inserting.");
     } catch (err) {
       setError(err.message || "AI draft could not be generated.");
     } finally {
       setAiGenerating(false);
     }
+  };
+
+  const regenerateAiPrompt = () => {
+    setAiForm((current) => ({
+      ...current,
+      prompt: buildCurrentCourseAiPrompt(current),
+    }));
   };
 
   const applyAiDraft = async () => {
@@ -3220,14 +3351,24 @@ function CourseBuilder() {
           </MDBox>
           <MDBox display="flex" gap={1} flexWrap="wrap">
             {isTemplate && (
-              <MDButton
-                variant="outlined"
-                color="info"
-                startIcon={<Icon>visibility</Icon>}
-                onClick={() => navigate(`/system-admin/courses/${entityId}/preview`)}
-              >
-                View as Learner
-              </MDButton>
+              <>
+                <MDButton
+                  variant="gradient"
+                  color="warning"
+                  startIcon={<Icon>auto_awesome</Icon>}
+                  onClick={() => setAiDialogOpen(true)}
+                >
+                  AI Builder
+                </MDButton>
+                <MDButton
+                  variant="outlined"
+                  color="info"
+                  startIcon={<Icon>visibility</Icon>}
+                  onClick={() => navigate(`/system-admin/courses/${entityId}/preview`)}
+                >
+                  View as Learner
+                </MDButton>
+              </>
             )}
             {!isTemplate && (
               <>
@@ -4199,11 +4340,13 @@ function CourseBuilder() {
           form={aiForm}
           generating={aiGenerating}
           inserting={aiInserting}
+          lastPrompt={aiLastPrompt}
           open={aiDialogOpen}
           onApply={applyAiDraft}
           onChange={(changes) => setAiForm((current) => ({ ...current, ...changes }))}
           onClose={() => setAiDialogOpen(false)}
           onGenerate={generateAiDraft}
+          onRegeneratePrompt={regenerateAiPrompt}
         />
         <ActivityManagerDialog
           activity={selectedActivity}
