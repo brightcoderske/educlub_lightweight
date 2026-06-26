@@ -41,6 +41,7 @@ const typingPracticeRoutes = require("./routes/typingPractice.routes");
 const quizTestsRoutes = require("./routes/quizTests.routes");
 const teacherAssignmentsRoutes = require("./routes/teacherAssignments.routes");
 const teacherDashboardRoutes = require("./routes/teacherDashboard.routes");
+const aiRoutes = require("./routes/ai.routes");
 
 const app = express();
 const privateUploadPrefixes = ["/reports", "/report-cards", "/learner-files"];
@@ -163,6 +164,7 @@ app.use("/api/typing-practice", typingPracticeRoutes);
 app.use("/api/quiz-tests", quizTestsRoutes);
 app.use("/api/teacher-assignments", teacherAssignmentsRoutes);
 app.use("/api/teacher-dashboard", teacherDashboardRoutes);
+app.use("/api/ai", aiRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

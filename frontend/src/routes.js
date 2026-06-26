@@ -18,6 +18,7 @@ import SystemAdminAcademic from "layouts/system-admin/academic";
 import SystemAdminCompetitions from "layouts/system-admin/competitions";
 import SystemAdminReports from "layouts/system-admin/reports";
 import SystemAdminCertificates from "layouts/system-admin/certificates";
+import SystemAdminAiSettings from "layouts/system-admin/ai-settings";
 import SchoolAdminDashboard from "layouts/school-admin";
 import SchoolAdminLearners from "layouts/school-admin/learners";
 import SchoolAdminAllocations from "layouts/school-admin/allocations";
@@ -267,6 +268,15 @@ const routes = [
     icon: <Icon fontSize="small">workspace_premium</Icon>,
     route: "/system-admin/certificates",
     component: <SystemAdminCertificates />,
+    roles: ["system_admin"],
+  },
+  {
+    type: "collapse",
+    name: "AI Settings",
+    key: "system-admin-ai-settings",
+    icon: <Icon fontSize="small">psychology</Icon>,
+    route: "/system-admin/ai-settings",
+    component: <SystemAdminAiSettings />,
     roles: ["system_admin"],
   },
   {

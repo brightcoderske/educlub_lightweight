@@ -2130,6 +2130,219 @@ ActivityReviewDialog.defaultProps = {
   review: null,
 };
 
+function AiCourseBuilderDialog({
+  draft,
+  form,
+  generating,
+  inserting,
+  open,
+  onApply,
+  onChange,
+  onClose,
+  onGenerate,
+}) {
+  const moduleCount = draft?.modules?.length || 0;
+  const activityCount =
+    draft?.modules?.reduce((total, courseModule) => total + (courseModule.activities?.length || 0), 0) ||
+    0;
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+      <DialogTitle>AI Course Builder</DialogTitle>
+      <DialogContent dividers>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={4}>
+            <MDInput
+              select
+              label="Generate"
+              fullWidth
+              value={form.mode}
+              onChange={(event) => onChange({ mode: event.target.value })}
+              SelectProps={{ native: true }}
+            >
+              <option value="full_course">Full course draft</option>
+              <option value="outline">Course outline</option>
+              <option value="modules">Modules</option>
+              <option value="activities">Activities</option>
+              <option value="quiz_bank">Quiz bank</option>
+              <option value="teacher_notes">Teacher notes</option>
+              <option value="try_more">Try-more activities</option>
+            </MDInput>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <MDInput
+              label="Learner age"
+              fullWidth
+              value={form.learner_age}
+              onChange={(event) => onChange({ learner_age: event.target.value })}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <MDInput
+              select
+              label="Interactivity"
+              fullWidth
+              value={form.interactivity_level}
+              onChange={(event) => onChange({ interactivity_level: event.target.value })}
+              SelectProps={{ native: true }}
+            >
+              <option value="high">High: clickable and playful</option>
+              <option value="medium">Medium: balanced</option>
+              <option value="simple">Simple: mostly guided text</option>
+            </MDInput>
+          </Grid>
+          <Grid item xs={6} md={2}>
+            <MDInput
+              label="Modules"
+              type="number"
+              fullWidth
+              value={form.module_count}
+              onChange={(event) => onChange({ module_count: event.target.value })}
+            />
+          </Grid>
+          <Grid item xs={6} md={2}>
+            <MDInput
+              label="Activities/module"
+              type="number"
+              fullWidth
+              value={form.activities_per_module}
+              onChange={(event) => onChange({ activities_per_module: event.target.value })}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <MDInput
+              label="Course objective"
+              multiline
+              rows={3}
+              fullWidth
+              value={form.objective}
+              onChange={(event) => onChange({ objective: event.target.value })}
+              placeholder="Example: Help Grade 4 learners understand safe internet use through practical activities."
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <MDBox display="flex" gap={1.5} flexWrap="wrap">
+              {[
+                ["include_quizzes", "Quizzes"],
+                ["include_discussions", "Discussions"],
+                ["include_try_more", "Try more"],
+                ["include_teacher_notes", "Teacher notes"],
+                ["include_coding", "Coding challenges"],
+              ].map(([field, label]) => (
+                <MDBox key={field} display="flex" alignItems="center" gap={0.5}>
+                  <Checkbox
+                    checked={Boolean(form[field])}
+                    onChange={(event) => onChange({ [field]: event.target.checked })}
+                  />
+                  <MDTypography variant="caption" color="text">
+                    {label}
+                  </MDTypography>
+                </MDBox>
+              ))}
+            </MDBox>
+          </Grid>
+        </Grid>
+
+        <MDBox mt={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#eef6ff" }}>
+          <MDTypography variant="caption" color="text">
+            AI generates a draft only. Review it here first, then insert it into this template when
+            you are satisfied.
+          </MDTypography>
+        </MDBox>
+
+        {draft && (
+          <MDBox mt={3}>
+            <MDBox display="flex" gap={1} alignItems="center" flexWrap="wrap" mb={2}>
+              <Chip label={`${moduleCount} modules`} color="info" size="small" />
+              <Chip label={`${activityCount} activities`} color="success" size="small" />
+              <Chip label="Preview only" color="warning" size="small" />
+            </MDBox>
+            <MDTypography variant="h5">{draft.title}</MDTypography>
+            <MDTypography variant="body2" color="text" mb={2}>
+              {draft.description || "No description generated."}
+            </MDTypography>
+            <MDBox display="flex" flexDirection="column" gap={1.5}>
+              {(draft.modules || []).map((courseModule, moduleIndex) => (
+                <MDBox key={`${courseModule.title}-${moduleIndex}`} p={1.5} borderRadius="md" border="1px solid #e5e7eb">
+                  <MDTypography variant="h6">
+                    Module {moduleIndex + 1}: {courseModule.title}
+                  </MDTypography>
+                  <MDTypography variant="caption" color="text" display="block" mb={1}>
+                    {courseModule.description}
+                  </MDTypography>
+                  {(courseModule.activities || []).map((activity, activityIndex) => (
+                    <MDBox
+                      key={`${activity.title}-${activityIndex}`}
+                      display="flex"
+                      justifyContent="space-between"
+                      gap={1}
+                      py={0.5}
+                      borderTop={activityIndex === 0 ? "0" : "1px solid #f1f5f9"}
+                    >
+                      <MDTypography variant="button">
+                        {activityIndex + 1}. {activity.title}
+                      </MDTypography>
+                      <Chip label={activity.activity_type} size="small" />
+                    </MDBox>
+                  ))}
+                </MDBox>
+              ))}
+            </MDBox>
+          </MDBox>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <MDButton variant="outlined" color="dark" onClick={onClose}>
+          Close
+        </MDButton>
+        <MDButton color="info" onClick={onGenerate} disabled={generating || !form.objective}>
+          {generating ? "Generating..." : "Generate Draft"}
+        </MDButton>
+        <MDButton
+          variant="gradient"
+          color="success"
+          onClick={onApply}
+          disabled={inserting || !draft?.modules?.length}
+        >
+          {inserting ? "Inserting..." : "Insert Draft"}
+        </MDButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+AiCourseBuilderDialog.defaultProps = {
+  draft: null,
+};
+
+AiCourseBuilderDialog.propTypes = {
+  draft: PropTypes.shape({
+    title: PropTypes.string,
+    description: PropTypes.string,
+    modules: PropTypes.arrayOf(PropTypes.shape({})),
+  }),
+  form: PropTypes.shape({
+    activities_per_module: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    learner_age: PropTypes.string.isRequired,
+    include_coding: PropTypes.bool.isRequired,
+    include_discussions: PropTypes.bool.isRequired,
+    include_quizzes: PropTypes.bool.isRequired,
+    include_teacher_notes: PropTypes.bool.isRequired,
+    include_try_more: PropTypes.bool.isRequired,
+    interactivity_level: PropTypes.string.isRequired,
+    mode: PropTypes.string.isRequired,
+    module_count: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    objective: PropTypes.string.isRequired,
+  }).isRequired,
+  generating: PropTypes.bool.isRequired,
+  inserting: PropTypes.bool.isRequired,
+  open: PropTypes.bool.isRequired,
+  onApply: PropTypes.func.isRequired,
+  onChange: PropTypes.func.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onGenerate: PropTypes.func.isRequired,
+};
+
 function CourseBuilder() {
   const { user } = useAuth();
   const { templateId, courseId } = useParams();
@@ -2166,6 +2379,23 @@ function CourseBuilder() {
   const [error, setError] = useState("");
   const [currentTerm, setCurrentTerm] = useState(null);
   const [termWeeks, setTermWeeks] = useState([]);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiDraft, setAiDraft] = useState(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiInserting, setAiInserting] = useState(false);
+  const [aiForm, setAiForm] = useState({
+    mode: "full_course",
+    learner_age: "8 years old beginner",
+    module_count: 4,
+    activities_per_module: 6,
+    interactivity_level: "high",
+    include_quizzes: true,
+    include_discussions: true,
+    include_try_more: true,
+    include_teacher_notes: true,
+    include_coding: false,
+    objective: "",
+  });
 
   const modules = data?.modules || [];
   const selectedModule = useMemo(
@@ -2213,6 +2443,11 @@ function CourseBuilder() {
         course_category: (response.course || response.template)?.course_category || "general",
         is_active: (response.course || response.template)?.is_active !== false,
       });
+      setAiForm((current) => ({
+        ...current,
+        learner_age: current.learner_age || (response.course || response.template)?.target_level || "",
+        objective: current.objective || (response.course || response.template)?.description || "",
+      }));
       setModuleForm(emptyModule((response.modules?.length || 0) + 1));
       setActivityForm(emptyActivity((response.modules?.[0]?.activities?.length || 0) + 1));
     } catch (err) {
@@ -2296,6 +2531,48 @@ function CourseBuilder() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const generateAiDraft = async () => {
+    if (!isTemplate) return;
+    setAiGenerating(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await apiClient.post("/ai/course-builder/generate", {
+        ...aiForm,
+        template_id: Number(entityId),
+        module_count: Number(aiForm.module_count || 1),
+        activities_per_module: Number(aiForm.activities_per_module || 1),
+      });
+      setAiDraft(response.draft);
+      setMessage("AI draft generated. Review it before inserting.");
+    } catch (err) {
+      setError(err.message || "AI draft could not be generated.");
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const applyAiDraft = async () => {
+    if (!isTemplate || !aiDraft) return;
+    setAiInserting(true);
+    setError("");
+    setMessage("");
+    try {
+      await apiClient.post("/ai/course-builder/apply", {
+        template_id: Number(entityId),
+        draft: aiDraft,
+      });
+      setMessage("AI draft inserted into the template.");
+      setAiDraft(null);
+      setAiDialogOpen(false);
+      await loadBuilder();
+    } catch (err) {
+      setError(err.message || "AI draft could not be inserted.");
+    } finally {
+      setAiInserting(false);
     }
   };
 
@@ -2844,6 +3121,28 @@ function CourseBuilder() {
           <MDTypography variant="caption" color="success" display="block" mb={2}>
             {message}
           </MDTypography>
+        )}
+        {isTemplate && (
+          <MDButton
+            variant="gradient"
+            color="warning"
+            onClick={() => setAiDialogOpen(true)}
+            sx={{
+              position: "fixed",
+              right: { xs: 18, md: 28 },
+              bottom: { xs: 88, md: 30 },
+              zIndex: 1200,
+              borderRadius: "999px",
+              boxShadow: "0 14px 28px rgba(245, 158, 11, 0.28)",
+              px: { xs: 2, md: 2.5 },
+              minWidth: { xs: 52, md: "auto" },
+            }}
+          >
+            <Icon>auto_awesome</Icon>
+            <MDBox component="span" ml={{ xs: 0, md: 1 }} display={{ xs: "none", md: "inline" }}>
+              AI Builder
+            </MDBox>
+          </MDButton>
         )}
         {reviewMode && (
           <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#dcfce7" }}>
@@ -3702,6 +4001,17 @@ function CourseBuilder() {
             Delete
           </MenuItem>
         </Menu>
+        <AiCourseBuilderDialog
+          draft={aiDraft}
+          form={aiForm}
+          generating={aiGenerating}
+          inserting={aiInserting}
+          open={aiDialogOpen}
+          onApply={applyAiDraft}
+          onChange={(changes) => setAiForm((current) => ({ ...current, ...changes }))}
+          onClose={() => setAiDialogOpen(false)}
+          onGenerate={generateAiDraft}
+        />
         <ActivityManagerDialog
           activity={selectedActivity}
           open={activityManagerOpen}

@@ -3377,5 +3377,124 @@ CREATE POLICY competition_reminders_system_admin_delete ON competition_reminders
   FOR DELETE
   USING ((SELECT public.educlub_role()) = 'system_admin');
 
+CREATE TABLE IF NOT EXISTS ai_settings (
+  id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  enabled_roles JSONB NOT NULL DEFAULT '{}'::jsonb,
+  default_provider_key VARCHAR(50),
+  fallback_provider_key VARCHAR(50),
+  max_requests_per_hour INTEGER NOT NULL DEFAULT 50,
+  max_tokens_per_hour INTEGER NOT NULL DEFAULT 100000,
+  max_requests_per_day INTEGER NOT NULL DEFAULT 250,
+  max_tokens_per_day INTEGER NOT NULL DEFAULT 500000,
+  retain_prompt_days INTEGER NOT NULL DEFAULT 0,
+  debug_logging_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_providers (
+  id SERIAL PRIMARY KEY,
+  provider_key VARCHAR(50) UNIQUE NOT NULL,
+  display_name VARCHAR(120) NOT NULL,
+  base_url TEXT,
+  api_key_ciphertext TEXT,
+  default_model VARCHAR(120),
+  fallback_model VARCHAR(120),
+  is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  is_default BOOLEAN NOT NULL DEFAULT FALSE,
+  config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_role_limits (
+  role VARCHAR(30) PRIMARY KEY,
+  is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  requests_per_hour INTEGER NOT NULL DEFAULT 10,
+  tokens_per_hour INTEGER NOT NULL DEFAULT 20000,
+  requests_per_day INTEGER NOT NULL DEFAULT 40,
+  tokens_per_day INTEGER NOT NULL DEFAULT 80000,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_usage_logs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL,
+  role VARCHAR(30),
+  provider_key VARCHAR(50),
+  model VARCHAR(120),
+  feature VARCHAR(80),
+  activity_id INTEGER,
+  prompt_tokens INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  estimated_cost NUMERIC(12, 6) NOT NULL DEFAULT 0,
+  status VARCHAR(30) NOT NULL DEFAULT 'pending',
+  error_message TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_user_created ON ai_usage_logs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_school_created ON ai_usage_logs(school_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_role_created ON ai_usage_logs(role, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_feature_created ON ai_usage_logs(feature, created_at);
+
+ALTER TABLE IF EXISTS ai_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS ai_providers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS ai_role_limits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS ai_usage_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ai_settings_system_admin ON ai_settings;
+CREATE POLICY ai_settings_system_admin ON ai_settings
+  FOR ALL
+  USING ((SELECT public.educlub_role()) = 'system_admin')
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+
+DROP POLICY IF EXISTS ai_settings_authenticated_read ON ai_settings;
+CREATE POLICY ai_settings_authenticated_read ON ai_settings
+  FOR SELECT
+  USING ((SELECT public.educlub_role()) <> '');
+
+DROP POLICY IF EXISTS ai_providers_system_admin ON ai_providers;
+CREATE POLICY ai_providers_system_admin ON ai_providers
+  FOR ALL
+  USING ((SELECT public.educlub_role()) = 'system_admin')
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+
+DROP POLICY IF EXISTS ai_role_limits_system_admin ON ai_role_limits;
+CREATE POLICY ai_role_limits_system_admin ON ai_role_limits
+  FOR ALL
+  USING ((SELECT public.educlub_role()) = 'system_admin')
+  WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+
+DROP POLICY IF EXISTS ai_role_limits_authenticated_read ON ai_role_limits;
+CREATE POLICY ai_role_limits_authenticated_read ON ai_role_limits
+  FOR SELECT
+  USING ((SELECT public.educlub_role()) <> '');
+
+DROP POLICY IF EXISTS ai_usage_logs_scoped_read ON ai_usage_logs;
+CREATE POLICY ai_usage_logs_scoped_read ON ai_usage_logs
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR user_id = (SELECT public.educlub_user_id())
+    OR (
+      (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+      AND school_id = (SELECT public.educlub_school_id())
+    )
+  );
+
+DROP POLICY IF EXISTS ai_usage_logs_scoped_insert ON ai_usage_logs;
+CREATE POLICY ai_usage_logs_scoped_insert ON ai_usage_logs
+  FOR INSERT
+  WITH CHECK (
+    user_id = (SELECT public.educlub_user_id())
+    OR (SELECT public.educlub_role()) = 'system_admin'
+  );
+
 -- Create production admin accounts with scripts/seed-admin.js and environment
 -- variables; never keep default credentials in schema migrations.

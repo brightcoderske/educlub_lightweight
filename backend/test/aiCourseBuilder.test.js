@@ -1,0 +1,117 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+function read(relativePath) {
+  return fs.readFileSync(path.join(__dirname, relativePath), "utf8");
+}
+
+test("AI course builder routes are system-admin only and preview before insert", () => {
+  const routes = read("../src/routes/ai.routes.js");
+  const controller = read("../src/controllers/ai.controller.js");
+
+  assert.match(
+    routes,
+    /router\.post\([\s\S]*"\/course-builder\/generate"[\s\S]*requireRole\("system_admin"\)/,
+  );
+  assert.match(
+    routes,
+    /router\.post\([\s\S]*"\/course-builder\/apply"[\s\S]*requireRole\("system_admin"\)/,
+  );
+  assert.match(controller, /generateCourseBuilderDraft/);
+  assert.match(controller, /applyCourseBuilderDraft/);
+});
+
+test("AI course prompt is child-safe, objective-aware, and JSON-only", () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
+  delete require.cache[require.resolve("../src/services/aiCourseBuilder.service")];
+  const { buildCourseBuilderMessages } = require("../src/services/aiCourseBuilder.service");
+
+  const messages = buildCourseBuilderMessages({
+    template: { name: "Computer Basics", target_level: "Grade 4" },
+    mode: "full_course",
+    objective: "Teach safe internet use",
+    learner_age: "9-11",
+    module_count: 2,
+    activities_per_module: 4,
+  });
+  const prompt = messages.map((message) => message.content).join("\n");
+
+  assert.match(prompt, /JSON only/i);
+  assert.match(prompt, /child-safe/i);
+  assert.match(prompt, /age/i);
+  assert.match(prompt, /objective/i);
+  assert.match(prompt, /progressive/i);
+  assert.match(prompt, /try-more/i);
+  assert.match(prompt, /step by step/i);
+  assert.match(prompt, /project-based/i);
+  assert.match(prompt, /interactive/i);
+  assert.match(prompt, /lightweight/i);
+  assert.match(prompt, /visuals/i);
+  assert.match(prompt, /click-to-reveal/i);
+  assert.match(prompt, /flashcards/i);
+  assert.match(prompt, /checkboxes/i);
+  assert.match(prompt, /slide-style/i);
+
+  if (previousDatabaseUrl === undefined) {
+    delete process.env.DATABASE_URL;
+  } else {
+    process.env.DATABASE_URL = previousDatabaseUrl;
+  }
+});
+
+test("AI course drafts are normalized into safe template module and activity shapes", () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
+  delete require.cache[require.resolve("../src/services/aiCourseBuilder.service")];
+  const { normalizeCourseDraft } = require("../src/services/aiCourseBuilder.service");
+
+  const draft = normalizeCourseDraft({
+    title: "Fun Computing",
+    modules: [
+      {
+        title: "Start",
+        learning_outcomes: ["Use a mouse"],
+        activities: [
+          {
+            title: "Click practice",
+            activity_type: "lesson",
+            points: 0,
+            content: { body: "<script>alert(1)</script><p>Practice clicking.</p>" },
+          },
+          {
+            title: "Check",
+            activity_type: "quiz",
+            points: 5,
+            content: {
+              questions: [
+                {
+                  prompt: "A mouse helps you point.",
+                  question_type: "true_false",
+                  correct_answer: "true",
+                  points: 1,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(draft.modules.length, 1);
+  assert.equal(draft.modules[0].position, 1);
+  assert.equal(draft.modules[0].activities[0].position, 1);
+  assert.equal(draft.modules[0].activities[0].completion_rule, "manual");
+  assert.equal(draft.modules[0].activities[1].completion_rule, "score");
+  assert.equal(draft.modules[0].activities[1].pass_score, 50);
+  assert.doesNotMatch(draft.modules[0].activities[0].content.body, /script/i);
+
+  if (previousDatabaseUrl === undefined) {
+    delete process.env.DATABASE_URL;
+  } else {
+    process.env.DATABASE_URL = previousDatabaseUrl;
+  }
+});
