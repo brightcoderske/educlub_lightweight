@@ -245,6 +245,8 @@ test("AI activity prompt is activity-aware and requests rich vanilla interactive
   assert.match(prompt, /Knowledge Check/i);
   assert.match(prompt, /measure understanding rather than memorisation/i);
   assert.match(prompt, /fun coding game/i);
+  assert.match(prompt, /single-quoted HTML attributes/i);
+  assert.match(prompt, /data-interactive-block='reveal'/i);
   assert.match(prompt, /eduClub-safe/i);
   assert.match(prompt, /score_at_least/i);
   assert.match(prompt, /Save/i);

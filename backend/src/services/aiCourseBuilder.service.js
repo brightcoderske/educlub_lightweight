@@ -40,19 +40,20 @@ const COMPLETION_RULES = new Set([
 ]);
 
 const EDUCLUB_INTERACTIVE_BLOCK_GUIDE = `Use eduClub-safe interactive HTML only. Do not use <script>, inline event handlers such as onclick, external JavaScript, external CSS, or heavy libraries.
+Because the response must be valid JSON, use single-quoted HTML attributes inside rich_html. If you must use double quotes inside any JSON string, escape them as \\".
 Allowed interactive patterns:
 - Click-to-reveal/flashcard:
-  <div data-interactive-block="reveal" data-block-title="Title" data-block-prompt="Question" data-block-answer="Answer"><button type="button" data-interactive-toggle="true">Show answer</button><div data-interactive-answer="true" hidden>Answer</div></div>
+  <div data-interactive-block='reveal' data-block-title='Title' data-block-prompt='Question' data-block-answer='Answer'><button type='button' data-interactive-toggle='true'>Show answer</button><div data-interactive-answer='true' hidden>Answer</div></div>
 - Hint:
-  <button type="button" data-hint-toggle="hint-1" aria-expanded="false">Show hint</button><div data-hint-panel="hint-1">Helpful hint text.</div>
+  <button type='button' data-hint-toggle='hint-1' aria-expanded='false'>Show hint</button><div data-hint-panel='hint-1'>Helpful hint text.</div>
 - Progress and checklist:
-  <div data-rich-root="activity-key"><div data-rich-progress="activity-key"><span data-rich-progress-text>0% complete</span><div><div data-rich-progress-fill style="width:0%"></div></div></div><label><input type="checkbox" data-rich-check data-rich-key="activity-key-step-1"> I tried step 1</label></div>
+  <div data-rich-root='activity-key'><div data-rich-progress='activity-key'><span data-rich-progress-text>0% complete</span><div><div data-rich-progress-fill style='width:0%'></div></div></div><label><input type='checkbox' data-rich-check data-rich-key='activity-key-step-1'> I tried step 1</label></div>
 - Mini quiz:
-  <div data-rich-quiz="activity-key-q1"><p>Question?</p><button type="button" data-quiz-option data-correct="true">Correct option</button><button type="button" data-quiz-option data-correct="false">Wrong option</button><p data-quiz-feedback></p></div>
+  <div data-rich-quiz='activity-key-q1'><p>Question?</p><button type='button' data-quiz-option data-correct='true'>Correct option</button><button type='button' data-quiz-option data-correct='false'>Wrong option</button><p data-quiz-feedback></p></div>
 - Reflection:
-  <textarea data-rich-reflection data-rich-key="activity-key-reflection" placeholder="Write your idea here."></textarea>
+  <textarea data-rich-reflection data-rich-key='activity-key-reflection' placeholder='Write your idea here.'></textarea>
 - Celebration:
-  <button type="button" data-celebrate="true">Celebrate progress</button>`;
+  <button type='button' data-celebrate='true'>Celebrate progress</button>`;
 
 const ACTIVITY_OUTPUT_SCHEMA = `Return JSON only with this shape:
 {
@@ -434,6 +435,7 @@ Requirements:
 - If Generation mode is coding_helper, produce editable browser-safe starter HTML/CSS/JavaScript and validation checks where relevant.
 - Follow the EduClub teaching flow exactly where useful: Explain -> Show -> Practice Together -> Practice Independently -> Create -> Improve -> Reflect.
 - Use rich_html for learner-facing content.
+- In rich_html, use single-quoted HTML attributes to keep the JSON valid. Do not place raw unescaped double quotes inside JSON strings.
 - rich_html should teach step by step: explain what it is, why it matters, when to use it, what happens if it is missing, how it connects to previous learning, show an example, let the learner try, give hints, then check understanding.
 - Use eduClub-safe interactive HTML blocks. Do not include <script>, onclick, external libraries, external CSS, or unsafe links inside rich_html.
 - Include visuals made with lightweight HTML/CSS, simple diagrams, click-to-reveal sections, flashcards, checkboxes, mini-checks, prediction questions, debugging moments, common mistakes, celebration cards, "Did you notice?", "Think before you code", and slide-style step panels where useful.
