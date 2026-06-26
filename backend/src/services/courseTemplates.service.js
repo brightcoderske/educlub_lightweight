@@ -304,7 +304,7 @@ async function createTemplateModule(templateId, data = {}) {
       data.unlock_at || null,
     ],
   );
-  await bumpTemplateVersion(templateId);
+  if (!data.skip_version_bump) await bumpTemplateVersion(templateId);
   return result.rows[0];
 }
 
@@ -363,7 +363,7 @@ async function createTemplateActivity(moduleId, data = {}) {
     ],
   );
   const templateId = await getTemplateIdForModule(moduleId);
-  if (templateId) await bumpTemplateVersion(templateId);
+  if (templateId && !data.skip_version_bump) await bumpTemplateVersion(templateId);
   return result.rows[0];
 }
 
@@ -456,7 +456,7 @@ async function reorderTemplateActivities(moduleId, activityIds = []) {
     );
   }
 
-  await bumpTemplateVersion(templateId);
+  if (templateId) await bumpTemplateVersion(templateId);
 
   const result = await query(
     `SELECT *
@@ -828,4 +828,5 @@ module.exports = {
   getSchoolCourse,
   syncSchoolCourse,
   rollbackSchoolCourse,
+  bumpTemplateVersion,
 };

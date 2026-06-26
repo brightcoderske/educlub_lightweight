@@ -224,6 +224,21 @@ function normalizeCourseDraft(rawDraft = {}) {
   };
 }
 
+function prepareDraftForAppend(rawDraft = {}, existingModuleCount = 0) {
+  const draft = normalizeCourseDraft(rawDraft);
+  return {
+    ...draft,
+    modules: draft.modules.map((courseModule, moduleIndex) => ({
+      ...courseModule,
+      position: existingModuleCount + moduleIndex + 1,
+      activities: (courseModule.activities || []).map((activity, activityIndex) => ({
+        ...activity,
+        position: activityIndex + 1,
+      })),
+    })),
+  };
+}
+
 function buildCourseBuilderMessages(options = {}) {
   const template = options.template || {};
   const courseStructure = Array.isArray(options.course_structure)
@@ -561,23 +576,28 @@ async function generateActivityContentDraft(payload = {}, user = {}) {
 async function applyCourseBuilderDraft(payload = {}) {
   const templateId = Number(payload.template_id);
   if (!templateId) throw new Error("Template is required.");
-  const draft = normalizeCourseDraft(payload.draft || {});
+  const existingBuilder = await courseTemplatesService.getTemplateBuilder(templateId);
+  const existingModuleCount = existingBuilder?.modules?.length || 0;
+  const draft = prepareDraftForAppend(payload.draft || {}, existingModuleCount);
   const insertedModules = [];
 
   for (const moduleDraft of draft.modules) {
     const insertedModule = await courseTemplatesService.createTemplateModule(
       templateId,
-      moduleDraft,
+      { ...moduleDraft, skip_version_bump: true },
     );
     insertedModule.activities = [];
     for (const activityDraft of moduleDraft.activities) {
       const insertedActivity = await courseTemplatesService.createTemplateActivity(
         insertedModule.id,
-        activityDraft,
+        { ...activityDraft, skip_version_bump: true },
       );
       insertedModule.activities.push(insertedActivity);
     }
     insertedModules.push(insertedModule);
+  }
+  if (insertedModules.length) {
+    await courseTemplatesService.bumpTemplateVersion(templateId);
   }
 
   return {
@@ -594,5 +614,6 @@ module.exports = {
   generateCourseBuilderDraft,
   applyCourseBuilderDraft,
   normalizeCourseDraft,
+  prepareDraftForAppend,
   parseJsonDraft,
 };
