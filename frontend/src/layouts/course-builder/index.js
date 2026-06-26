@@ -220,13 +220,22 @@ function defaultActivityAiPrompt(form = {}) {
   const activityType = String(form.activity_type || "lesson").replace(/_/g, " ");
   return [
     `Generate rich ${activityType} content for this one activity only.`,
-    "Teach an 8-year-old beginner step by step using a warm, practical, project-based style.",
-    "Use rich HTML with small visual blocks, click-to-reveal hints, flashcards, checkboxes, and simple slide-style sections where useful.",
+    "Teach an 8-year-old beginner step by step using a warm, practical, project-based, self-paced style.",
+    "Follow EduClub's flow: explain, show, practice together, practice independently, create, improve, reflect.",
+    "Use rich HTML with small visual blocks, click-to-reveal hints, flashcards, prediction questions, checkboxes, debugging moments, celebration cards, and simple slide-style sections where useful.",
     "Use eduClub-safe interactive blocks only, such as data-interactive-block, data-hint-toggle, data-rich-check, data-rich-quiz, data-rich-reflection, and data-rich-progress.",
     "Do not use script tags, onclick handlers, external JavaScript, external CSS, or heavy libraries inside rich content.",
     "Keep the content focused on this activity title and avoid creating extra modules or unrelated activities.",
   ].join("\n");
 }
+
+const aiActivityModes = [
+  ["generate_activity", "Generate"],
+  ["explain_activity", "Explain"],
+  ["improve_activity", "Improve"],
+  ["quiz_builder", "Quiz"],
+  ["coding_helper", "Code"],
+];
 
 function courseStructureForPrompt(modules = []) {
   return modules
@@ -278,13 +287,12 @@ function mergeGeneratedActivityForm(current, generated = {}) {
     ...current,
     title: generated.title || current.title,
     activity_type: generated.activity_type || current.activity_type,
-    points:
-      generated.points === 0 || generated.points
-        ? Number(generated.points)
-        : current.points,
+    points: generated.points === 0 || generated.points ? Number(generated.points) : current.points,
     completion_rule: generated.completion_rule || current.completion_rule,
     pass_score:
-      generated.pass_score === 0 || generated.pass_score ? generated.pass_score : current.pass_score,
+      generated.pass_score === 0 || generated.pass_score
+        ? generated.pass_score
+        : current.pass_score,
     purpose: content.purpose || current.purpose,
     description: content.description || current.description,
     rich_html: content.rich_html || current.rich_html,
@@ -295,7 +303,9 @@ function mergeGeneratedActivityForm(current, generated = {}) {
     starter_js: content.starter_js || current.starter_js,
     language: content.language || current.language,
     challenge_mode: content.challenge_mode || current.challenge_mode,
-    validation_checks_text: stringifyChecks(content.validation_checks || current.validation_checks_text),
+    validation_checks_text: stringifyChecks(
+      content.validation_checks || current.validation_checks_text
+    ),
     submission_instructions: content.submission_instructions || current.submission_instructions,
     reflection_prompt: content.reflection_prompt || current.reflection_prompt,
     project_brief: content.project_brief || current.project_brief,
@@ -1062,6 +1072,8 @@ function RichContentEditor({ value, onChange, onImageUpload }) {
 function ActivityManagerDialog({
   activity,
   courseName,
+  moduleDescription,
+  modulePosition,
   moduleTitle,
   open,
   saving,
@@ -1072,8 +1084,11 @@ function ActivityManagerDialog({
   const [form, setForm] = useState(activityToManagerForm(activity));
   const [csvText, setCsvText] = useState("");
   const [validationError, setValidationError] = useState("");
-  const [aiPrompt, setAiPrompt] = useState(defaultActivityAiPrompt(activityToManagerForm(activity)));
+  const [aiPrompt, setAiPrompt] = useState(
+    defaultActivityAiPrompt(activityToManagerForm(activity))
+  );
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiMode, setAiMode] = useState("generate_activity");
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
   const [aiLastPrompt, setAiLastPrompt] = useState("");
@@ -1083,6 +1098,7 @@ function ActivityManagerDialog({
     setForm(nextForm);
     setAiPrompt(defaultActivityAiPrompt(nextForm));
     setAiPanelOpen(false);
+    setAiMode("generate_activity");
     setAiGenerating(false);
     setAiMessage("");
     setAiLastPrompt("");
@@ -1169,7 +1185,11 @@ function ActivityManagerDialog({
       const content = structuredFormContent(form, form.questions || []);
       const response = await apiClient.post("/ai/course-builder/activity", {
         course_name: courseName,
+        module_description: moduleDescription,
+        module_position: modulePosition,
         module_title: moduleTitle,
+        activity_position: Number(form.position || activity?.position || 1),
+        generation_mode: aiMode,
         learner_age: 8,
         prompt: aiPrompt,
         activity: {
@@ -1305,11 +1325,21 @@ function ActivityManagerDialog({
                 AI Activity Helper
               </MDTypography>
               <MDTypography variant="caption" color="text">
-                Generates draft content only for this {form.activity_type} activity. It will not
+                Uses {moduleTitle || "this module"} context, module {modulePosition || 1}, activity{" "}
+                {form.position || 1}, and this {form.activity_type} title/description. It will not
                 save until you review and click Save Activity.
               </MDTypography>
             </MDBox>
             <MDBox display="flex" gap={1} flexWrap="wrap">
+              {aiActivityModes.map(([value, label]) => (
+                <Chip
+                  key={value}
+                  label={label}
+                  color={aiMode === value ? "warning" : "default"}
+                  onClick={() => setAiMode(value)}
+                  size="small"
+                />
+              ))}
               <MDButton
                 variant="outlined"
                 color="warning"
@@ -1340,6 +1370,7 @@ function ActivityManagerDialog({
                 flexDirection={{ xs: "column", md: "row" }}
               >
                 <MDTypography variant="caption" color="text">
+                  Mode: {aiActivityModes.find(([value]) => value === aiMode)?.[1] || "Generate"}.
                   Output is rich HTML plus activity-specific fields such as quiz questions, coding
                   starter files, prompts, hints, and teacher notes.
                 </MDTypography>
@@ -1542,18 +1573,18 @@ function ActivityManagerDialog({
                                 questionType === "true_false"
                                   ? ["True", "False"]
                                   : questionType === "matching"
-                                  ? [{ left: "", right: "" }]
-                                  : question.options.some((option) => typeof option === "object")
-                                  ? ["Option 1", "Option 2"]
-                                  : question.options,
+                                    ? [{ left: "", right: "" }]
+                                    : question.options.some((option) => typeof option === "object")
+                                      ? ["Option 1", "Option 2"]
+                                      : question.options,
                               correct_answer:
                                 questionType === "true_false"
                                   ? "True"
                                   : questionType === "multi_select"
-                                  ? []
-                                  : questionType === "ordering"
-                                  ? question.options
-                                  : "",
+                                    ? []
+                                    : questionType === "ordering"
+                                      ? question.options
+                                      : "",
                             });
                           }}
                           SelectProps={{ native: true }}
@@ -1852,8 +1883,8 @@ function ActivityManagerDialog({
                   form.activity_type === "reflection"
                     ? "Reflection prompt"
                     : form.activity_type === "project"
-                    ? "Project brief"
-                    : "Submission instructions"
+                      ? "Project brief"
+                      : "Submission instructions"
                 }
                 multiline
                 rows={4}
@@ -1862,8 +1893,8 @@ function ActivityManagerDialog({
                   form.activity_type === "reflection"
                     ? form.reflection_prompt
                     : form.activity_type === "project"
-                    ? form.project_brief
-                    : form.submission_instructions
+                      ? form.project_brief
+                      : form.submission_instructions
                 }
                 onChange={(event) =>
                   setForm({
@@ -1871,8 +1902,8 @@ function ActivityManagerDialog({
                     [form.activity_type === "reflection"
                       ? "reflection_prompt"
                       : form.activity_type === "project"
-                      ? "project_brief"
-                      : "submission_instructions"]: event.target.value,
+                        ? "project_brief"
+                        : "submission_instructions"]: event.target.value,
                   })
                 }
               />
@@ -2009,6 +2040,8 @@ ActivityManagerDialog.propTypes = {
     title: PropTypes.string,
   }),
   courseName: PropTypes.string,
+  moduleDescription: PropTypes.string,
+  modulePosition: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
   moduleTitle: PropTypes.string,
   onClose: PropTypes.func.isRequired,
   onImageUpload: PropTypes.func.isRequired,
@@ -2020,6 +2053,8 @@ ActivityManagerDialog.propTypes = {
 ActivityManagerDialog.defaultProps = {
   activity: null,
   courseName: "",
+  moduleDescription: "",
+  modulePosition: 1,
   moduleTitle: "",
 };
 
@@ -2388,8 +2423,10 @@ function AiCourseBuilderDialog({
 }) {
   const moduleCount = draft?.modules?.length || 0;
   const activityCount =
-    draft?.modules?.reduce((total, courseModule) => total + (courseModule.activities?.length || 0), 0) ||
-    0;
+    draft?.modules?.reduce(
+      (total, courseModule) => total + (courseModule.activities?.length || 0),
+      0
+    ) || 0;
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
@@ -2552,7 +2589,12 @@ function AiCourseBuilderDialog({
             </MDTypography>
             <MDBox display="flex" flexDirection="column" gap={1.5}>
               {(draft.modules || []).map((courseModule, moduleIndex) => (
-                <MDBox key={`${courseModule.title}-${moduleIndex}`} p={1.5} borderRadius="md" border="1px solid #e5e7eb">
+                <MDBox
+                  key={`${courseModule.title}-${moduleIndex}`}
+                  p={1.5}
+                  borderRadius="md"
+                  border="1px solid #e5e7eb"
+                >
                   <MDTypography variant="h6">
                     Module {moduleIndex + 1}: {courseModule.title}
                   </MDTypography>
@@ -2706,7 +2748,8 @@ function CourseBuilder() {
     [selectedModule, selectedActivityId]
   );
   const course = data?.course || data?.template;
-  const buildCurrentCourseAiPrompt = (form = aiForm) => defaultCourseAiPrompt(course, modules, form);
+  const buildCurrentCourseAiPrompt = (form = aiForm) =>
+    defaultCourseAiPrompt(course, modules, form);
   const versionLabel = isTemplate
     ? `Template v${course?.version || 1}`
     : `School v${course?.school_version || 1}${
@@ -2749,7 +2792,9 @@ function CourseBuilder() {
         };
         return {
           ...nextForm,
-          prompt: current.prompt || defaultCourseAiPrompt(responseCourse, response.modules || [], nextForm),
+          prompt:
+            current.prompt ||
+            defaultCourseAiPrompt(responseCourse, response.modules || [], nextForm),
         };
       });
       setModuleForm(emptyModule((response.modules?.length || 0) + 1));
@@ -3460,27 +3505,27 @@ function CourseBuilder() {
           !activityReviewOpen &&
           !earlyUnlockTarget &&
           !aiDialogOpen && (
-          <MDButton
-            variant="gradient"
-            color="warning"
-            onClick={() => setAiDialogOpen(true)}
-            sx={{
-              position: "fixed",
-              right: { xs: 18, md: 28 },
-              bottom: { xs: 88, md: 30 },
-              zIndex: 1200,
-              borderRadius: "999px",
-              boxShadow: "0 14px 28px rgba(245, 158, 11, 0.28)",
-              px: { xs: 2, md: 2.5 },
-              minWidth: { xs: 52, md: "auto" },
-            }}
-          >
-            <Icon>auto_awesome</Icon>
-            <MDBox component="span" ml={{ xs: 0, md: 1 }} display={{ xs: "none", md: "inline" }}>
-              AI Builder
-            </MDBox>
-          </MDButton>
-        )}
+            <MDButton
+              variant="gradient"
+              color="warning"
+              onClick={() => setAiDialogOpen(true)}
+              sx={{
+                position: "fixed",
+                right: { xs: 18, md: 28 },
+                bottom: { xs: 88, md: 30 },
+                zIndex: 1200,
+                borderRadius: "999px",
+                boxShadow: "0 14px 28px rgba(245, 158, 11, 0.28)",
+                px: { xs: 2, md: 2.5 },
+                minWidth: { xs: 52, md: "auto" },
+              }}
+            >
+              <Icon>auto_awesome</Icon>
+              <MDBox component="span" ml={{ xs: 0, md: 1 }} display={{ xs: "none", md: "inline" }}>
+                AI Builder
+              </MDBox>
+            </MDButton>
+          )}
         {reviewMode && (
           <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#dcfce7" }}>
             <MDTypography variant="body2" color="success" fontWeight="medium">
@@ -4388,6 +4433,8 @@ function CourseBuilder() {
         <ActivityManagerDialog
           activity={selectedActivity}
           courseName={course?.name || ""}
+          moduleDescription={selectedModule?.description || ""}
+          modulePosition={selectedModule?.position || 1}
           moduleTitle={selectedModule?.title || ""}
           open={activityManagerOpen}
           saving={saving}

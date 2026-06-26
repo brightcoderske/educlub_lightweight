@@ -359,19 +359,34 @@ function buildActivityBuilderMessages(options = {}) {
     ? activity.activity_type
     : "lesson";
   const customPrompt = String(options.prompt || "").trim();
+  const generationMode = String(options.generation_mode || "generate_activity")
+    .trim()
+    .toLowerCase();
+  const modulePosition = clampNumber(options.module_position, 1, 1, 100);
+  const activityPosition = clampNumber(
+    options.activity_position,
+    activity.position || 1,
+    1,
+    100,
+  );
+  const moduleDescription = String(options.module_description || "").trim();
   return [
     {
       role: "system",
       content:
-        "You are eduClub's expert activity author for young learners. Produce JSON only. Keep content child-safe, age-aware, objective-aware, interactive, project-based, and lightweight. Never ask for personal information. Avoid unsafe external links and heavy libraries.",
+        "You are the EduClub Master Activity Builder: an expert curriculum designer, software engineer, UX designer, child psychologist, coding instructor, and instructional designer for children aged 8-14. Produce JSON only. Keep content child-safe, age-aware, objective-aware, interactive, project-based, self-paced, encouraging, and lightweight. Never ask for personal information. Avoid unsafe external links and heavy libraries.",
     },
     {
       role: "user",
       content: `Create content for one existing eduClub activity only.
 Course: ${options.course_name || "Current course"}
 Module: ${options.module_title || "Current module"}
+Module number: ${modulePosition}
+Module description/objective: ${moduleDescription || "Use the module title and course context."}
 Activity title: ${activity.title || "Untitled activity"}
+Activity number in module: ${activityPosition}
 Activity type: ${activityType}
+Generation mode: ${generationMode}
 Learner age: ${options.learner_age || "8 years old beginner"}
 Marks/points: ${activity.points || 0}
 Existing activity description/content:
@@ -383,18 +398,25 @@ ${customPrompt || "Create rich, step-by-step, beginner-friendly activity content
 Requirements:
 - Do not create modules or other activities.
 - Keep the generated content focused on this activity only.
+- Use the course, module, module number, activity number, activity title, activity description, and activity type as hard context.
+- Align this activity with its position in the module: earlier activities should introduce and build confidence; later activities should apply, debug, create, improve, and reflect.
+- If Generation mode is explain_activity, deeply explain and improve the existing activity without changing its intent.
+- If Generation mode is improve_activity, enrich the current content with clearer scaffolding, interactivity, hints, and teacher notes.
+- If Generation mode is quiz_builder, produce a strong knowledge check with mixed question styles and explanations.
+- If Generation mode is coding_helper, produce editable browser-safe starter HTML/CSS/JavaScript and validation checks where relevant.
+- Follow the EduClub teaching flow exactly where useful: Explain -> Show -> Practice Together -> Practice Independently -> Create -> Improve -> Reflect.
 - Use rich_html for learner-facing content.
-- rich_html should teach step by step: explain, show, let the learner try, give hints, then check understanding.
+- rich_html should teach step by step: explain what it is, why it matters, when to use it, what happens if it is missing, how it connects to previous learning, show an example, let the learner try, give hints, then check understanding.
 - Use eduClub-safe interactive HTML blocks. Do not include <script>, onclick, external libraries, external CSS, or unsafe links inside rich_html.
-- Include visuals, simple diagrams, click-to-reveal sections, flashcards, checkboxes, mini-checks, and slide-style step panels where useful.
+- Include visuals made with lightweight HTML/CSS, simple diagrams, click-to-reveal sections, flashcards, checkboxes, mini-checks, prediction questions, debugging moments, common mistakes, celebration cards, "Did you notice?", "Think before you code", and slide-style step panels where useful.
 - Make the activity project based and practical for an 8-year-old beginner.
 - Include a clear activity-level objective in content.purpose.
 - Include a short learner-facing overview in content.description.
 - completion_rule must be one of manual, viewed, scrolled, submitted, graded, score_at_least. Use score_at_least for quizzes.
-- For quiz activities, include questions with points, correct answers, hints, and explanations.
+- For quiz activities, include questions with points, correct answers, hints, explanations, true/false, matching, ordering, identify-the-mistake, complete-the-code, and predict-the-output where suitable.
 - For discussion activities, include a discussion_prompt.
 - For coding activities, include starter_html, starter_css, starter_js, validation_checks, and clear instructions. Code execution belongs in starter fields, not in rich_html scripts.
-- Include teacher_notes, friendly_hints, and common mistakes.
+- Include teacher_notes, friendly_hints, common mistakes, quick recap, mini challenge, checkpoints, and reflection.
 - The teacher must still click Save in the editor after reviewing.
 
 ${EDUCLUB_INTERACTIVE_BLOCK_GUIDE}

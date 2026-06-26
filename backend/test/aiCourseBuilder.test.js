@@ -206,10 +206,14 @@ test("AI activity prompt is activity-aware and requests rich vanilla interactive
   const messages = buildActivityBuilderMessages({
     course_name: "Computer Basics",
     module_title: "Mouse Skills",
+    module_position: 2,
+    activity_position: 4,
+    generation_mode: "explain_activity",
     activity: {
       title: "Click Practice",
       activity_type: "lesson",
       points: 5,
+      content: { description: "Learners practise selecting items carefully." },
     },
     learner_age: "8 years old beginner",
     prompt: "Make it visual and project based.",
@@ -217,12 +221,22 @@ test("AI activity prompt is activity-aware and requests rich vanilla interactive
   const prompt = messages.map((message) => message.content).join("\n");
 
   assert.match(prompt, /Click Practice/);
+  assert.match(prompt, /Module number: 2/);
+  assert.match(prompt, /Activity number in module: 4/);
+  assert.match(prompt, /explain_activity/);
+  assert.match(
+    prompt,
+    /Explain.*Show.*Practice Together.*Practice Independently.*Create.*Improve.*Reflect/s,
+  );
   assert.match(prompt, /lesson/);
   assert.match(prompt, /rich_html/);
   assert.match(prompt, /vanilla/i);
   assert.match(prompt, /flashcards/i);
   assert.match(prompt, /click-to-reveal/i);
   assert.match(prompt, /checkbox/i);
+  assert.match(prompt, /prediction questions/i);
+  assert.match(prompt, /debugging moments/i);
+  assert.match(prompt, /Did you notice/i);
   assert.match(prompt, /eduClub-safe/i);
   assert.match(prompt, /score_at_least/i);
   assert.match(prompt, /Save/i);
