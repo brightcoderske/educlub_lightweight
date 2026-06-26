@@ -8,43 +8,49 @@ router.get(
   "/settings",
   authenticateToken,
   requireRole("system_admin"),
-  aiController.getSettings,
+  aiController.getSettings
 );
 router.put(
   "/settings",
   authenticateToken,
   requireRole("system_admin"),
-  aiController.updateSettings,
+  aiController.updateSettings
 );
 router.get(
   "/school-settings",
   authenticateToken,
   requireRole("school_admin", "teacher"),
-  aiController.getSchoolSettings,
+  aiController.getSchoolSettings
 );
 router.put(
   "/school-settings",
   authenticateToken,
   requireRole("school_admin"),
-  aiController.updateSchoolSettings,
+  aiController.updateSchoolSettings
 );
 router.post(
   "/course-builder/generate",
   authenticateToken,
   requireRole("system_admin"),
-  aiController.generateCourseBuilderDraft,
+  aiController.generateCourseBuilderDraft
 );
 router.post(
   "/course-builder/activity",
   authenticateToken,
   requireRole("system_admin", "school_admin", "teacher"),
-  aiController.generateActivityContentDraft,
+  aiController.generateActivityContentDraft
 );
 router.post(
   "/course-builder/apply",
   authenticateToken,
   requireRole("system_admin"),
-  aiController.applyCourseBuilderDraft,
+  aiController.applyCourseBuilderDraft
+);
+router.post(
+  "/learner/activities/:activityId/explain",
+  authenticateToken,
+  requireRole("learner"),
+  aiController.generateLearnerActivityExplanation
 );
 
 module.exports = router;

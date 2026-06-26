@@ -1,5 +1,6 @@
 const { query } = require("../config");
 const courseTemplatesService = require("./courseTemplates.service");
+const coursesService = require("./courses.service");
 const {
   getActiveProvider,
   getAiAvailability,
@@ -28,6 +29,58 @@ const SUPPORTED_MODES = new Set([
   "quiz_bank",
   "teacher_notes",
   "try_more",
+]);
+
+const LEARNER_AI_BLOCKED_ACTIVITY_TYPES = new Set(["quiz"]);
+const LEARNER_AI_ACTIONS = {
+  explain_simple:
+    "Explain this activity in simple steps for a beginner learner.",
+  next_step:
+    "Tell the learner the next small step to try without doing the work for them.",
+  code_idea:
+    "Explain the coding idea and what each important part means without giving a full final answer.",
+  debug_hint:
+    "Help the learner debug their thinking with checks they can try, but do not complete the code.",
+  small_hint:
+    "Give one small hint and one question the learner should ask themselves.",
+  discussion_prompt:
+    "Explain the discussion prompt and help the learner understand what kind of idea they can share.",
+  plan_reply:
+    "Help the learner plan a thoughtful discussion reply without writing the final post.",
+  sentence_starters:
+    "Give child-friendly sentence starters so the learner can write their own answer.",
+  break_down: "Break the task into small steps the learner can follow.",
+  expected_work:
+    "Explain what good work should include without writing or completing it.",
+  project_plan:
+    "Help the learner plan the project with simple steps, but do not build it for them.",
+  improve_idea:
+    "Suggest ways the learner can improve their own idea while still doing the work themselves.",
+  checklist: "Give a short checklist the learner can use for this activity.",
+  reflection_help:
+    "Help the learner reflect with simple questions, without writing the reflection for them.",
+  learned_recap:
+    "Help the learner identify what they may have learned without writing their answer.",
+  typing_tips: "Give simple typing tips based on this activity.",
+  improve_typing:
+    "Explain how the learner can improve accuracy and speed without rushing.",
+  practice_plan: "Give a tiny practice plan the learner can do now.",
+  example_idea:
+    "Give a small example idea without completing the activity for the learner.",
+  quick_recap: "Give a quick recap and the most important thing to remember.",
+};
+const LEARNER_AI_ALLOWED_HTML_TAGS = new Set([
+  "p",
+  "ul",
+  "ol",
+  "li",
+  "strong",
+  "em",
+  "code",
+  "pre",
+  "div",
+  "span",
+  "br",
 ]);
 
 const COMPLETION_RULES = new Set([
@@ -160,7 +213,7 @@ async function parseJsonDraftWithRepair(text, repairText) {
       return parseJsonDraft(repairedText);
     } catch (repairError) {
       throw new Error(
-        `AI returned invalid JSON after an automatic repair attempt. ${repairError.message}`,
+        `AI returned invalid JSON after an automatic repair attempt. ${repairError.message}`
       );
     }
   }
@@ -206,7 +259,7 @@ function normalizeActivity(activity = {}, index = 0) {
     : "lesson";
   const completionRule = normalizeCompletionRule(
     activity.completion_rule,
-    activityType,
+    activityType
   );
   const content = sanitizeActivityContent(activity.content || {});
   const questions = Array.isArray(content.questions)
@@ -220,13 +273,13 @@ function normalizeActivity(activity = {}, index = 0) {
       typeof content.body === "string"
         ? sanitizeRichHtml(content.body)
         : sanitizeRichHtml(
-            String(activity.description || activity.summary || ""),
+            String(activity.description || activity.summary || "")
           ),
     teacher_notes: Array.isArray(content.teacher_notes)
       ? content.teacher_notes
       : Array.isArray(activity.teacher_notes)
-        ? activity.teacher_notes
-        : [],
+      ? activity.teacher_notes
+      : [],
     questions,
   };
 
@@ -238,10 +291,10 @@ function normalizeActivity(activity = {}, index = 0) {
       activity.points,
       questions.reduce(
         (total, question) => total + Number(question.points || 0),
-        0,
+        0
       ),
       0,
-      100,
+      100
     ),
     position: index + 1,
     is_required:
@@ -301,7 +354,7 @@ function prepareDraftForAppend(rawDraft = {}, existingModuleCount = 0) {
         (activity, activityIndex) => ({
           ...activity,
           position: activityIndex + 1,
-        }),
+        })
       ),
     })),
   };
@@ -316,13 +369,15 @@ function buildCourseBuilderMessages(options = {}) {
             ? courseModule.activities
                 .map(
                   (activity, activityIndex) =>
-                    `${activityIndex + 1}. ${activity.title || "Untitled"} (${activity.activity_type || "lesson"})`,
+                    `${activityIndex + 1}. ${activity.title || "Untitled"} (${
+                      activity.activity_type || "lesson"
+                    })`
                 )
                 .join("; ")
             : "";
-          return `Module ${moduleIndex + 1}: ${courseModule.title || "Untitled"}${
-            activities ? ` | Activities: ${activities}` : ""
-          }`;
+          return `Module ${moduleIndex + 1}: ${
+            courseModule.title || "Untitled"
+          }${activities ? ` | Activities: ${activities}` : ""}`;
         })
         .join("\n")
     : "";
@@ -331,7 +386,7 @@ function buildCourseBuilderMessages(options = {}) {
     options.activities_per_module,
     6,
     1,
-    10,
+    10
   );
   const mode = SUPPORTED_MODES.has(options.mode) ? options.mode : "full_course";
   const customPrompt = String(options.prompt || "").trim();
@@ -354,23 +409,36 @@ function buildCourseBuilderMessages(options = {}) {
       role: "user",
       content: `Generate a ${mode} draft for an eduClub LMS template.
 Course/template: ${template.name || "New course"}
-Course description: ${template.description || options.course_description || "Not provided"}
+Course description: ${
+        template.description || options.course_description || "Not provided"
+      }
 Level: ${template.target_level || options.target_level || "Primary learners"}
 Learner age: ${options.learner_age || "8 years old beginner"}
-Objective: ${options.objective || template.description || "Build practical digital skills"}
+Objective: ${
+        options.objective ||
+        template.description ||
+        "Build practical digital skills"
+      }
 Modules requested: ${moduleCount}
 Activities per module: ${activitiesPerModule}
 Interactivity level: ${interactiveOptions.interactivity_level}
 Include quizzes: ${interactiveOptions.include_quizzes ? "yes" : "no"}
 Include discussions: ${interactiveOptions.include_discussions ? "yes" : "no"}
-Include try-more activities: ${interactiveOptions.include_try_more ? "yes" : "no"}
+Include try-more activities: ${
+        interactiveOptions.include_try_more ? "yes" : "no"
+      }
 Include coding challenges: ${interactiveOptions.include_coding ? "yes" : "no"}
-Include teacher notes: ${interactiveOptions.include_teacher_notes ? "yes" : "no"}
+Include teacher notes: ${
+        interactiveOptions.include_teacher_notes ? "yes" : "no"
+      }
 Existing course structure to respect:
 ${courseStructure || "No existing structure provided."}
 
 Editable teacher prompt:
-${customPrompt || "Create a complete, rich, progressive course draft that fits the course description and structure."}
+${
+  customPrompt ||
+  "Create a complete, rich, progressive course draft that fits the course description and structure."
+}
 
 Quality rules:
 - JSON only, no markdown fences.
@@ -414,7 +482,7 @@ function buildActivityBuilderMessages(options = {}) {
     options.activity_position,
     activity.position || 1,
     1,
-    100,
+    100
   );
   const moduleDescription = String(options.module_description || "").trim();
   return [
@@ -429,7 +497,9 @@ function buildActivityBuilderMessages(options = {}) {
 Course: ${options.course_name || "Current course"}
 Module: ${options.module_title || "Current module"}
 Module number: ${modulePosition}
-Module description/objective: ${moduleDescription || "Use the module title and course context."}
+Module description/objective: ${
+        moduleDescription || "Use the module title and course context."
+      }
 Activity title: ${activity.title || "Untitled activity"}
 Activity number in module: ${activityPosition}
 Activity type: ${activityType}
@@ -440,7 +510,10 @@ Existing activity description/content:
 ${JSON.stringify(activity.content || {}, null, 2).slice(0, 4000)}
 
 Teacher fine-tuning prompt:
-${customPrompt || "Create rich, step-by-step, beginner-friendly activity content."}
+${
+  customPrompt ||
+  "Create rich, step-by-step, beginner-friendly activity content."
+}
 
 EduClub Master Course Builder principles to follow:
 - You are teaching like the world's best coding teacher for children.
@@ -503,17 +576,116 @@ ${ACTIVITY_OUTPUT_SCHEMA}`,
   ];
 }
 
+function assertLearnerAiActivityAllowed(activity = {}) {
+  const activityType = String(activity.activity_type || "").toLowerCase();
+  if (LEARNER_AI_BLOCKED_ACTIVITY_TYPES.has(activityType)) {
+    throw new Error("eduClub AI help is not available for quiz activities.");
+  }
+}
+
+function compactLearningContent(content = {}) {
+  return JSON.stringify(
+    {
+      purpose: content.purpose || "",
+      description: content.description || "",
+      body: content.body || content.text || content.instructions || "",
+      rich_html: content.rich_html || "",
+      discussion_prompt: content.discussion_prompt || "",
+      project_brief: content.project_brief || "",
+      submission_instructions: content.submission_instructions || "",
+      reflection_prompt: content.reflection_prompt || "",
+      friendly_hints: content.friendly_hints || [],
+      starter_html: content.starter_html || "",
+      starter_css: content.starter_css || "",
+      starter_js: content.starter_js || "",
+      language: content.language || "",
+    },
+    null,
+    2
+  ).slice(0, 6000);
+}
+
+function buildLearnerActivityExplainMessages(options = {}) {
+  const activity = options.activity || {};
+  const module = options.module || {};
+  const course = options.course || {};
+  const learner = options.learner || {};
+  const question = String(options.question || "").trim();
+  return [
+    {
+      role: "system",
+      content:
+        "You are eduClub AI, a child-safe learning helper for children aged 8-14. Explain concepts warmly, step by step, and never request personal information. Do not answer quiz questions, reveal assessment answers, or complete submitted work for the learner. Return JSON only.",
+    },
+    {
+      role: "user",
+      content: `Help a learner understand the currently opened eduClub activity.
+
+Course: ${course.name || "Current course"}
+Module: ${module.title || "Current module"}
+Module number: ${module.position || ""}
+Module objective/description: ${module.description || ""}
+Activity title: ${activity.title || "Current activity"}
+Activity ${activity.position || ""} type: ${activity.activity_type || "lesson"}
+Learner level: ${learner.grade || "Beginner"}, age range 8-14
+
+Learner question:
+${
+  question ||
+  "Explain this activity in a simpler way and tell me what to do next."
+}
+
+Activity content summary:
+${compactLearningContent(activity.content || {})}
+
+Rules:
+- Call yourself eduClub AI.
+- Explain only this opened activity, using the course/module/activity context.
+- Be module-aware and activity-number-aware.
+- Keep the answer short enough for a learner panel, but useful.
+- Use simple language for a child.
+- Give the learner a next step they can try now.
+- Use lightweight HTML only: p, ul, ol, li, strong, em, code, pre, div, span.
+- Do not include scripts, event handlers, iframes, external links, images, forms, or hidden answers.
+- Do not answer quiz questions, reveal correct options, or solve assessed tasks.
+- If the learner asks for a direct answer to an assessment, explain the concept and ask them to try.
+
+Return JSON only:
+{
+  "answer_html": "<div><p>Short helpful explanation...</p></div>",
+  "next_step": "One practical next action"
+}`,
+    },
+  ];
+}
+
+function buildLearnerAiActionPrompt(activity = {}, action = "") {
+  const actionKey = String(action || "explain_simple").trim();
+  return LEARNER_AI_ACTIONS[actionKey] || LEARNER_AI_ACTIONS.explain_simple;
+}
+
+function sanitizeLearnerAiHtml(html = "") {
+  return sanitizeRichHtml(html).replace(
+    /<\/?([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>/g,
+    (tag, name) => {
+      const tagName = String(name || "").toLowerCase();
+      if (!LEARNER_AI_ALLOWED_HTML_TAGS.has(tagName)) return "";
+      return tag.startsWith("</") ? `</${tagName}>` : `<${tagName}>`;
+    }
+  );
+}
+
 async function checkUsageLimits(user, settings) {
   const availability = await getAiAvailability(user);
   if (!availability.enabled) {
     throw new Error(
-      availability.reason || "AI is not enabled for your account.",
+      availability.reason || "AI is not enabled for your account."
     );
   }
 
   const roleLimitResult = await query(
     "SELECT * FROM ai_role_limits WHERE role = $1 AND is_enabled = true",
-    [user.role],
+    [user.role]
   );
   const roleLimit = roleLimitResult.rows[0];
   if (!roleLimit) {
@@ -529,7 +701,7 @@ async function checkUsageLimits(user, settings) {
      FROM ai_usage_logs
      WHERE user_id = $1
        AND status IN ('success', 'pending')`,
-    [user.userId || user.id],
+    [user.userId || user.id]
   );
   const usage = usageResult.rows[0] || {};
   if (Number(usage.hour_requests) >= Number(roleLimit.requests_per_hour)) {
@@ -573,7 +745,7 @@ async function logUsage(user, payload) {
       payload.total_tokens || 0,
       payload.status || "pending",
       payload.error_message || null,
-    ],
+    ]
   );
   return result.rows[0];
 }
@@ -583,7 +755,10 @@ async function callOpenAiCompatibleProvider({
   messages,
   temperature = 0.35,
 }) {
-  const endpoint = `${String(provider.base_url || "").replace(/\/$/, "")}/chat/completions`;
+  const endpoint = `${String(provider.base_url || "").replace(
+    /\/$/,
+    ""
+  )}/chat/completions`;
   const configuredMaxTokens = Number(provider.config?.max_tokens || 12000);
   const maxTokens =
     Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
@@ -644,7 +819,7 @@ async function generateCourseBuilderDraft(payload = {}, user = {}) {
         });
         repairUsage = repairResult.usage || {};
         return repairResult.text;
-      },
+      }
     );
     const draft = normalizeCourseDraft(parsedDraft);
     const usage = providerResult.usage || {};
@@ -662,7 +837,7 @@ async function generateCourseBuilderDraft(payload = {}, user = {}) {
           Number(repairUsage.completion_tokens || 0),
         Number(usage.total_tokens || 0) + Number(repairUsage.total_tokens || 0),
         pendingLog.id,
-      ],
+      ]
     );
     return {
       draft,
@@ -674,7 +849,7 @@ async function generateCourseBuilderDraft(payload = {}, user = {}) {
   } catch (error) {
     await query(
       "UPDATE ai_usage_logs SET status = 'failed', error_message = $1 WHERE id = $2",
-      [error.message, pendingLog.id],
+      [error.message, pendingLog.id]
     );
     throw error;
   }
@@ -708,7 +883,7 @@ async function generateActivityContentDraft(payload = {}, user = {}) {
         });
         repairUsage = repairResult.usage || {};
         return repairResult.text;
-      },
+      }
     );
     const activity = normalizeActivity({
       ...(payload.activity || {}),
@@ -729,7 +904,7 @@ async function generateActivityContentDraft(payload = {}, user = {}) {
           Number(repairUsage.completion_tokens || 0),
         Number(usage.total_tokens || 0) + Number(repairUsage.total_tokens || 0),
         pendingLog.id,
-      ],
+      ]
     );
     return {
       activity,
@@ -741,7 +916,115 @@ async function generateActivityContentDraft(payload = {}, user = {}) {
   } catch (error) {
     await query(
       "UPDATE ai_usage_logs SET status = 'failed', error_message = $1 WHERE id = $2",
-      [error.message, pendingLog.id],
+      [error.message, pendingLog.id]
+    );
+    throw error;
+  }
+}
+
+async function generateLearnerActivityExplanation(
+  activityId,
+  payload = {},
+  user = {}
+) {
+  const activityAccess = await coursesService.assertActivityAccess(
+    activityId,
+    user
+  );
+  const activity = activityAccess.activity;
+  if (!activity || !activityAccess.learner) {
+    throw new Error("This activity is not available to your account.");
+  }
+  assertLearnerAiActivityAllowed(activity);
+
+  const contextResult = await query(
+    `SELECT c.id AS course_id, c.name AS course_name,
+            cm.id AS module_id, cm.title AS module_title,
+            cm.description AS module_description, cm.position AS module_position
+     FROM learning_activities la
+     JOIN course_modules cm ON cm.id = la.module_id
+     JOIN courses c ON c.id = cm.course_id
+     WHERE la.id = $1`,
+    [activity.id]
+  );
+  const context = contextResult.rows[0] || {};
+  const { settings, provider } = await getActiveProvider();
+  await checkUsageLimits(user, settings);
+  const messages = buildLearnerActivityExplainMessages({
+    learner: activityAccess.learner,
+    course: {
+      id: context.course_id,
+      name: context.course_name,
+    },
+    module: {
+      id: context.module_id,
+      title: context.module_title,
+      description: context.module_description,
+      position: context.module_position,
+    },
+    activity,
+    question: buildLearnerAiActionPrompt(activity, payload.action),
+  });
+  const pendingLog = await logUsage(user, {
+    provider_key: provider.provider_key,
+    model: provider.default_model,
+    feature: "learner_activity_explain",
+    activity_id: activity.id,
+    status: "pending",
+  });
+
+  try {
+    const providerResult = await callOpenAiCompatibleProvider({
+      provider,
+      messages,
+      temperature: 0.25,
+    });
+    let repairUsage = {};
+    const parsed = await parseJsonDraftWithRepair(
+      providerResult.text,
+      async (repairMessages) => {
+        const repairResult = await callOpenAiCompatibleProvider({
+          provider,
+          messages: repairMessages,
+          temperature: 0,
+        });
+        repairUsage = repairResult.usage || {};
+        return repairResult.text;
+      }
+    );
+    const usage = providerResult.usage || {};
+    await query(
+      `UPDATE ai_usage_logs
+       SET status = 'success',
+           prompt_tokens = $1,
+           completion_tokens = $2,
+           total_tokens = $3
+       WHERE id = $4`,
+      [
+        Number(usage.prompt_tokens || 0) +
+          Number(repairUsage.prompt_tokens || 0),
+        Number(usage.completion_tokens || 0) +
+          Number(repairUsage.completion_tokens || 0),
+        Number(usage.total_tokens || 0) + Number(repairUsage.total_tokens || 0),
+        pendingLog.id,
+      ]
+    );
+
+    const answerHtml = sanitizeLearnerAiHtml(
+      parsed.answer_html || parsed.answer || parsed.explanation || ""
+    );
+    return {
+      answer_html:
+        answerHtml ||
+        "<p>eduClub AI could not prepare a clear explanation this time. Try asking again in simpler words.</p>",
+      next_step: String(parsed.next_step || "").trim(),
+      provider: provider.provider_key,
+      model: provider.default_model,
+    };
+  } catch (error) {
+    await query(
+      "UPDATE ai_usage_logs SET status = 'failed', error_message = $1 WHERE id = $2",
+      [error.message, pendingLog.id]
     );
     throw error;
   }
@@ -750,8 +1033,9 @@ async function generateActivityContentDraft(payload = {}, user = {}) {
 async function applyCourseBuilderDraft(payload = {}) {
   const templateId = Number(payload.template_id);
   if (!templateId) throw new Error("Template is required.");
-  const existingBuilder =
-    await courseTemplatesService.getTemplateBuilder(templateId);
+  const existingBuilder = await courseTemplatesService.getTemplateBuilder(
+    templateId
+  );
   const existingModuleCount = existingBuilder?.modules?.length || 0;
   const draft = prepareDraftForAppend(payload.draft || {}, existingModuleCount);
   const insertedModules = [];
@@ -759,7 +1043,7 @@ async function applyCourseBuilderDraft(payload = {}) {
   for (const moduleDraft of draft.modules) {
     const insertedModule = await courseTemplatesService.createTemplateModule(
       templateId,
-      { ...moduleDraft, skip_version_bump: true },
+      { ...moduleDraft, skip_version_bump: true }
     );
     insertedModule.activities = [];
     for (const activityDraft of moduleDraft.activities) {
@@ -784,14 +1068,19 @@ async function applyCourseBuilderDraft(payload = {}) {
 }
 
 module.exports = {
+  assertLearnerAiActivityAllowed,
   buildActivityBuilderMessages,
   buildCourseBuilderMessages,
   buildJsonRepairMessages,
+  buildLearnerAiActionPrompt,
+  buildLearnerActivityExplainMessages,
   generateActivityContentDraft,
   generateCourseBuilderDraft,
+  generateLearnerActivityExplanation,
   applyCourseBuilderDraft,
   normalizeCourseDraft,
   prepareDraftForAppend,
   parseJsonDraft,
   parseJsonDraftWithRepair,
+  sanitizeLearnerAiHtml,
 };

@@ -15,23 +15,27 @@ test("AI settings routes are authenticated and system-admin controlled", () => {
   assert.match(routes, /router\.get\("\/availability", authenticateToken/);
   assert.match(
     routes,
-    /router\.get\([\s\S]*"\/settings"[\s\S]*requireRole\("system_admin"\)/,
+    /router\.get\([\s\S]*"\/settings"[\s\S]*requireRole\("system_admin"\)/
   );
   assert.match(
     routes,
-    /router\.put\([\s\S]*"\/settings"[\s\S]*requireRole\("system_admin"\)/,
+    /router\.put\([\s\S]*"\/settings"[\s\S]*requireRole\("system_admin"\)/
   );
   assert.match(
     routes,
-    /router\.get\([\s\S]*"\/school-settings"[\s\S]*requireRole\("school_admin", "teacher"\)/,
+    /router\.get\([\s\S]*"\/school-settings"[\s\S]*requireRole\("school_admin", "teacher"\)/
   );
   assert.match(
     routes,
-    /router\.put\([\s\S]*"\/school-settings"[\s\S]*requireRole\("school_admin"\)/,
+    /router\.put\([\s\S]*"\/school-settings"[\s\S]*requireRole\("school_admin"\)/
   );
   assert.match(
     routes,
-    /router\.post\([\s\S]*"\/course-builder\/activity"[\s\S]*requireRole\("system_admin", "school_admin", "teacher"\)/,
+    /router\.post\([\s\S]*"\/course-builder\/activity"[\s\S]*requireRole\("system_admin", "school_admin", "teacher"\)/
+  );
+  assert.match(
+    routes,
+    /router\.post\([\s\S]*"\/learner\/activities\/:activityId\/explain"[\s\S]*requireRole\("learner"\)/
   );
 });
 

@@ -1246,6 +1246,347 @@ CompletionCelebration.propTypes = {
   onSubmitFeedback: PropTypes.func.isRequired,
 };
 
+function learnerAiOptions(activity = {}) {
+  const type = activity.activity_type || "lesson";
+  const title = activity.title || "this activity";
+  const common = [
+    {
+      key: "explain_simple",
+      label: "Explain this simply",
+    },
+    {
+      key: "next_step",
+      label: "What should I do next?",
+    },
+  ];
+  const byType = {
+    coding: [
+      {
+        key: "code_idea",
+        label: "Explain the code idea",
+      },
+      {
+        key: "debug_hint",
+        label: "Help me find mistakes",
+      },
+      {
+        key: "small_hint",
+        label: "Give me a small hint",
+      },
+    ],
+    discussion: [
+      {
+        key: "discussion_prompt",
+        label: "Explain the discussion prompt",
+      },
+      {
+        key: "plan_reply",
+        label: "Help me plan my reply",
+      },
+      {
+        key: "sentence_starters",
+        label: "Give me sentence starters",
+      },
+    ],
+    assignment: [
+      {
+        key: "break_down",
+        label: "Break down the task",
+      },
+      {
+        key: "expected_work",
+        label: "Check what is expected",
+      },
+      {
+        key: "small_hint",
+        label: "Give me a hint",
+      },
+    ],
+    project: [
+      {
+        key: "project_plan",
+        label: "Plan my project",
+      },
+      {
+        key: "improve_idea",
+        label: "Improve my idea",
+      },
+      {
+        key: "checklist",
+        label: "Give me a checklist",
+      },
+    ],
+    reflection: [
+      {
+        key: "reflection_help",
+        label: "Help me reflect",
+      },
+      {
+        key: "learned_recap",
+        label: "What did I learn?",
+      },
+      {
+        key: "sentence_starters",
+        label: "Give sentence starters",
+      },
+    ],
+    typing: [
+      {
+        key: "typing_tips",
+        label: "Typing tips",
+      },
+      {
+        key: "improve_typing",
+        label: "How do I improve?",
+      },
+      {
+        key: "practice_plan",
+        label: "Practice plan",
+      },
+    ],
+  };
+  const specific = byType[type] || [
+    {
+      key: "example_idea",
+      label: "Show me an example idea",
+    },
+    {
+      key: "small_hint",
+      label: "Give me a hint",
+    },
+    {
+      key: "quick_recap",
+      label: "Quick recap",
+    },
+  ];
+  return [...common, ...specific]
+    .slice(0, 5)
+    .map((option) => ({ ...option, prompt: `${option.key}:${title}` }));
+}
+
+function LearnerAiPanel({
+  activity,
+  answerHtml,
+  error,
+  loading,
+  nextStep,
+  open,
+  question,
+  onAsk,
+  onClose,
+  onOpen,
+}) {
+  const dragState = useRef(null);
+  const dragCleanupRef = useRef(null);
+  const [topOffset, setTopOffset] = useState(null);
+  const [large, setLarge] = useState(false);
+  useEffect(
+    () => () => {
+      dragCleanupRef.current?.();
+    },
+    []
+  );
+  if (!activity || activity.activity_type === "quiz") return null;
+  const options = learnerAiOptions(activity).slice(0, 5);
+
+  const startDrag = (event) => {
+    dragCleanupRef.current?.();
+    const pointer = event.touches?.[0] || event;
+    dragState.current = {
+      startY: pointer.clientY,
+      startTop: topOffset,
+    };
+
+    const move = (moveEvent) => {
+      if (!dragState.current) return;
+      const movePointer = moveEvent.touches?.[0] || moveEvent;
+      const height = large ? 520 : 390;
+      const baseTop =
+        dragState.current.startTop ??
+        Math.max(16, window.innerHeight - height - (window.innerWidth < 600 ? 82 : 28));
+      const nextTop = Math.min(
+        Math.max(12, baseTop + movePointer.clientY - dragState.current.startY),
+        Math.max(12, window.innerHeight - 96)
+      );
+      setTopOffset(nextTop);
+    };
+
+    const stop = () => {
+      dragState.current = null;
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", stop);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", stop);
+      dragCleanupRef.current = null;
+    };
+    dragCleanupRef.current = stop;
+
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", stop);
+    window.addEventListener("touchmove", move, { passive: true });
+    window.addEventListener("touchend", stop);
+  };
+
+  return (
+    <MDBox
+      sx={{
+        position: "fixed",
+        right: { xs: 14, md: 28 },
+        ...(topOffset === null ? { bottom: { xs: 82, md: 28 } } : { top: `${topOffset}px` }),
+        zIndex: 1250,
+        width: open ? { xs: "calc(100vw - 28px)", sm: large ? 520 : 390 } : "auto",
+        maxWidth: "calc(100vw - 28px)",
+      }}
+    >
+      {!open ? (
+        <MDButton
+          variant="gradient"
+          color="info"
+          startIcon={<Icon>auto_awesome</Icon>}
+          onClick={onOpen}
+          sx={{
+            borderRadius: "999px",
+            boxShadow: "0 14px 28px rgba(37, 99, 235, 0.28)",
+          }}
+        >
+          eduClub AI
+        </MDButton>
+      ) : (
+        <Card sx={{ boxShadow: "0 18px 42px rgba(15, 23, 42, 0.22)" }}>
+          <MDBox p={2}>
+            <MDBox
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+              gap={1}
+              onMouseDown={startDrag}
+              onTouchStart={startDrag}
+              sx={{ cursor: "ns-resize", userSelect: "none" }}
+            >
+              <MDBox minWidth={0}>
+                <MDTypography variant="button" fontWeight="bold">
+                  eduClub AI
+                </MDTypography>
+                <MDTypography variant="caption" color="text" display="block">
+                  Help for: {activity.title}
+                </MDTypography>
+              </MDBox>
+              <MDBox display="flex" alignItems="center" gap={0.5}>
+                <IconButton
+                  aria-label={large ? "Shrink eduClub AI" : "Expand eduClub AI"}
+                  size="small"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onClick={() => setLarge((current) => !current)}
+                >
+                  <Icon>{large ? "close_fullscreen" : "open_in_full"}</Icon>
+                </IconButton>
+                <IconButton
+                  aria-label="Close eduClub AI"
+                  size="small"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onTouchStart={(event) => event.stopPropagation()}
+                  onClick={onClose}
+                >
+                  <Icon>close</Icon>
+                </IconButton>
+              </MDBox>
+            </MDBox>
+
+            <MDBox mt={1.5} display="flex" flexDirection="column" gap={1}>
+              {options.map((option) => (
+                <MDButton
+                  key={option.label}
+                  variant={question === option.prompt ? "gradient" : "outlined"}
+                  color={question === option.prompt ? "info" : "dark"}
+                  size="small"
+                  disabled={loading}
+                  onClick={() => onAsk(option.prompt)}
+                  sx={{
+                    justifyContent: "flex-start",
+                    textAlign: "left",
+                    whiteSpace: "normal",
+                    lineHeight: 1.3,
+                    minHeight: 38,
+                  }}
+                >
+                  {option.label}
+                </MDButton>
+              ))}
+            </MDBox>
+
+            {error && (
+              <MDBox mt={1.5} p={1.25} borderRadius="md" sx={{ bgcolor: "#fee2e2" }}>
+                <MDTypography variant="caption" color="error">
+                  {error}
+                </MDTypography>
+              </MDBox>
+            )}
+
+            {answerHtml && (
+              <MDBox
+                mt={1.5}
+                p={1.5}
+                borderRadius="md"
+                sx={{
+                  bgcolor: "#f8fafc",
+                  border: "1px solid #dbeafe",
+                  maxHeight: large ? { xs: 340, sm: 430 } : { xs: 220, sm: 280 },
+                  overflow: "auto",
+                  "& p": { fontSize: 14, lineHeight: 1.65, marginTop: 0 },
+                  "& li": { fontSize: 14, lineHeight: 1.6 },
+                  "& code": {
+                    bgcolor: "#e0f2fe",
+                    px: 0.5,
+                    borderRadius: "4px",
+                  },
+                  "& pre": {
+                    bgcolor: "#0f172a",
+                    color: "#e2e8f0",
+                    p: 1,
+                    borderRadius: "6px",
+                    overflow: "auto",
+                  },
+                }}
+                dangerouslySetInnerHTML={{ __html: answerHtml }}
+              />
+            )}
+
+            {nextStep && (
+              <MDBox mt={1.25} p={1.25} borderRadius="md" sx={{ bgcolor: "#ecfdf5" }}>
+                <MDTypography variant="caption" color="success" fontWeight="bold">
+                  Try now: {nextStep}
+                </MDTypography>
+              </MDBox>
+            )}
+          </MDBox>
+        </Card>
+      )}
+    </MDBox>
+  );
+}
+
+LearnerAiPanel.propTypes = {
+  activity: PropTypes.shape({
+    activity_type: PropTypes.string,
+    id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    title: PropTypes.string,
+  }),
+  answerHtml: PropTypes.string.isRequired,
+  error: PropTypes.string.isRequired,
+  loading: PropTypes.bool.isRequired,
+  nextStep: PropTypes.string.isRequired,
+  onAsk: PropTypes.func.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onOpen: PropTypes.func.isRequired,
+  open: PropTypes.bool.isRequired,
+  question: PropTypes.string.isRequired,
+};
+
+LearnerAiPanel.defaultProps = {
+  activity: null,
+};
+
 function ModuleLearn() {
   const { courseId, templateId, moduleId } = useParams();
   const navigate = useNavigate();
@@ -1280,6 +1621,12 @@ function ModuleLearn() {
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [learnerAiOpen, setLearnerAiOpen] = useState(false);
+  const [learnerAiQuestion, setLearnerAiQuestion] = useState("");
+  const [learnerAiAnswer, setLearnerAiAnswer] = useState("");
+  const [learnerAiNextStep, setLearnerAiNextStep] = useState("");
+  const [learnerAiError, setLearnerAiError] = useState("");
+  const [learnerAiLoading, setLearnerAiLoading] = useState(false);
 
   const activeActivity = useMemo(
     () => data?.module?.activities?.find((activity) => activity.id === activeActivityId) || null,
@@ -1439,6 +1786,12 @@ function ModuleLearn() {
     setJsDraft(parts.js || "");
     setCodeOutput("");
     setCodePreviewHtml("");
+    setLearnerAiOpen(false);
+    setLearnerAiQuestion("");
+    setLearnerAiAnswer("");
+    setLearnerAiNextStep("");
+    setLearnerAiError("");
+    setLearnerAiLoading(false);
 
     async function loadDiscussion() {
       if (previewMode || activeActivity?.activity_type !== "discussion") return;
@@ -1647,6 +2000,26 @@ function ModuleLearn() {
       setError(err.message || "Failed to post reply");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const askLearnerAi = async (prompt) => {
+    if (!activeActivity || previewMode || activeActivity.activity_type === "quiz") return;
+    const selectedPrompt = prompt || "";
+    const selectedAction = selectedPrompt.split(":")[0] || "explain_simple";
+    setLearnerAiLoading(true);
+    setLearnerAiError("");
+    setLearnerAiQuestion(selectedPrompt);
+    try {
+      const response = await apiClient.post(`/ai/learner/activities/${activeActivity.id}/explain`, {
+        action: selectedAction,
+      });
+      setLearnerAiAnswer(response.answer_html || "");
+      setLearnerAiNextStep(response.next_step || "");
+    } catch (err) {
+      setLearnerAiError(err.message || "eduClub AI is not available for this activity.");
+    } finally {
+      setLearnerAiLoading(false);
     }
   };
 
@@ -2015,6 +2388,20 @@ function ModuleLearn() {
           </Grid>
         </Grid>
       </MDBox>
+      {!previewMode && activeActivity?.activity_type !== "quiz" && (
+        <LearnerAiPanel
+          activity={activeActivity}
+          answerHtml={learnerAiAnswer}
+          error={learnerAiError}
+          loading={learnerAiLoading}
+          nextStep={learnerAiNextStep}
+          open={learnerAiOpen}
+          question={learnerAiQuestion}
+          onAsk={askLearnerAi}
+          onClose={() => setLearnerAiOpen(false)}
+          onOpen={() => setLearnerAiOpen(true)}
+        />
+      )}
     </MDBox>
   );
 }

@@ -2113,6 +2113,7 @@ module.exports = {
   updateCourse,
   deleteCourse,
   normalizeCourseCategory,
+  assertActivityAccess,
   getCourseLearningOverview,
   getModuleLearning,
   startCoursePayment,
