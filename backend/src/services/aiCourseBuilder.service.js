@@ -120,6 +120,52 @@ function parseJsonDraft(text) {
   }
 }
 
+function buildJsonRepairMessages(rawText, parseError) {
+  const clippedText = String(rawText || "").slice(0, 30000);
+  return [
+    {
+      role: "system",
+      content:
+        "You repair invalid JSON for eduClub AI course content. Return complete valid JSON only. Do not add markdown fences, notes, summaries, or explanations.",
+    },
+    {
+      role: "user",
+      content: `Repair this invalid JSON into complete valid JSON.
+Keep the same data and content wherever possible.
+If rich_html contains HTML attributes, prefer single-quoted HTML attributes so JSON strings stay valid.
+If any double quotes must remain inside JSON string values, escape them correctly.
+If the JSON was truncated, close all open strings, arrays, and objects in the most sensible way without inventing unrelated modules.
+Return complete valid JSON only.
+
+Parser error:
+${parseError?.message || "Unknown JSON parse error"}
+
+Invalid JSON:
+${clippedText}`,
+    },
+  ];
+}
+
+async function parseJsonDraftWithRepair(text, repairText) {
+  try {
+    return parseJsonDraft(text);
+  } catch (initialError) {
+    if (typeof repairText !== "function") {
+      throw initialError;
+    }
+
+    const repairMessages = buildJsonRepairMessages(text, initialError);
+    const repairedText = await repairText(repairMessages);
+    try {
+      return parseJsonDraft(repairedText);
+    } catch (repairError) {
+      throw new Error(
+        `AI returned invalid JSON after an automatic repair attempt. ${repairError.message}`,
+      );
+    }
+  }
+}
+
 function normalizeQuestion(question = {}, index = 0) {
   const type = question.question_type || question.type || "multiple_choice";
   const options = Array.isArray(question.options)
@@ -435,6 +481,7 @@ Requirements:
 - If Generation mode is coding_helper, produce editable browser-safe starter HTML/CSS/JavaScript and validation checks where relevant.
 - Follow the EduClub teaching flow exactly where useful: Explain -> Show -> Practice Together -> Practice Independently -> Create -> Improve -> Reflect.
 - Use rich_html for learner-facing content.
+- Return one complete JSON object in one response. Do not stop mid-string, mid-tag, mid-code-block, or mid-object. If the activity becomes too long, shorten examples and explanations instead of truncating the JSON.
 - In rich_html, use single-quoted HTML attributes to keep the JSON valid. Do not place raw unescaped double quotes inside JSON strings.
 - rich_html should teach step by step: explain what it is, why it matters, when to use it, what happens if it is missing, how it connects to previous learning, show an example, let the learner try, give hints, then check understanding.
 - Use eduClub-safe interactive HTML blocks. Do not include <script>, onclick, external libraries, external CSS, or unsafe links inside rich_html.
@@ -531,8 +578,17 @@ async function logUsage(user, payload) {
   return result.rows[0];
 }
 
-async function callOpenAiCompatibleProvider({ provider, messages }) {
+async function callOpenAiCompatibleProvider({
+  provider,
+  messages,
+  temperature = 0.35,
+}) {
   const endpoint = `${String(provider.base_url || "").replace(/\/$/, "")}/chat/completions`;
+  const configuredMaxTokens = Number(provider.config?.max_tokens || 12000);
+  const maxTokens =
+    Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
+      ? Math.floor(configuredMaxTokens)
+      : 12000;
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -542,7 +598,8 @@ async function callOpenAiCompatibleProvider({ provider, messages }) {
     body: JSON.stringify({
       model: provider.default_model,
       messages,
-      temperature: 0.35,
+      temperature,
+      max_tokens: maxTokens,
       response_format: { type: "json_object" },
     }),
   });
@@ -576,7 +633,20 @@ async function generateCourseBuilderDraft(payload = {}, user = {}) {
       provider,
       messages,
     });
-    const draft = normalizeCourseDraft(parseJsonDraft(providerResult.text));
+    let repairUsage = {};
+    const parsedDraft = await parseJsonDraftWithRepair(
+      providerResult.text,
+      async (repairMessages) => {
+        const repairResult = await callOpenAiCompatibleProvider({
+          provider,
+          messages: repairMessages,
+          temperature: 0,
+        });
+        repairUsage = repairResult.usage || {};
+        return repairResult.text;
+      },
+    );
+    const draft = normalizeCourseDraft(parsedDraft);
     const usage = providerResult.usage || {};
     await query(
       `UPDATE ai_usage_logs
@@ -586,9 +656,11 @@ async function generateCourseBuilderDraft(payload = {}, user = {}) {
            total_tokens = $3
        WHERE id = $4`,
       [
-        usage.prompt_tokens || 0,
-        usage.completion_tokens || 0,
-        usage.total_tokens || 0,
+        Number(usage.prompt_tokens || 0) +
+          Number(repairUsage.prompt_tokens || 0),
+        Number(usage.completion_tokens || 0) +
+          Number(repairUsage.completion_tokens || 0),
+        Number(usage.total_tokens || 0) + Number(repairUsage.total_tokens || 0),
         pendingLog.id,
       ],
     );
@@ -625,9 +697,22 @@ async function generateActivityContentDraft(payload = {}, user = {}) {
       provider,
       messages,
     });
+    let repairUsage = {};
+    const parsedActivity = await parseJsonDraftWithRepair(
+      providerResult.text,
+      async (repairMessages) => {
+        const repairResult = await callOpenAiCompatibleProvider({
+          provider,
+          messages: repairMessages,
+          temperature: 0,
+        });
+        repairUsage = repairResult.usage || {};
+        return repairResult.text;
+      },
+    );
     const activity = normalizeActivity({
       ...(payload.activity || {}),
-      ...parseJsonDraft(providerResult.text),
+      ...parsedActivity,
     });
     const usage = providerResult.usage || {};
     await query(
@@ -638,9 +723,11 @@ async function generateActivityContentDraft(payload = {}, user = {}) {
            total_tokens = $3
        WHERE id = $4`,
       [
-        usage.prompt_tokens || 0,
-        usage.completion_tokens || 0,
-        usage.total_tokens || 0,
+        Number(usage.prompt_tokens || 0) +
+          Number(repairUsage.prompt_tokens || 0),
+        Number(usage.completion_tokens || 0) +
+          Number(repairUsage.completion_tokens || 0),
+        Number(usage.total_tokens || 0) + Number(repairUsage.total_tokens || 0),
         pendingLog.id,
       ],
     );
@@ -699,10 +786,12 @@ async function applyCourseBuilderDraft(payload = {}) {
 module.exports = {
   buildActivityBuilderMessages,
   buildCourseBuilderMessages,
+  buildJsonRepairMessages,
   generateActivityContentDraft,
   generateCourseBuilderDraft,
   applyCourseBuilderDraft,
   normalizeCourseDraft,
   prepareDraftForAppend,
   parseJsonDraft,
+  parseJsonDraftWithRepair,
 };

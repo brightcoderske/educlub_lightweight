@@ -257,3 +257,45 @@ test("AI activity prompt is activity-aware and requests rich vanilla interactive
     process.env.DATABASE_URL = previousDatabaseUrl;
   }
 });
+
+test("AI JSON repair retries malformed rich HTML payloads before failing", async () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL =
+    previousDatabaseUrl || "postgres://user:pass@localhost:5432/test";
+  delete require.cache[
+    require.resolve("../src/services/aiCourseBuilder.service")
+  ];
+  const {
+    parseJsonDraftWithRepair,
+  } = require("../src/services/aiCourseBuilder.service");
+
+  const brokenJson =
+    '{"title":"Click Practice","content":{"rich_html":"<div data-hint-toggle="hint-1">Show hint</div>"}}';
+  const repairedJson =
+    '{"title":"Click Practice","content":{"rich_html":"<div data-hint-toggle=\'hint-1\'>Show hint</div>"}}';
+
+  const parsed = await parseJsonDraftWithRepair(
+    brokenJson,
+    async (repairMessages) => {
+      const repairPrompt = repairMessages
+        .map((message) => message.content)
+        .join("\n");
+      assert.match(repairPrompt, /Repair this invalid JSON/i);
+      assert.match(repairPrompt, /complete valid JSON/i);
+      assert.match(repairPrompt, /single-quoted HTML attributes/i);
+      return repairedJson;
+    },
+  );
+
+  assert.equal(parsed.title, "Click Practice");
+  assert.equal(
+    parsed.content.rich_html,
+    "<div data-hint-toggle='hint-1'>Show hint</div>",
+  );
+
+  if (previousDatabaseUrl === undefined) {
+    delete process.env.DATABASE_URL;
+  } else {
+    process.env.DATABASE_URL = previousDatabaseUrl;
+  }
+});
