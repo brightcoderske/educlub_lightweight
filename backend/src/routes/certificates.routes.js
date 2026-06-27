@@ -5,19 +5,20 @@ const { authenticateToken, requireRole } = require("../middleware");
 
 router.get("/", authenticateToken, certificatesController.getAllCertificates);
 router.get(
-  "/:id",
+  "/download/:id",
   authenticateToken,
-  certificatesController.getCertificateById
+  certificatesController.downloadCertificate
 );
 router.post(
   "/generate",
   authenticateToken,
+  requireRole("system_admin", "school_admin"),
   certificatesController.generateCertificate
 );
 router.get(
-  "/download/:id",
+  "/:id",
   authenticateToken,
-  certificatesController.downloadCertificate
+  certificatesController.getCertificateById
 );
 router.put(
   "/:id/approve",

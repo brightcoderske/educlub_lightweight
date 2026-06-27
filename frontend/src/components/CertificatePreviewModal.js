@@ -21,6 +21,7 @@ import { apiClient } from "lib/api";
 function CertificatePreviewModal({ open, onClose, certificateId }) {
   const [certificate, setCertificate] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
 
@@ -32,16 +33,19 @@ function CertificatePreviewModal({ open, onClose, certificateId }) {
     if (!open) {
       setZoom(1);
       setRotation(0);
+      setError("");
     }
   }, [open, certificateId]);
 
   const fetchCertificate = async () => {
     setLoading(true);
+    setError("");
     try {
       const response = await apiClient.get(`/certificates/${certificateId}`);
       setCertificate(response);
     } catch (error) {
       console.error("Failed to fetch certificate:", error);
+      setError(error.message || "Failed to fetch certificate.");
     } finally {
       setLoading(false);
     }
@@ -50,16 +54,32 @@ function CertificatePreviewModal({ open, onClose, certificateId }) {
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 0.2, 3));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 0.2, 0.5));
   const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
-  const handleDownload = () => {
-    if (certificate?.download_url) {
-      window.open(certificate.download_url, "_blank", "noopener,noreferrer");
+  const downloadPdf = async (openForPrint = false) => {
+    if (!certificate?.id) return;
+    setError("");
+    try {
+      const { blob, filename } = await apiClient.download(
+        `/certificates/download/${certificate.id}`
+      );
+      const url = URL.createObjectURL(blob);
+      if (openForPrint) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        return;
+      }
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename || `educlub-certificate-${certificate.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setError(downloadError.message || "Failed to download certificate.");
     }
   };
-  const handlePrint = () => {
-    if (certificate?.download_url) {
-      window.open(certificate.download_url, "_blank", "noopener,noreferrer");
-    }
-  };
+  const handleDownload = () => downloadPdf(false);
+  const handlePrint = () => downloadPdf(true);
 
   return (
     <Dialog
@@ -116,6 +136,11 @@ function CertificatePreviewModal({ open, onClose, certificateId }) {
           </MDBox>
         ) : certificate ? (
           <MDBox>
+            {error && (
+              <MDTypography variant="caption" color="error" display="block" mb={2}>
+                {error}
+              </MDTypography>
+            )}
             {/* Toolbar */}
             <Card sx={{ mb: 2, p: 2, bgcolor: "white" }}>
               <MDBox

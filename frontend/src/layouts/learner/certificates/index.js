@@ -9,7 +9,9 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 
 import DashboardIdentity from "components/DashboardIdentity";
+import CertificatePreviewModal from "components/CertificatePreviewModal";
 import MDBox from "components/MDBox";
+import MDButton from "components/MDButton";
 import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -23,6 +25,7 @@ function LearnerCertificates() {
   const [badges, setBadges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [previewCertificateId, setPreviewCertificateId] = useState(null);
 
   useEffect(() => {
     const loadCertificates = async () => {
@@ -114,6 +117,7 @@ function LearnerCertificates() {
                       <TableCell>Term</TableCell>
                       <TableCell>Academic Year</TableCell>
                       <TableCell>Status</TableCell>
+                      <TableCell align="center">Action</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -125,6 +129,16 @@ function LearnerCertificates() {
                         <TableCell>
                           <Chip label={certificate.status} color="info" size="small" />
                         </TableCell>
+                        <TableCell align="center">
+                          <MDButton
+                            variant="text"
+                            color="info"
+                            size="small"
+                            onClick={() => setPreviewCertificateId(certificate.id)}
+                          >
+                            Preview
+                          </MDButton>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -134,6 +148,11 @@ function LearnerCertificates() {
           </MDBox>
         </Card>
       </MDBox>
+      <CertificatePreviewModal
+        open={Boolean(previewCertificateId)}
+        certificateId={previewCertificateId}
+        onClose={() => setPreviewCertificateId(null)}
+      />
       <Footer />
     </DashboardLayout>
   );

@@ -869,8 +869,8 @@ CREATE TABLE IF NOT EXISTS certificates (
   course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
   term VARCHAR(50),
   academic_year INTEGER,
-  completion_status VARCHAR(50) DEFAULT 'pending' CHECK (completion_status IN ('pending', 'approved', 'issued')),
-  status VARCHAR(50) DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'issued')),
+  completion_status VARCHAR(50) DEFAULT 'completed' CHECK (completion_status IN ('completed', 'pending', 'approved', 'issued')),
+  status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'issued')),
   certificate_url TEXT,
   approved_by INTEGER REFERENCES users(id),
   approved_at TIMESTAMP,
@@ -1184,6 +1184,8 @@ CREATE INDEX IF NOT EXISTS idx_quiz_test_attempts_lookup ON quiz_test_attempts(q
 CREATE INDEX IF NOT EXISTS idx_certificates_learner_id ON certificates(learner_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_course_id ON certificates(course_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_learner_status ON certificates(learner_id, status, completion_status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_certificates_unique_award
+  ON certificates(learner_id, course_id, COALESCE(term, ''), COALESCE(academic_year::text, ''));
 CREATE INDEX IF NOT EXISTS idx_reports_learner_id ON reports(learner_id);
 CREATE INDEX IF NOT EXISTS idx_reports_learner_period_type ON reports(learner_id, academic_year, term, report_type);
 CREATE INDEX IF NOT EXISTS idx_report_feedback_period ON report_feedback(school_id, academic_year, term);

@@ -9,6 +9,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 
 import DashboardIdentity from "components/DashboardIdentity";
+import CertificatePreviewModal from "components/CertificatePreviewModal";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDTypography from "components/MDTypography";
@@ -24,6 +25,7 @@ function SchoolAdminCertificates() {
   const [certificates, setCertificates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [previewCertificateId, setPreviewCertificateId] = useState(null);
   const cacheKey = `school-admin:${user?.schoolId}:certificates`;
 
   const loadCertificates = async (background = false) => {
@@ -119,15 +121,25 @@ function SchoolAdminCertificates() {
                           <Chip label={certificate.status} color="info" size="small" />
                         </TableCell>
                         <TableCell align="center">
-                          <MDButton
-                            variant="text"
-                            color="success"
-                            size="small"
-                            disabled={certificate.status === "approved"}
-                            onClick={() => approveCertificate(certificate.id)}
-                          >
-                            Approve
-                          </MDButton>
+                          <MDBox display="flex" justifyContent="center" gap={1} flexWrap="wrap">
+                            <MDButton
+                              variant="text"
+                              color="info"
+                              size="small"
+                              onClick={() => setPreviewCertificateId(certificate.id)}
+                            >
+                              Preview
+                            </MDButton>
+                            <MDButton
+                              variant="text"
+                              color="success"
+                              size="small"
+                              disabled={certificate.status === "approved"}
+                              onClick={() => approveCertificate(certificate.id)}
+                            >
+                              Approve
+                            </MDButton>
+                          </MDBox>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -138,6 +150,11 @@ function SchoolAdminCertificates() {
           </MDBox>
         </Card>
       </MDBox>
+      <CertificatePreviewModal
+        open={Boolean(previewCertificateId)}
+        certificateId={previewCertificateId}
+        onClose={() => setPreviewCertificateId(null)}
+      />
       <Footer />
     </DashboardLayout>
   );

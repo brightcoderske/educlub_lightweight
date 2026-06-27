@@ -20,6 +20,7 @@ const {
 } = require("./codingChallenges.service");
 const moduleFeedbackService = require("./moduleFeedback.service");
 const teacherAssignmentsService = require("./teacherAssignments.service");
+const certificatesService = require("./certificates.service");
 const { normalizeActivityGrade } = require("./gradingPolicy");
 const {
   sanitizeActivityContent: sanitizeActivityContentForStorage,
@@ -1352,7 +1353,10 @@ async function upsertActivityProgress(
     throw new Error("Learner profile is not linked to this account.");
 
   const access = await query(
-    `SELECT la.id, la.module_id, la.points, la.activity_type, la.completion_rule, la.pass_score
+    `SELECT la.id, la.module_id, la.points, la.activity_type, la.completion_rule, la.pass_score,
+            cm.course_id,
+            ca.term AS allocation_term,
+            ca.academic_year AS allocation_academic_year
      FROM learning_activities la
      JOIN course_modules cm ON cm.id = la.module_id
      JOIN course_allocations ca ON ca.course_id = cm.course_id
@@ -1423,7 +1427,67 @@ async function upsertActivityProgress(
   } catch (error) {
     console.error("Module badge recalculation error:", error);
   }
-  return { ...result.rows[0], badge };
+
+  let certificate = null;
+  try {
+    certificate = await maybeCreateCourseCompletionCertificate({
+      learnerId: learner.id,
+      courseId: access.rows[0].course_id,
+      term: access.rows[0].allocation_term || learner.term,
+      academicYear:
+        access.rows[0].allocation_academic_year || learner.academic_year,
+    });
+  } catch (error) {
+    console.error("Course certificate completion check error:", error);
+  }
+
+  return { ...result.rows[0], badge, certificate };
+}
+
+async function maybeCreateCourseCompletionCertificate({
+  learnerId,
+  courseId,
+  term,
+  academicYear,
+} = {}) {
+  const summary = await query(
+    `SELECT c.certificate_enabled,
+            COUNT(la.id) FILTER (
+              WHERE COALESCE(la.availability_mode, 'required') = 'required'
+                AND la.is_published = true
+                AND cm.is_published = true
+            )::integer AS required_total,
+            COUNT(ap.id) FILTER (
+              WHERE COALESCE(la.availability_mode, 'required') = 'required'
+                AND la.is_published = true
+                AND cm.is_published = true
+                AND ap.status IN ('completed', 'graded')
+            )::integer AS required_done
+     FROM courses c
+     LEFT JOIN course_modules cm ON cm.course_id = c.id
+     LEFT JOIN learning_activities la ON la.module_id = cm.id
+     LEFT JOIN activity_progress ap
+       ON ap.activity_id = la.id
+      AND ap.learner_id = $2::integer
+     WHERE c.id = $1::integer
+     GROUP BY c.id, c.certificate_enabled`,
+    [courseId, learnerId]
+  );
+  const row = summary.rows[0];
+  if (
+    !row?.certificate_enabled ||
+    row.required_total <= 0 ||
+    row.required_done < row.required_total
+  ) {
+    return null;
+  }
+
+  return certificatesService.ensureCourseCompletionCertificate({
+    learnerId,
+    courseId,
+    term,
+    academicYear,
+  });
 }
 
 function toPositiveInteger(value, fallback, maxValue = null) {
@@ -1673,6 +1737,26 @@ async function gradeActivityForLearner(
     await recalculateModuleBadge(learnerId, activity.module_id);
   } catch (error) {
     console.error("Module badge recalculation error:", error);
+  }
+
+  try {
+    const allocation = await query(
+      `SELECT term, academic_year
+       FROM course_allocations
+       WHERE course_id = $1::integer
+         AND learner_id = $2::integer
+         AND status IN ('active', 'in_progress', 'completed')
+       LIMIT 1`,
+      [activity.course_id, learnerId]
+    );
+    await maybeCreateCourseCompletionCertificate({
+      learnerId,
+      courseId: activity.course_id,
+      term: allocation.rows[0]?.term,
+      academicYear: allocation.rows[0]?.academic_year,
+    });
+  } catch (error) {
+    console.error("Course certificate grade completion check error:", error);
   }
 
   return grade.rows[0];
