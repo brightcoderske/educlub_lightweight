@@ -25,7 +25,16 @@ import typography from "assets/theme/base/typography";
 
 function Footer() {
   const { size } = typography;
-  const links = ["System Admin", "School Admin", "Learner", "Reports", "Certificates"];
+  const links = [
+    { label: "Dashboard", href: "/learner" },
+    { label: "My Courses", href: "/learner/courses" },
+    { label: "Certificates", href: "/learner/certificates" },
+    { label: "Help", href: "/contact" },
+    { label: "Privacy", href: "/privacy" },
+    { label: "Terms", href: "/user-agreement" },
+    { label: "contact", href: "mailto:support@educlub.co.ke" },
+    { label: "share", href: "https://www.educlub.co.ke" },
+  ];
 
   return (
     <MDBox
@@ -49,7 +58,12 @@ function Footer() {
         fontSize={size.sm}
         px={1.5}
       >
-        &copy; 2026 eduClub LMS. Safe online learning and competitions for schools.
+        <MDTypography variant="caption" color="text" fontStyle="italic">
+          Every expert was once a beginner.
+        </MDTypography>
+        <MDTypography variant="caption" color="text" ml={1}>
+          &copy; 2026 EduClub &bull; Developed by Bright Coders
+        </MDTypography>
       </MDBox>
       <MDBox
         component="ul"
@@ -69,9 +83,18 @@ function Footer() {
         })}
       >
         {links.map((link) => (
-          <MDBox component="li" px={1.5} lineHeight={1} key={link}>
-            <MDTypography variant="button" fontWeight="regular" color="text">
-              {link}
+          <MDBox component="li" px={1.1} lineHeight={1} key={link.label}>
+            <MDTypography
+              component="a"
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="button"
+              fontWeight="regular"
+              color="text"
+              sx={{ textDecoration: "none" }}
+            >
+              {link.label}
             </MDTypography>
           </MDBox>
         ))}

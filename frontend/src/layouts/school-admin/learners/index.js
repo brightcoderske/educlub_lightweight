@@ -389,7 +389,9 @@ function SchoolAdminLearners() {
                       onChange={(event) =>
                         setPromotion((current) => ({ ...current, learner_id: event.target.value }))
                       }
+                      InputLabelProps={{ shrink: true }}
                       SelectProps={{ native: true }}
+                      helperText="Leave empty to match learners by grade and stream."
                     >
                       <option value="">All learners matching grade / stream</option>
                       {learners.map((learner) => (
@@ -409,8 +411,10 @@ function SchoolAdminLearners() {
                       onChange={(event) =>
                         setPromotion((current) => ({ ...current, grade: event.target.value }))
                       }
+                      InputLabelProps={{ shrink: true }}
                       SelectProps={{ native: true }}
                       disabled={Boolean(promotion.learner_id)}
+                      helperText="Used only when no specific learner is selected."
                     >
                       <option value="">Any grade</option>
                       {grades.map((grade) => (
@@ -429,8 +433,10 @@ function SchoolAdminLearners() {
                       onChange={(event) =>
                         setPromotion((current) => ({ ...current, stream: event.target.value }))
                       }
+                      InputLabelProps={{ shrink: true }}
                       SelectProps={{ native: true }}
                       disabled={Boolean(promotion.learner_id)}
+                      helperText="Optional class filter."
                     >
                       <option value="">Any stream</option>
                       {streams.map((stream) => (
@@ -452,7 +458,9 @@ function SchoolAdminLearners() {
                           next_grade: event.target.value,
                         }))
                       }
+                      InputLabelProps={{ shrink: true }}
                       SelectProps={{ native: true }}
+                      helperText="Leave empty if only changing term."
                     >
                       <option value="">Keep current grade</option>
                       {grades.map((grade) => (
@@ -471,7 +479,9 @@ function SchoolAdminLearners() {
                       onChange={(event) =>
                         setPromotion((current) => ({ ...current, next_term: event.target.value }))
                       }
+                      InputLabelProps={{ shrink: true }}
                       SelectProps={{ native: true }}
+                      helperText="Leave empty if only changing grade."
                     >
                       <option value="">Keep current term</option>
                       {terms.map((term) => (
@@ -493,7 +503,9 @@ function SchoolAdminLearners() {
                           academic_year: event.target.value,
                         }))
                       }
+                      InputLabelProps={{ shrink: true }}
                       SelectProps={{ native: true }}
+                      helperText="Target academic year."
                     >
                       {academicYears.map((year) => (
                         <option key={year} value={year}>
