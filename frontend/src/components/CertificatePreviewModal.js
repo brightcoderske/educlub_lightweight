@@ -226,57 +226,229 @@ function CertificatePreviewModal({ open, onClose, certificateId }) {
                   sx={{
                     width: "800px",
                     height: "600px",
-                    border: "8px solid #d4af37",
-                    borderRadius: "8px",
-                    p: 4,
+                    position: "relative",
+                    overflow: "hidden",
+                    border: "3px solid #d4af37",
+                    p: 5,
                     bgcolor: "#fff",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
                     boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+                    color: "#061a3a",
+                    "&::before": {
+                      content: '""',
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      width: 180,
+                      height: 210,
+                      background:
+                        "linear-gradient(135deg, #061a3a 0%, #071b3f 70%, transparent 71%)",
+                    },
+                    "&::after": {
+                      content: '""',
+                      position: "absolute",
+                      right: -35,
+                      top: -35,
+                      width: 160,
+                      height: 160,
+                      borderRadius: "50%",
+                      background:
+                        "radial-gradient(circle, #061a3a 0 43%, #d4af37 44% 53%, #f5c451 54% 65%, transparent 66%)",
+                      boxShadow: "0 8px 22px rgba(6, 26, 58, 0.2)",
+                    },
                   }}
                 >
-                  {/* Certificate Header */}
-                  <Box sx={{ textAlign: "center", mb: 3 }}>
-                    <Icon fontSize="large" color="warning" sx={{ mb: 1 }}>
-                      emoji_events
-                    </Icon>
-                    <MDTypography variant="h4" fontWeight="bold" color="dark">
-                      Certificate of Completion
-                    </MDTypography>
-                    <MDTypography variant="body2" color="text">
-                      This is to certify that
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      left: 24,
+                      bottom: 0,
+                      width: 320,
+                      height: 118,
+                      background:
+                        "linear-gradient(135deg, #061a3a 0%, #071b3f 58%, #d4af37 59%, #f5c451 62%, transparent 63%)",
+                    }}
+                  />
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      right: 54,
+                      top: 54,
+                      width: 78,
+                      height: 132,
+                      background: "linear-gradient(180deg, #f5c451, #d4af37)",
+                      clipPath: "polygon(0 0, 100% 0, 100% 76%, 50% 62%, 0 76%)",
+                    }}
+                  />
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      right: 42,
+                      top: 42,
+                      width: 100,
+                      height: 100,
+                      borderRadius: "50%",
+                      border: "8px solid #d4af37",
+                      bgcolor: "#061a3a",
+                      zIndex: 2,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      textAlign: "center",
+                      px: 1,
+                    }}
+                  >
+                    <MDTypography
+                      variant="caption"
+                      sx={{ color: "#f5c451", fontWeight: 800, lineHeight: 1.1 }}
+                    >
+                      EduClub Excellence
                     </MDTypography>
                   </Box>
 
-                  {/* Learner Name */}
-                  <Box sx={{ textAlign: "center", my: 2 }}>
-                    <MDTypography variant="h3" fontWeight="bold" color="primary">
-                      {certificate.learner_name}
-                    </MDTypography>
-                  </Box>
+                  <Box sx={{ position: "relative", zIndex: 1 }}>
+                    <Box display="flex" justifyContent="center" alignItems="center" gap={4} mb={4}>
+                      <Box display="flex" alignItems="center" gap={2} minWidth={260}>
+                        <Box
+                          sx={{
+                            width: 54,
+                            height: 62,
+                            borderRadius: 1,
+                            bgcolor: "#061a3a",
+                            border: "2px solid #d4af37",
+                            color: "#f5c451",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 800,
+                            fontSize: 24,
+                          }}
+                        >
+                          {(certificate.school_name || "S").slice(0, 1).toUpperCase()}
+                        </Box>
+                        <Box textAlign="left">
+                          <MDTypography variant="h6" sx={{ color: "#061a3a", fontWeight: 800 }}>
+                            {certificate.school_name || "Your School Name"}
+                          </MDTypography>
+                          <MDTypography
+                            variant="caption"
+                            sx={{ color: "#b8860b", letterSpacing: 2 }}
+                          >
+                            LEARN - LEAD - INSPIRE
+                          </MDTypography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ width: 1, height: 56, bgcolor: "#98a2b3" }} />
+                      <Box textAlign="left" minWidth={230}>
+                        <MDTypography variant="h4" sx={{ color: "#061a3a", fontWeight: 800 }}>
+                          educlub
+                        </MDTypography>
+                        <MDTypography variant="caption" sx={{ color: "#b8860b", letterSpacing: 2 }}>
+                          LEARN. SHARE. GROW.
+                        </MDTypography>
+                      </Box>
+                    </Box>
 
-                  {/* Course Info */}
-                  <Box sx={{ textAlign: "center", my: 2 }}>
-                    <MDTypography variant="body1" color="text">
-                      has successfully completed the course
-                    </MDTypography>
-                    <MDTypography variant="h5" fontWeight="bold" color="dark" sx={{ my: 1 }}>
-                      {certificate.course_name}
-                    </MDTypography>
-                    <MDTypography variant="body2" color="text">
-                      on {new Date(certificate.issued_date).toLocaleDateString()}
-                    </MDTypography>
-                  </Box>
+                    <Box sx={{ textAlign: "center" }}>
+                      <MDTypography
+                        variant="h1"
+                        sx={{
+                          color: "#061a3a",
+                          fontSize: "3rem",
+                          letterSpacing: 6,
+                          fontWeight: 800,
+                          mb: 0.5,
+                        }}
+                      >
+                        CERTIFICATE
+                      </MDTypography>
+                      <MDTypography
+                        variant="h5"
+                        sx={{ color: "#b8860b", letterSpacing: 5, fontWeight: 500 }}
+                      >
+                        OF COMPLETION
+                      </MDTypography>
+                      <MDTypography
+                        variant="button"
+                        sx={{
+                          color: "#061a3a",
+                          display: "block",
+                          mt: 3,
+                          letterSpacing: 1.4,
+                        }}
+                      >
+                        THIS CERTIFICATE IS PROUDLY PRESENTED TO
+                      </MDTypography>
+                      <MDTypography
+                        sx={{
+                          color: "#061a3a",
+                          fontFamily: "Georgia, serif",
+                          fontStyle: "italic",
+                          fontSize: "3rem",
+                          mt: 1,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {certificate.learner_name}
+                      </MDTypography>
+                      <Box
+                        sx={{ width: "52%", height: 1, bgcolor: "#d4af37", mx: "auto", my: 2 }}
+                      />
+                      <MDTypography variant="body1" sx={{ color: "#667085" }}>
+                        for successfully completing
+                      </MDTypography>
+                      <MDTypography variant="h4" sx={{ color: "#0b1633", fontWeight: 800, mt: 1 }}>
+                        {certificate.course_name}
+                      </MDTypography>
+                      <MDTypography variant="body2" sx={{ color: "#667085", mt: 1.5 }}>
+                        {[certificate.term, certificate.academic_year].filter(Boolean).join(" | ")}
+                        {certificate.term || certificate.academic_year ? " | " : ""}
+                        Issued: {new Date(certificate.issued_date).toLocaleDateString()}
+                      </MDTypography>
+                    </Box>
 
-                  {/* Decorative Border */}
-                  <Box sx={{ width: "60%", height: "2px", bgcolor: "#d4af37", my: 2 }} />
+                    <Box
+                      display="flex"
+                      justifyContent="space-between"
+                      alignItems="flex-end"
+                      sx={{ mt: 6, px: 10 }}
+                    >
+                      <Box textAlign="center">
+                        <Box sx={{ width: 150, height: 1, bgcolor: "#0b1633", mb: 1 }} />
+                        <MDTypography variant="button" sx={{ color: "#0b1633" }}>
+                          School Approval
+                        </MDTypography>
+                      </Box>
+                      <Box
+                        sx={{
+                          width: 92,
+                          height: 92,
+                          borderRadius: "50%",
+                          bgcolor: "#f5c451",
+                          border: "5px solid #d4af37",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          textAlign: "center",
+                          color: "#061a3a",
+                          fontWeight: 800,
+                          boxShadow: "0 6px 15px rgba(0,0,0,0.18)",
+                        }}
+                      >
+                        TOGETHER WE GROW
+                      </Box>
+                      <Box textAlign="center">
+                        <Box sx={{ width: 150, height: 1, bgcolor: "#0b1633", mb: 1 }} />
+                        <MDTypography variant="button" sx={{ color: "#0b1633" }}>
+                          EduClub
+                        </MDTypography>
+                      </Box>
+                    </Box>
 
-                  {/* Footer */}
-                  <Box sx={{ textAlign: "center", mt: 2 }}>
-                    <MDTypography variant="caption" color="text" sx={{ opacity: 0.7 }}>
-                      EduClub Learning Management System
+                    <MDTypography
+                      variant="caption"
+                      sx={{ color: "#667085", display: "block", textAlign: "center", mt: 3 }}
+                    >
+                      Certificate ID: CERT-{certificate.id}
                     </MDTypography>
                   </Box>
                 </Box>

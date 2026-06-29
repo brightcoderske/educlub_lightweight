@@ -39,3 +39,23 @@ test("certificate APIs are scoped and return authenticated PDF downloads", () =>
   assert.match(certificatesService, /assertCertificateAccess/);
   assert.match(certificatesService, /c\.status = 'approved'/);
 });
+
+test("certificate PDF and preview use the premium eduClub visual style", () => {
+  const certificatesService = read("../src/services/certificates.service.js");
+  const preview = read(
+    "../../frontend/src/components/CertificatePreviewModal.js"
+  );
+
+  for (const source of [certificatesService, preview]) {
+    assert.match(source, /#061a3a|#071b3f/);
+    assert.match(source, /#d4af37|#f5c451/);
+    assert.match(source, /EduClub Excellence/);
+    assert.match(source, /School Approval/);
+    assert.match(source, /Certificate ID/);
+  }
+
+  assert.match(certificatesService, /drawPremiumRibbon/);
+  assert.match(certificatesService, /drawSeal/);
+  assert.match(preview, /radial-gradient/);
+  assert.match(preview, /linear-gradient\(135deg/);
+});

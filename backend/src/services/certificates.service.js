@@ -1,5 +1,16 @@
+const fs = require("fs");
+const path = require("path");
 const PDFDocument = require("pdfkit");
 const { query } = require("../config");
+
+const CERTIFICATE_COLORS = {
+  navy: "#061a3a",
+  navySoft: "#0a2a5c",
+  gold: "#d4af37",
+  goldLight: "#f5c451",
+  ink: "#0b1633",
+  muted: "#667085",
+};
 
 const CERTIFICATE_SELECT = `
   SELECT c.*,
@@ -268,15 +279,189 @@ async function approveCertificate(id, approvedBy, user = {}) {
   return getCertificateRow(id);
 }
 
+function getUploadLocalPath(fileUrl) {
+  if (!fileUrl || typeof fileUrl !== "string") return null;
+  let uploadPath = fileUrl;
+  try {
+    if (/^https?:\/\//i.test(fileUrl)) {
+      uploadPath = new URL(fileUrl).pathname;
+    }
+  } catch (error) {
+    uploadPath = fileUrl;
+  }
+  if (!uploadPath.startsWith("/uploads/")) return null;
+  return path.join(__dirname, "../..", uploadPath);
+}
+
 function drawCenteredText(doc, text, y, options = {}) {
   doc
     .font(options.font || "Helvetica")
     .fontSize(options.size || 18)
-    .fillColor(options.color || "#24324b")
-    .text(text, 60, y, {
-      width: doc.page.width - 120,
+    .fillColor(options.color || CERTIFICATE_COLORS.ink)
+    .text(String(text || ""), options.x || 60, y, {
+      width: options.width || doc.page.width - 120,
       align: "center",
+      characterSpacing: options.characterSpacing || 0,
     });
+}
+
+function drawSchoolMark(doc, certificate, x, y) {
+  const localLogo = getUploadLocalPath(certificate.school_logo_url);
+  if (localLogo && fs.existsSync(localLogo)) {
+    doc.image(localLogo, x, y, { width: 54, height: 54, fit: [54, 54] });
+  } else {
+    doc
+      .roundedRect(x, y, 54, 60, 6)
+      .fill(CERTIFICATE_COLORS.navy)
+      .strokeColor(CERTIFICATE_COLORS.gold)
+      .lineWidth(2)
+      .stroke();
+    doc
+      .fillColor(CERTIFICATE_COLORS.goldLight)
+      .font("Helvetica-Bold")
+      .fontSize(24)
+      .text(
+        (certificate.school_name || "S").slice(0, 1).toUpperCase(),
+        x,
+        y + 17,
+        {
+          width: 54,
+          align: "center",
+        }
+      );
+  }
+
+  doc
+    .fillColor(CERTIFICATE_COLORS.navy)
+    .font("Helvetica-Bold")
+    .fontSize(15)
+    .text(
+      String(certificate.school_name || "Your School").toUpperCase(),
+      x + 68,
+      y + 10,
+      {
+        width: 190,
+        align: "left",
+      }
+    );
+  doc
+    .fillColor(CERTIFICATE_COLORS.gold)
+    .font("Helvetica")
+    .fontSize(7.5)
+    .text("LEARN - LEAD - INSPIRE", x + 70, y + 48, {
+      width: 180,
+      align: "left",
+      characterSpacing: 1.4,
+    });
+}
+
+function drawEduClubBrand(doc, x, y) {
+  doc
+    .strokeColor(CERTIFICATE_COLORS.navy)
+    .lineWidth(3)
+    .moveTo(x, y + 46)
+    .quadraticCurveTo(x + 20, y + 20, x + 42, y + 46)
+    .moveTo(x + 48, y + 46)
+    .quadraticCurveTo(x + 70, y + 20, x + 92, y + 46)
+    .stroke();
+  doc
+    .strokeColor(CERTIFICATE_COLORS.gold)
+    .lineWidth(5)
+    .moveTo(x + 46, y + 50)
+    .lineTo(x + 46, y + 20)
+    .stroke();
+  doc.circle(x + 46, y + 12, 5).fill(CERTIFICATE_COLORS.gold);
+  doc
+    .fillColor(CERTIFICATE_COLORS.navy)
+    .font("Helvetica-Bold")
+    .fontSize(27)
+    .text("educlub", x + 108, y + 21, { width: 150 });
+  doc
+    .fillColor(CERTIFICATE_COLORS.gold)
+    .font("Helvetica")
+    .fontSize(7.5)
+    .text("LEARN. SHARE. GROW.", x + 111, y + 55, {
+      width: 150,
+      characterSpacing: 2,
+    });
+}
+
+function drawSeal(doc, x, y, radius, label = "EduClub Excellence") {
+  doc.circle(x, y, radius + 8).fill(CERTIFICATE_COLORS.goldLight);
+  doc.circle(x, y, radius + 3).fill(CERTIFICATE_COLORS.gold);
+  doc.circle(x, y, radius).fill(CERTIFICATE_COLORS.navy);
+  doc
+    .circle(x, y, radius - 7)
+    .strokeColor(CERTIFICATE_COLORS.goldLight)
+    .lineWidth(1.2)
+    .stroke();
+  const sealLines = String(label || "")
+    .toUpperCase()
+    .replace("EDUCLUB EXCELLENCE", "EDUCLUB\nEXCELLENCE")
+    .replace("TOGETHER WE GROW", "TOGETHER\nWE\nGROW");
+  doc
+    .fillColor(CERTIFICATE_COLORS.goldLight)
+    .font("Helvetica-Bold")
+    .fontSize(radius > 40 ? 10 : 9)
+    .text(sealLines, x - radius + 8, y - 13, {
+      width: radius * 2 - 16,
+      align: "center",
+      lineGap: 1,
+    });
+  doc
+    .fontSize(18)
+    .text("*", x - 8, y - radius + 9, { width: 16, align: "center" });
+}
+
+function drawPremiumRibbon(doc, width, height) {
+  doc.save();
+  doc
+    .moveTo(0, 0)
+    .lineTo(178, 0)
+    .quadraticCurveTo(112, 96, 0, 178)
+    .lineTo(0, 0)
+    .fill(CERTIFICATE_COLORS.navy);
+  doc
+    .moveTo(0, height)
+    .lineTo(0, height - 176)
+    .quadraticCurveTo(122, height - 58, 268, height)
+    .lineTo(0, height)
+    .fill(CERTIFICATE_COLORS.navy);
+  doc
+    .strokeColor(CERTIFICATE_COLORS.goldLight)
+    .lineWidth(10)
+    .moveTo(140, 0)
+    .quadraticCurveTo(78, 82, 0, 138)
+    .stroke();
+  doc
+    .strokeColor(CERTIFICATE_COLORS.gold)
+    .lineWidth(7)
+    .moveTo(0, height - 115)
+    .quadraticCurveTo(120, height - 35, 320, height - 28)
+    .stroke();
+  doc
+    .moveTo(width - 170, 0)
+    .lineTo(width - 64, 0)
+    .lineTo(width, 62)
+    .lineTo(width, 110)
+    .lineTo(width - 170, 0)
+    .fill(CERTIFICATE_COLORS.goldLight);
+  doc
+    .moveTo(width - 112, 0)
+    .lineTo(width - 28, 0)
+    .lineTo(width, 28)
+    .lineTo(width, 78)
+    .lineTo(width - 112, 0)
+    .fill(CERTIFICATE_COLORS.gold);
+  doc
+    .moveTo(width - 122, 92)
+    .lineTo(width - 62, 92)
+    .lineTo(width - 62, 174)
+    .lineTo(width - 92, 150)
+    .lineTo(width - 122, 174)
+    .lineTo(width - 122, 92)
+    .fill(CERTIFICATE_COLORS.gold);
+  doc.restore();
 }
 
 function buildCertificatePdf(certificate) {
@@ -297,42 +482,73 @@ function buildCertificatePdf(certificate) {
     doc.on("error", reject);
 
     const { width, height } = doc.page;
+    doc.rect(0, 0, width, height).fill("#ffffff");
+    drawPremiumRibbon(doc, width, height);
     doc
-      .rect(24, 24, width - 48, height - 48)
-      .lineWidth(3)
-      .stroke("#f59e0b");
+      .rect(14, 14, width - 28, height - 28)
+      .lineWidth(1.2)
+      .stroke(CERTIFICATE_COLORS.gold);
     doc
-      .rect(38, 38, width - 76, height - 76)
-      .lineWidth(1)
-      .stroke("#2563eb");
+      .rect(44, 44, width - 88, height - 88)
+      .lineWidth(0.8)
+      .stroke(CERTIFICATE_COLORS.goldLight);
 
-    drawCenteredText(doc, certificate.school_name || "EduClub", 68, {
+    drawSchoolMark(doc, certificate, 205, 70);
+    doc
+      .strokeColor("#98a2b3")
+      .lineWidth(0.8)
+      .moveTo(418, 73)
+      .lineTo(418, 128)
+      .stroke();
+    drawEduClubBrand(doc, 458, 70);
+    drawSeal(doc, width - 92, 88, 45, "EduClub Excellence");
+
+    drawCenteredText(doc, "CERTIFICATE", 164, {
       font: "Helvetica-Bold",
-      size: 20,
-      color: "#2563eb",
+      size: 44,
+      color: CERTIFICATE_COLORS.navy,
+      characterSpacing: 5,
     });
-    drawCenteredText(doc, "Certificate of Completion", 112, {
+    doc
+      .strokeColor(CERTIFICATE_COLORS.gold)
+      .lineWidth(1.1)
+      .moveTo(250, 236)
+      .lineTo(318, 236)
+      .moveTo(width - 318, 236)
+      .lineTo(width - 250, 236)
+      .stroke();
+    drawCenteredText(doc, "OF COMPLETION", 214, {
+      font: "Helvetica",
+      size: 18,
+      color: CERTIFICATE_COLORS.gold,
+      characterSpacing: 5,
+    });
+    drawCenteredText(doc, "THIS CERTIFICATE IS PROUDLY PRESENTED TO", 262, {
+      font: "Helvetica",
+      size: 12,
+      color: CERTIFICATE_COLORS.navy,
+      characterSpacing: 1.2,
+    });
+    drawCenteredText(doc, certificate.learner_name || "Learner", 288, {
+      font: "Times-Italic",
+      size: 40,
+      color: CERTIFICATE_COLORS.navy,
+    });
+    doc
+      .strokeColor(CERTIFICATE_COLORS.gold)
+      .lineWidth(0.9)
+      .moveTo(220, 336)
+      .lineTo(width - 220, 336)
+      .stroke();
+    drawCenteredText(doc, "for successfully completing", 358, {
+      font: "Helvetica",
+      size: 12,
+      color: CERTIFICATE_COLORS.muted,
+    });
+    drawCenteredText(doc, certificate.course_name || "Course", 386, {
       font: "Helvetica-Bold",
-      size: 34,
-      color: "#111827",
-    });
-    drawCenteredText(doc, "This is proudly awarded to", 170, {
-      size: 15,
-      color: "#6b7280",
-    });
-    drawCenteredText(doc, certificate.learner_name || "Learner", 205, {
-      font: "Helvetica-Bold",
-      size: 32,
-      color: "#0f766e",
-    });
-    drawCenteredText(doc, "for successfully completing", 268, {
-      size: 15,
-      color: "#6b7280",
-    });
-    drawCenteredText(doc, certificate.course_name || "Course", 300, {
-      font: "Helvetica-Bold",
-      size: 24,
-      color: "#24324b",
+      size: 22,
+      color: CERTIFICATE_COLORS.ink,
     });
 
     const date = certificate.issued_date
@@ -344,32 +560,45 @@ function buildCertificatePdf(certificate) {
     drawCenteredText(
       doc,
       `${period ? `${period} | ` : ""}Issued: ${date}`,
-      360,
+      423,
       {
-        size: 13,
-        color: "#6b7280",
+        size: 10.5,
+        color: CERTIFICATE_COLORS.muted,
       }
     );
 
-    doc.moveTo(165, 430).lineTo(330, 430).stroke("#111827");
+    doc.moveTo(162, 486).lineTo(316, 486).stroke(CERTIFICATE_COLORS.ink);
     doc
-      .moveTo(width - 330, 430)
-      .lineTo(width - 165, 430)
-      .stroke("#111827");
+      .moveTo(width - 316, 486)
+      .lineTo(width - 162, 486)
+      .stroke(CERTIFICATE_COLORS.ink);
     doc
       .font("Helvetica")
       .fontSize(10)
-      .fillColor("#6b7280")
-      .text("School Approval", 165, 440, { width: 165, align: "center" })
-      .text("EduClub", width - 330, 440, { width: 165, align: "center" });
+      .fillColor(CERTIFICATE_COLORS.ink)
+      .text("School Approval", 158, 496, { width: 165, align: "center" })
+      .text("EduClub", width - 324, 496, { width: 165, align: "center" });
+    doc
+      .fontSize(8)
+      .fillColor(CERTIFICATE_COLORS.muted)
+      .text(certificate.school_name || "School", 158, 511, {
+        width: 165,
+        align: "center",
+      })
+      .text("Learn. Share. Grow.", width - 324, 511, {
+        width: 165,
+        align: "center",
+      });
+
+    drawSeal(doc, width / 2, 490, 34, "Together We Grow");
 
     drawCenteredText(
       doc,
       `Certificate ID: CERT-${certificate.id}`,
-      height - 82,
+      height - 44,
       {
         size: 9,
-        color: "#6b7280",
+        color: CERTIFICATE_COLORS.muted,
       }
     );
 
