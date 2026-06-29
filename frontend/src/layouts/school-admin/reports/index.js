@@ -6,6 +6,9 @@ import MDButton from "components/MDButton";
 import MDTypography from "components/MDTypography";
 import MDInput from "components/MDInput";
 import Card from "@mui/material/Card";
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Divider from "@mui/material/Divider";
 import DashboardIdentity from "components/DashboardIdentity";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -28,6 +31,24 @@ const feedbackTemplates = [
   "Keep going, {learnerName}. Small improvements each week will lead to strong results.",
 ];
 
+const defaultReportSettings = {
+  show_weekly_typing: true,
+  show_weekly_quizzes: true,
+  show_active_courses: true,
+  show_competitions: true,
+  show_badges: true,
+  show_teacher_feedback: true,
+};
+
+const reportSettingOptions = [
+  ["show_weekly_typing", "Weekly typing"],
+  ["show_weekly_quizzes", "Weekly quizzes"],
+  ["show_active_courses", "Active courses"],
+  ["show_competitions", "Competitions"],
+  ["show_badges", "Badges"],
+  ["show_teacher_feedback", "Teacher feedback"],
+];
+
 function Reports() {
   const { user, isSchoolAdmin } = useAuth();
   const [reportType, setReportType] = useState("single"); // single, class, school
@@ -45,6 +66,9 @@ function Reports() {
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackTemplate, setFeedbackTemplate] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
+  const [reportSettings, setReportSettings] = useState(defaultReportSettings);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState("");
   const isStaff = isSchoolAdmin() || user?.role === "teacher";
   const optionsCacheKey = `school-admin:${user?.schoolId}:reports-options`;
 
@@ -54,15 +78,22 @@ function Reports() {
       if (cached) {
         setLearners(cached.learners || []);
         setTerms(cached.terms || []);
+        setReportSettings(cached.reportSettings || defaultReportSettings);
       }
       try {
-        const [learnersRes, termsRes] = await Promise.all([
+        const [learnersRes, termsRes, settingsRes] = await Promise.all([
           apiClient.get(`/learners?school_id=${user?.schoolId}`),
           apiClient.get("/academic/terms"),
+          apiClient.get("/reports/settings"),
         ]);
         setLearners(learnersRes);
         setTerms(termsRes);
-        setCachedPage(optionsCacheKey, { learners: learnersRes, terms: termsRes });
+        setReportSettings(settingsRes || defaultReportSettings);
+        setCachedPage(optionsCacheKey, {
+          learners: learnersRes,
+          terms: termsRes,
+          reportSettings: settingsRes || defaultReportSettings,
+        });
         const activeTerm = termsRes.find((item) => item.is_active) || termsRes[0];
         if (activeTerm) {
           setTerm(activeTerm.name);
@@ -137,6 +168,38 @@ function Reports() {
       setError(err.message);
     } finally {
       setFeedbackSaving(false);
+    }
+  };
+
+  const updateReportSetting = (key) => {
+    setSettingsMessage("");
+    setReportSettings((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
+
+  const saveReportSettings = async () => {
+    if (!isSchoolAdmin()) return;
+    setSettingsSaving(true);
+    setSettingsMessage("");
+    setError("");
+    try {
+      const saved = await apiClient.put("/reports/settings", {
+        settings: reportSettings,
+      });
+      const nextSettings = saved || reportSettings;
+      setReportSettings(nextSettings);
+      setCachedPage(optionsCacheKey, {
+        learners,
+        terms,
+        reportSettings: nextSettings,
+      });
+      setSettingsMessage("Report card sections updated.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -287,6 +350,63 @@ function Reports() {
                   >
                     Whole School
                   </MDButton>
+                </MDBox>
+
+                <Divider sx={{ my: 2 }} />
+
+                <MDBox mb={2}>
+                  <MDBox
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    gap={2}
+                    flexWrap="wrap"
+                    mb={1}
+                  >
+                    <MDBox>
+                      <MDTypography variant="h6">Report Sections</MDTypography>
+                      <MDTypography variant="caption" color="text">
+                        Choose what appears on generated report cards for this school.
+                      </MDTypography>
+                    </MDBox>
+                    {isSchoolAdmin() && (
+                      <MDButton
+                        variant="outlined"
+                        color="info"
+                        size="small"
+                        onClick={saveReportSettings}
+                        disabled={settingsSaving}
+                      >
+                        {settingsSaving ? "Saving..." : "Save Sections"}
+                      </MDButton>
+                    )}
+                  </MDBox>
+                  <Grid container spacing={1}>
+                    {reportSettingOptions.map(([key, label]) => (
+                      <Grid item xs={12} sm={6} md={4} key={key}>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={Boolean(reportSettings[key])}
+                              onChange={() => updateReportSetting(key)}
+                              disabled={!isSchoolAdmin() || settingsSaving}
+                            />
+                          }
+                          label={label}
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                  {user?.role === "teacher" && (
+                    <MDTypography variant="caption" color="text">
+                      Report sections are controlled by the school admin.
+                    </MDTypography>
+                  )}
+                  {settingsMessage && (
+                    <MDTypography variant="caption" color="success" display="block">
+                      {settingsMessage}
+                    </MDTypography>
+                  )}
                 </MDBox>
 
                 {reportType === "single" && (

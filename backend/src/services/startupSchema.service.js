@@ -3,6 +3,7 @@ const { ensureAiDefaults } = require("./aiSettings.service");
 
 const statements = [
   "ALTER TABLE IF EXISTS schools ADD COLUMN IF NOT EXISTS is_independent_school BOOLEAN DEFAULT FALSE",
+  `ALTER TABLE IF EXISTS schools ADD COLUMN IF NOT EXISTS report_card_settings JSONB DEFAULT '{"show_weekly_typing":true,"show_weekly_quizzes":true,"show_active_courses":true,"show_competitions":true,"show_badges":true,"show_teacher_feedback":true}'::jsonb`,
   "ALTER TABLE IF EXISTS courses ADD COLUMN IF NOT EXISTS school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL",
   "ALTER TABLE IF EXISTS courses ADD COLUMN IF NOT EXISTS code VARCHAR(80)",
   "ALTER TABLE IF EXISTS courses ADD COLUMN IF NOT EXISTS target_level VARCHAR(80)",

@@ -12,11 +12,13 @@ CREATE TABLE IF NOT EXISTS schools (
   logo_url TEXT,
   allow_self_registration BOOLEAN DEFAULT FALSE,
   is_independent_school BOOLEAN DEFAULT FALSE,
+  report_card_settings JSONB DEFAULT '{"show_weekly_typing":true,"show_weekly_quizzes":true,"show_active_courses":true,"show_competitions":true,"show_badges":true,"show_teacher_feedback":true}'::jsonb,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ALTER TABLE schools ADD COLUMN IF NOT EXISTS is_independent_school BOOLEAN DEFAULT FALSE;
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS report_card_settings JSONB DEFAULT '{"show_weekly_typing":true,"show_weekly_quizzes":true,"show_active_courses":true,"show_competitions":true,"show_badges":true,"show_teacher_feedback":true}'::jsonb;
 
 INSERT INTO schools (name, code, email, allow_self_registration, is_independent_school, is_active)
 VALUES ('eduClub Independent Learners', 'EDUCLUB-INDEPENDENT', 'support@educlub.co.ke', true, true, true)

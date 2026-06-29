@@ -33,6 +33,18 @@ router.put(
   requireRole("system_admin", "school_admin", "teacher"),
   reportsController.saveReportFeedback
 );
+router.get(
+  "/settings",
+  authenticateToken,
+  requireRole("system_admin", "school_admin", "teacher"),
+  reportsController.getReportCardSettings
+);
+router.put(
+  "/settings",
+  authenticateToken,
+  requireRole("system_admin", "school_admin"),
+  reportsController.saveReportCardSettings
+);
 
 // PDF Report Generation Routes
 router.get(

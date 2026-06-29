@@ -82,12 +82,9 @@ async function listCompetitionsForLearner(userId) {
   const result = await query(
     `WITH ranked_results AS (
        SELECT cr.*,
-              COALESCE(
-                cr.rank,
-                RANK() OVER (
-                  PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
-                  ORDER BY cr.total_score DESC NULLS LAST
-                )
+              RANK() OVER (
+                PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
+                ORDER BY cr.total_score DESC NULLS LAST
               ) AS calculated_rank,
               COUNT(*) OVER (
                 PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
@@ -483,12 +480,9 @@ async function getSchoolCompetitionReport(schoolId, filters = {}) {
             cr.typing_wpm,
             cr.typing_accuracy,
             cr.total_score,
-            COALESCE(
-              cr.rank,
-              RANK() OVER (
-                PARTITION BY ce.competition_id, COALESCE(cr.result_stage, $6), l.grade
-                ORDER BY cr.total_score DESC NULLS LAST
-              )
+            RANK() OVER (
+              PARTITION BY ce.competition_id, COALESCE(cr.result_stage, $6), l.grade
+              ORDER BY cr.total_score DESC NULLS LAST
             ) AS rank,
             COUNT(cr.id) OVER (
               PARTITION BY ce.competition_id, COALESCE(cr.result_stage, $6), l.grade
@@ -535,12 +529,9 @@ async function getLearnerCompetitionPerformance(
   const result = await query(
     `WITH ranked_results AS (
        SELECT cr.*,
-              COALESCE(
-                cr.rank,
-                RANK() OVER (
-                  PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
-                  ORDER BY cr.total_score DESC NULLS LAST
-                )
+              RANK() OVER (
+                PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
+                ORDER BY cr.total_score DESC NULLS LAST
               ) AS calculated_rank,
               COUNT(*) OVER (
                 PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade

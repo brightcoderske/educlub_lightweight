@@ -27,7 +27,7 @@ async function ensureLearnerAccess(req, learnerId) {
     try {
       await teacherAssignmentsService.assertTeacherLearnerAccess(
         req.user,
-        learnerId,
+        learnerId
       );
       return true;
     } catch (error) {
@@ -119,7 +119,7 @@ async function getCourseReports(req, res) {
     if (req.user.role === "teacher") {
       await teacherAssignmentsService.assertTeacherCourseAccess(
         req.user,
-        req.params.courseId,
+        req.params.courseId
       );
     }
     const result = await query(
@@ -178,7 +178,9 @@ async function getReportFeedback(req, res) {
       return res.status(403).json({ error: "Learner is outside your access" });
     }
     if (!term || !academicYear) {
-      return res.status(400).json({ error: "Term and academic year are required." });
+      return res
+        .status(400)
+        .json({ error: "Term and academic year are required." });
     }
 
     const feedback = await reportsService.getReportFeedback(
@@ -186,7 +188,14 @@ async function getReportFeedback(req, res) {
       term,
       academicYear
     );
-    res.json(feedback || { learner_id: Number(learnerId), term, academic_year: Number(academicYear), comment_text: "" });
+    res.json(
+      feedback || {
+        learner_id: Number(learnerId),
+        term,
+        academic_year: Number(academicYear),
+        comment_text: "",
+      }
+    );
   } catch (error) {
     console.error("Get report feedback error:", error);
     res.status(500).json({ error: "Failed to load report feedback" });
@@ -202,7 +211,9 @@ async function saveReportFeedback(req, res) {
       return res.status(403).json({ error: "Learner is outside your access" });
     }
     if (!term || !academicYear) {
-      return res.status(400).json({ error: "Term and academic year are required." });
+      return res
+        .status(400)
+        .json({ error: "Term and academic year are required." });
     }
 
     const saved = await reportsService.saveReportFeedback(
@@ -224,6 +235,41 @@ async function saveReportFeedback(req, res) {
   } catch (error) {
     console.error("Save report feedback error:", error);
     res.status(500).json({ error: "Failed to save report feedback" });
+  }
+}
+
+function resolveSettingsSchoolId(req) {
+  return req.user.role === "system_admin"
+    ? req.query.school_id || req.body?.school_id
+    : req.user.schoolId;
+}
+
+async function getReportCardSettings(req, res) {
+  try {
+    const schoolId = resolveSettingsSchoolId(req);
+    if (!schoolId) {
+      return res.status(400).json({ error: "School is required" });
+    }
+    const settings = await reportsService.getReportCardSettings(schoolId);
+    res.json(settings);
+  } catch (error) {
+    console.error("Get report card settings error:", error);
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+}
+
+async function saveReportCardSettings(req, res) {
+  try {
+    const schoolId = resolveSettingsSchoolId(req);
+    const settings = await reportsService.saveReportCardSettings(
+      req.user,
+      schoolId,
+      req.body.settings || req.body
+    );
+    res.json(settings);
+  } catch (error) {
+    console.error("Save report card settings error:", error);
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 }
 
@@ -385,6 +431,8 @@ module.exports = {
   generateReport,
   getReportFeedback,
   saveReportFeedback,
+  getReportCardSettings,
+  saveReportCardSettings,
   generateLearnerReportPDF,
   generateClassReportsPDF,
   generateSchoolReportsPDF,

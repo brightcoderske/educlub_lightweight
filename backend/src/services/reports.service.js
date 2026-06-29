@@ -4,6 +4,89 @@ const archiver = require("archiver");
 const fs = require("fs");
 const path = require("path");
 const courseProgressService = require("./courseProgress.service");
+const { getBadgeTier } = require("./moduleBadges.service");
+const { getTypingBadge } = require("./typingBadges");
+
+const DEFAULT_REPORT_CARD_SETTINGS = Object.freeze({
+  show_weekly_typing: true,
+  show_weekly_quizzes: true,
+  show_active_courses: true,
+  show_competitions: true,
+  show_badges: true,
+  show_teacher_feedback: true,
+});
+
+function normalizeReportCardSettings(settings = {}) {
+  const source =
+    settings && typeof settings === "object" && !Array.isArray(settings)
+      ? settings
+      : {};
+  return Object.fromEntries(
+    Object.entries(DEFAULT_REPORT_CARD_SETTINGS).map(([key, value]) => [
+      key,
+      source[key] === undefined ? value : Boolean(source[key]),
+    ])
+  );
+}
+
+async function ensureReportCardSettingsColumn() {
+  await query(
+    `ALTER TABLE IF EXISTS schools
+     ADD COLUMN IF NOT EXISTS report_card_settings JSONB
+     DEFAULT '{"show_weekly_typing":true,"show_weekly_quizzes":true,"show_active_courses":true,"show_competitions":true,"show_badges":true,"show_teacher_feedback":true}'::jsonb`
+  );
+}
+
+async function getReportCardSettings(schoolId) {
+  if (!schoolId) return normalizeReportCardSettings();
+  await ensureReportCardSettingsColumn();
+  const result = await query(
+    "SELECT report_card_settings FROM schools WHERE id = $1 LIMIT 1",
+    [schoolId]
+  );
+  return normalizeReportCardSettings(result.rows[0]?.report_card_settings);
+}
+
+async function saveReportCardSettings(user, schoolId, settings) {
+  if (!user || !["system_admin", "school_admin"].includes(user.role)) {
+    const error = new Error(
+      "Only school admins can update report card settings."
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+  const targetSchoolId =
+    user.role === "system_admin" ? Number(schoolId) : Number(user.schoolId);
+  if (!targetSchoolId) {
+    const error = new Error("School is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (
+    user.role === "school_admin" &&
+    Number(targetSchoolId) !== Number(user.schoolId)
+  ) {
+    const error = new Error("School is outside your access.");
+    error.statusCode = 403;
+    throw error;
+  }
+  const normalized = normalizeReportCardSettings(settings);
+  await ensureReportCardSettingsColumn();
+  const result = await query(
+    `UPDATE schools
+     SET report_card_settings = $2::jsonb,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+     RETURNING report_card_settings`,
+    [targetSchoolId, JSON.stringify(normalized)]
+  );
+  if (!result.rows[0]) {
+    const error = new Error("School not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+  return normalizeReportCardSettings(result.rows[0].report_card_settings);
+}
 
 async function ensureReportFeedbackTable() {
   await query(`
@@ -292,7 +375,7 @@ function drawSectionTitle(doc, number, title, x, y, width) {
     .fillColor("white")
     .font("Helvetica-Bold")
     .fontSize(11)
-    .text(`${number}. ${title}`, x + 10, y + 9);
+    .text(number ? `${number}. ${title}` : title, x + 10, y + 9);
 }
 
 function drawLineChart(doc, rows, key, x, y, width, height, suffix = "") {
@@ -303,7 +386,9 @@ function drawLineChart(doc, rows, key, x, y, width, height, suffix = "") {
         ? null
         : Number(row[key]),
   }));
-  const data = axis.filter((row) => row.value !== null && !Number.isNaN(row.value));
+  const data = axis.filter(
+    (row) => row.value !== null && !Number.isNaN(row.value)
+  );
 
   doc.strokeColor("#c6ccd8").lineWidth(1);
   doc
@@ -316,9 +401,13 @@ function drawLineChart(doc, rows, key, x, y, width, height, suffix = "") {
   const plotRight = x + width - 28;
   const plotTop = y + 18;
   const plotBottom = y + height - 25;
-  const step = axis.length === 1 ? 0 : (plotRight - plotLeft) / Math.max(axis.length - 1, 1);
+  const step =
+    axis.length === 1
+      ? 0
+      : (plotRight - plotLeft) / Math.max(axis.length - 1, 1);
   axis.forEach((item, index) => {
-    const labelX = axis.length === 1 ? (plotLeft + plotRight) / 2 : plotLeft + index * step;
+    const labelX =
+      axis.length === 1 ? (plotLeft + plotRight) / 2 : plotLeft + index * step;
     doc
       .fillColor("#4d5b73")
       .font("Helvetica")
@@ -371,6 +460,173 @@ function drawLineChart(doc, rows, key, x, y, width, height, suffix = "") {
   });
 }
 
+function ensurePageSpace(doc, y, neededHeight) {
+  if (y + neededHeight <= 760) return y;
+  drawReportFooter(doc);
+  doc.addPage();
+  return 55;
+}
+
+function drawBadgeGrid(doc, badges, y) {
+  let cursorY = ensurePageSpace(doc, y, 74);
+  drawSectionTitle(doc, "", "BADGES EARNED THIS TERM", 55, cursorY, 485);
+  cursorY += 42;
+
+  if (badges.length === 0) {
+    doc
+      .roundedRect(55, cursorY - 8, 485, 40, 7)
+      .fill("#f7faff")
+      .strokeColor("#dbe5f5")
+      .stroke();
+    doc
+      .fillColor("#4d5b73")
+      .font("Helvetica")
+      .fontSize(9)
+      .text("No badges earned in this term yet.", 70, cursorY + 4);
+    return cursorY + 52;
+  }
+
+  const cardWidth = 232;
+  const cardHeight = 76;
+  badges.forEach((badge, index) => {
+    if (cursorY + cardHeight > 760) {
+      drawReportFooter(doc);
+      doc.addPage();
+      cursorY = 55;
+    }
+    const column = index % 2;
+    const x = column === 0 ? 55 : 308;
+    const rowY = cursorY;
+    doc
+      .roundedRect(x, rowY, cardWidth, cardHeight, 8)
+      .fill("#ffffff")
+      .strokeColor("#dbe5f5")
+      .stroke();
+    doc.circle(x + 35, rowY + 34, 19).fill(badge.color || "#111827");
+    doc
+      .fillColor("white")
+      .font("Helvetica-Bold")
+      .fontSize(11)
+      .text(
+        (badge.label || "Badge").slice(0, 1).toUpperCase(),
+        x + 25,
+        rowY + 28,
+        {
+          width: 20,
+          align: "center",
+        }
+      );
+    doc
+      .fillColor("#001b44")
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text(
+        fitText(badge.badge_name || badge.label || "Badge", 28),
+        x + 64,
+        rowY + 14,
+        {
+          width: 150,
+        }
+      );
+    doc
+      .fillColor("#4d5b73")
+      .font("Helvetica")
+      .fontSize(7)
+      .text(
+        fitText(badge.subtitle || badge.detail || "", 34),
+        x + 64,
+        rowY + 30,
+        {
+          width: 150,
+        }
+      );
+    doc
+      .fillColor(badge.color || "#111827")
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .text(
+        String(badge.label || "Completion").toUpperCase(),
+        x + 64,
+        rowY + 50,
+        {
+          width: 150,
+        }
+      );
+    if (column === 1 || index === badges.length - 1) {
+      cursorY += cardHeight + 12;
+    }
+  });
+  return cursorY + 4;
+}
+
+function drawCompetitionSection(doc, competitions, y) {
+  let cursorY = ensurePageSpace(doc, y, 86);
+  drawSectionTitle(doc, "", "COMPETITIONS", 55, cursorY, 485);
+  cursorY += 40;
+
+  if (competitions.length === 0) {
+    doc
+      .roundedRect(55, cursorY - 8, 485, 40, 7)
+      .fill("#f7faff")
+      .strokeColor("#dbe5f5")
+      .stroke();
+    doc
+      .fillColor("#4d5b73")
+      .font("Helvetica")
+      .fontSize(9)
+      .text("No competition results recorded for this term.", 70, cursorY + 4);
+    return cursorY + 52;
+  }
+
+  doc.roundedRect(55, cursorY, 485, 24, 0).fill("#eef4ff");
+  doc.fillColor("#003f91").font("Helvetica-Bold").fontSize(8);
+  doc.text("Competition", 65, cursorY + 8);
+  doc.text("Type", 255, cursorY + 8);
+  doc.text("Score", 330, cursorY + 8);
+  doc.text("Position", 410, cursorY + 8);
+  cursorY += 34;
+
+  competitions.forEach((competition, index) => {
+    cursorY = ensurePageSpace(doc, cursorY, 36);
+    doc
+      .roundedRect(55, cursorY - 7, 485, 30, 4)
+      .fill(index % 2 === 0 ? "#ffffff" : "#f7faff")
+      .strokeColor("#dbe5f5")
+      .stroke();
+    doc.fillColor("#001b44").font("Helvetica").fontSize(8);
+    doc.text(fitText(competition.competition_name, 34), 65, cursorY, {
+      width: 178,
+    });
+    doc.text(
+      String(competition.competition_type || "-").toUpperCase(),
+      255,
+      cursorY,
+      {
+        width: 62,
+      }
+    );
+    doc.text(
+      `${Number(competition.total_score || 0).toFixed(1)}`,
+      330,
+      cursorY,
+      {
+        width: 52,
+      }
+    );
+    doc.text(
+      competition.rank
+        ? `${competition.rank}/${competition.participant_count || "-"}`
+        : "-",
+      410,
+      cursorY,
+      { width: 80 }
+    );
+    cursorY += 36;
+  });
+
+  return cursorY + 8;
+}
+
 async function getTypingTargets(term, academicYear) {
   const result = await query(
     `SELECT week_number, MAX(pass_threshold)::numeric AS pass_threshold
@@ -382,40 +638,65 @@ async function getTypingTargets(term, academicYear) {
     [term, Number(academicYear)]
   );
   return new Map(
-    result.rows.map((row) => [Number(row.week_number), Number(row.pass_threshold || 25)])
+    result.rows.map((row) => [
+      Number(row.week_number),
+      Number(row.pass_threshold || 25),
+    ])
   );
 }
 
 function average(values = []) {
-  const valid = values.filter((value) => Number.isFinite(Number(value))).map(Number);
+  const valid = values
+    .filter((value) => Number.isFinite(Number(value)))
+    .map(Number);
   if (valid.length === 0) return null;
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }
 
-function calculateOverallPerformance(weeklyMarks, courseProgress, typingTargets) {
-  const quizAverage = average(
-    weeklyMarks
-      .filter((row) => row.quiz_score !== null && row.quiz_score !== undefined)
-      .map((row) => row.quiz_score)
-  );
-  const typingAverage = average(
-    weeklyMarks
-      .filter((row) => row.typing_score !== null && row.typing_score !== undefined)
-      .map((row) => {
-        const target = typingTargets.get(Number(row.week_number)) || 25;
-        return Math.min(100, (Number(row.typing_score) / Math.max(target, 1)) * 100);
-      })
-  );
+function calculateOverallPerformance(
+  weeklyMarks,
+  courseProgress,
+  typingTargets,
+  settings = DEFAULT_REPORT_CARD_SETTINGS
+) {
+  const reportSettings = normalizeReportCardSettings(settings);
+  const quizAverage = reportSettings.show_weekly_quizzes
+    ? average(
+        weeklyMarks
+          .filter(
+            (row) => row.quiz_score !== null && row.quiz_score !== undefined
+          )
+          .map((row) => row.quiz_score)
+      )
+    : null;
+  const typingAverage = reportSettings.show_weekly_typing
+    ? average(
+        weeklyMarks
+          .filter(
+            (row) => row.typing_score !== null && row.typing_score !== undefined
+          )
+          .map((row) => {
+            const target = typingTargets.get(Number(row.week_number)) || 25;
+            return Math.min(
+              100,
+              (Number(row.typing_score) / Math.max(target, 1)) * 100
+            );
+          })
+      )
+    : null;
   const completedModuleScores = courseProgress.flatMap((course) =>
     (course.modules || [])
       .filter(
         (module) =>
           Number(module.total_activities || 0) > 0 &&
-          Number(module.completed_activities || 0) >= Number(module.total_activities || 0)
+          Number(module.completed_activities || 0) >=
+            Number(module.total_activities || 0)
       )
       .map((module) => module.score_percent)
   );
-  const courseAverage = average(completedModuleScores);
+  const courseAverage = reportSettings.show_active_courses
+    ? average(completedModuleScores)
+    : null;
   const overall = average([quizAverage, typingAverage, courseAverage]);
 
   return {
@@ -456,6 +737,142 @@ async function isClosedReportPeriod(term, academicYear) {
 
   const endDate = result.rows[0]?.end_date;
   return endDate ? new Date(endDate) < new Date() : false;
+}
+
+async function getTermDateRange(term, academicYear) {
+  const result = await query(
+    `SELECT t.start_date, t.end_date
+     FROM terms t
+     JOIN academic_years ay ON ay.id = t.academic_year_id
+     WHERE t.name = $1 AND ay.year = $2
+     ORDER BY t.start_date DESC
+     LIMIT 1`,
+    [term, Number(academicYear)]
+  );
+  return result.rows[0] || null;
+}
+
+async function getTermBadges(learnerId, term, academicYear) {
+  const range = await getTermDateRange(term, academicYear);
+  const startDate = range?.start_date || `${Number(academicYear)}-01-01`;
+  const endDate = range?.end_date || `${Number(academicYear)}-12-31`;
+
+  const [moduleResult, typingResult] = await Promise.all([
+    query(
+      `SELECT b.*, c.name AS course_name, cm.title AS module_title
+       FROM learner_module_badges b
+       JOIN courses c ON c.id = b.course_id
+       JOIN course_modules cm ON cm.id = b.module_id
+       WHERE b.learner_id = $1
+         AND b.awarded_at >= $2::date
+         AND b.awarded_at < ($3::date + INTERVAL '1 day')
+       ORDER BY COALESCE(b.updated_at, b.awarded_at) DESC`,
+      [learnerId, startDate, endDate]
+    ),
+    query(
+      `WITH lesson_totals AS (
+         SELECT typing_test_id, COUNT(*)::integer AS lesson_count
+         FROM typing_lessons
+         GROUP BY typing_test_id
+       ),
+       completed_trials AS (
+         SELECT ta.typing_test_id,
+                ta.attempt_number,
+                AVG(ta.final_score)::numeric AS net_wpm,
+                AVG(ta.accuracy)::numeric AS accuracy,
+                MAX(ta.submitted_at) AS awarded_at
+         FROM typing_attempts ta
+         JOIN lesson_totals lt ON lt.typing_test_id = ta.typing_test_id
+         WHERE ta.learner_id = $1
+           AND ta.submitted_at >= $2::date
+           AND ta.submitted_at < ($3::date + INTERVAL '1 day')
+         GROUP BY ta.typing_test_id, ta.attempt_number, lt.lesson_count
+         HAVING COUNT(DISTINCT ta.typing_lesson_id) = lt.lesson_count
+       ),
+       ranked AS (
+         SELECT *, ROW_NUMBER() OVER (
+           PARTITION BY typing_test_id
+           ORDER BY net_wpm DESC, accuracy DESC, attempt_number ASC
+         ) AS rank
+         FROM completed_trials
+       )
+       SELECT ranked.*, tt.name AS test_name
+       FROM ranked
+       JOIN typing_tests tt ON tt.id = ranked.typing_test_id
+       WHERE ranked.rank = 1
+       ORDER BY ranked.awarded_at DESC`,
+      [learnerId, startDate, endDate]
+    ),
+  ]);
+
+  const moduleBadges = moduleResult.rows.map((row) => ({
+    ...row,
+    badge_type: "module",
+    badge_name: row.badge_name || row.module_title,
+    subtitle: row.course_name,
+    detail: row.module_title,
+    awarded_at: row.updated_at || row.awarded_at,
+    ...getBadgeTier(row.score_percent),
+  }));
+  const typingBadges = typingResult.rows.map((row) => {
+    const badge = getTypingBadge(row.net_wpm, row.accuracy);
+    return {
+      id: `typing-${row.typing_test_id}`,
+      badge_type: "typing",
+      badge_name: row.test_name,
+      subtitle: "Typing Practice",
+      detail: `${Math.round(Number(row.net_wpm || 0))} WPM · ${Math.round(
+        Number(row.accuracy || 0)
+      )}% accuracy`,
+      score_percent: Number(row.accuracy || 0),
+      awarded_at: row.awarded_at,
+      ...badge,
+    };
+  });
+  return [...moduleBadges, ...typingBadges].sort(
+    (left, right) =>
+      new Date(right.awarded_at || 0) - new Date(left.awarded_at || 0)
+  );
+}
+
+async function getLearnerCompetitionResults(learnerId, term, academicYear) {
+  const range = await getTermDateRange(term, academicYear);
+  if (!range?.start_date || !range?.end_date) return [];
+
+  const result = await query(
+    `WITH ranked AS (
+       SELECT cr.learner_id,
+              cr.competition_id,
+              cr.result_stage,
+              cr.learner_grade,
+              cr.total_score,
+              cr.quiz_score,
+              cr.typing_wpm,
+              cr.typing_accuracy,
+              c.name AS competition_name,
+              c.competition_type,
+              c.start_date,
+              c.end_date,
+              RANK() OVER (
+                PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
+                ORDER BY cr.total_score DESC NULLS LAST
+              ) AS rank,
+              COUNT(*) OVER (
+                PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
+              )::integer AS participant_count
+       FROM competition_results cr
+       JOIN competitions c ON c.id = cr.competition_id
+       WHERE cr.result_stage = 'final'
+         AND c.start_date <= $3::date
+         AND c.end_date >= $2::date
+     )
+     SELECT *
+     FROM ranked
+     WHERE learner_id = $1
+     ORDER BY start_date DESC, competition_name`,
+    [learnerId, range.start_date, range.end_date]
+  );
+  return result.rows;
 }
 
 async function hasReportPeriodData(learnerId, term, academicYear) {
@@ -513,7 +930,13 @@ async function getReportFeedback(learnerId, term, academicYear) {
   return result.rows[0] || null;
 }
 
-async function saveReportFeedback(user, learnerId, term, academicYear, commentText) {
+async function saveReportFeedback(
+  user,
+  learnerId,
+  term,
+  academicYear,
+  commentText
+) {
   await ensureReportFeedbackTable();
   const learnerResult = await query(
     "SELECT id, school_id, full_name FROM learners WHERE id = $1 LIMIT 1",
@@ -583,23 +1006,44 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
     throw error;
   }
 
+  const reportSettings = await getReportCardSettings(learner.school_id);
   const useHistoricalCache = await isClosedReportPeriod(term, academicYear);
-  const activeCourseProgress = await courseProgressService
-    .getLearnerCourseProgress(learnerId, term, academicYear, {
-      cachedOnly: useHistoricalCache,
-      updateWeekly: !useHistoricalCache,
-    })
-    .catch((error) => {
-      console.error("Course progress sync for report failed:", error.message);
-      return [];
-    });
-  const weeklyMarks = await getWeeklyMarks(learnerId, term, academicYear);
-  const typingTargets = await getTypingTargets(term, academicYear);
-  const reportFeedback = await getReportFeedback(learnerId, term, academicYear);
+  const activeCourseProgress = reportSettings.show_active_courses
+    ? await courseProgressService
+        .getLearnerCourseProgress(learnerId, term, academicYear, {
+          cachedOnly: useHistoricalCache,
+          updateWeekly: !useHistoricalCache,
+        })
+        .catch((error) => {
+          console.error(
+            "Course progress sync for report failed:",
+            error.message
+          );
+          return [];
+        })
+    : [];
+  const needsWeeklyMarks =
+    reportSettings.show_weekly_typing || reportSettings.show_weekly_quizzes;
+  const weeklyMarks = needsWeeklyMarks
+    ? await getWeeklyMarks(learnerId, term, academicYear)
+    : [];
+  const typingTargets = reportSettings.show_weekly_typing
+    ? await getTypingTargets(term, academicYear)
+    : new Map();
+  const reportFeedback = reportSettings.show_teacher_feedback
+    ? await getReportFeedback(learnerId, term, academicYear)
+    : null;
+  const termBadges = reportSettings.show_badges
+    ? await getTermBadges(learnerId, term, academicYear)
+    : [];
+  const competitionResults = reportSettings.show_competitions
+    ? await getLearnerCompetitionResults(learnerId, term, academicYear)
+    : [];
   const performance = calculateOverallPerformance(
     weeklyMarks,
     activeCourseProgress,
-    typingTargets
+    typingTargets,
+    reportSettings
   );
 
   const doc = new PDFDocument({ size: "A4", margin: 42 });
@@ -776,13 +1220,94 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
     .fontSize(7)
     .text(learner.grade || "-", 442, 210, { width: 76, align: "center" });
 
-  drawSectionTitle(doc, "1", "TYPING PERFORMANCE", 55, 246, 235);
-  doc.roundedRect(55, 246, 235, 170, 7).strokeColor("#cfd8e8").stroke();
-  drawLineChart(doc, weeklyMarks, "typing_score", 68, 286, 200, 105, "");
+  let sectionNumber = 1;
+  let moduleY = 246;
+  const showBothWeeklyCharts =
+    reportSettings.show_weekly_typing && reportSettings.show_weekly_quizzes;
+  if (showBothWeeklyCharts) {
+    drawSectionTitle(
+      doc,
+      String(sectionNumber++),
+      "TYPING PERFORMANCE",
+      55,
+      moduleY,
+      235
+    );
+    doc.roundedRect(55, moduleY, 235, 170, 7).strokeColor("#cfd8e8").stroke();
+    drawLineChart(
+      doc,
+      weeklyMarks,
+      "typing_score",
+      68,
+      moduleY + 40,
+      200,
+      105,
+      ""
+    );
 
-  drawSectionTitle(doc, "2", "QUIZ PERFORMANCE", 305, 246, 235);
-  doc.roundedRect(305, 246, 235, 170, 7).strokeColor("#cfd8e8").stroke();
-  drawLineChart(doc, weeklyMarks, "quiz_score", 318, 286, 200, 105, "%");
+    drawSectionTitle(
+      doc,
+      String(sectionNumber++),
+      "QUIZ PERFORMANCE",
+      305,
+      moduleY,
+      235
+    );
+    doc.roundedRect(305, moduleY, 235, 170, 7).strokeColor("#cfd8e8").stroke();
+    drawLineChart(
+      doc,
+      weeklyMarks,
+      "quiz_score",
+      318,
+      moduleY + 40,
+      200,
+      105,
+      "%"
+    );
+    moduleY += 186;
+  } else if (reportSettings.show_weekly_typing) {
+    drawSectionTitle(
+      doc,
+      String(sectionNumber++),
+      "TYPING PERFORMANCE",
+      55,
+      moduleY,
+      485
+    );
+    doc.roundedRect(55, moduleY, 485, 170, 7).strokeColor("#cfd8e8").stroke();
+    drawLineChart(
+      doc,
+      weeklyMarks,
+      "typing_score",
+      75,
+      moduleY + 40,
+      430,
+      105,
+      ""
+    );
+    moduleY += 186;
+  } else if (reportSettings.show_weekly_quizzes) {
+    drawSectionTitle(
+      doc,
+      String(sectionNumber++),
+      "QUIZ PERFORMANCE",
+      55,
+      moduleY,
+      485
+    );
+    doc.roundedRect(55, moduleY, 485, 170, 7).strokeColor("#cfd8e8").stroke();
+    drawLineChart(
+      doc,
+      weeklyMarks,
+      "quiz_score",
+      75,
+      moduleY + 40,
+      430,
+      105,
+      "%"
+    );
+    moduleY += 186;
+  }
 
   function drawCourseTableHeader(y, title, sectionNumber = "3") {
     drawSectionTitle(doc, sectionNumber, title, 55, y, 485);
@@ -795,24 +1320,32 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
     return y + 62;
   }
 
-  let moduleY = 432;
-  if (activeCourseProgress.length === 0) {
-    moduleY = drawCourseTableHeader(moduleY, "ACTIVE COURSES");
+  if (reportSettings.show_active_courses && activeCourseProgress.length === 0) {
+    moduleY = ensurePageSpace(doc, moduleY, 104);
+    moduleY = drawCourseTableHeader(
+      moduleY,
+      "ACTIVE COURSES",
+      String(sectionNumber++)
+    );
     doc
       .fillColor("#4d5b73")
       .font("Helvetica")
       .fontSize(9)
-      .text("No active course modules recorded for this term.", 65, moduleY, { width: 450 });
+      .text("No active course modules recorded for this term.", 65, moduleY, {
+        width: 450,
+      });
     moduleY += 34;
-  } else {
+  } else if (reportSettings.show_active_courses) {
     activeCourseProgress.forEach((course, courseIndex) => {
-      const title = `ACTIVE COURSE: ${String(course.course_name || "Course").toUpperCase()}`;
+      const title = `ACTIVE COURSE: ${String(
+        course.course_name || "Course"
+      ).toUpperCase()}`;
       if (moduleY + 70 > 760) {
         drawReportFooter(doc);
         doc.addPage();
         moduleY = 55;
       }
-      moduleY = drawCourseTableHeader(moduleY, title, String(courseIndex + 3));
+      moduleY = drawCourseTableHeader(moduleY, title, String(sectionNumber++));
       (course.modules || []).forEach((module, moduleIndex) => {
         const moduleName = `${module.module_number}. ${module.name}`;
         const textHeight = doc.heightOfString(moduleName, { width: 245 });
@@ -823,13 +1356,16 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
           moduleY = drawCourseTableHeader(
             55,
             `${String(course.course_name || "Course").toUpperCase()} CONTINUED`,
-            String(courseIndex + 3)
+            ""
           );
         }
         doc
           .roundedRect(55, moduleY - 7, 485, rowHeight, 4)
           .fill(moduleIndex % 2 === 0 ? "#ffffff" : "#f7faff");
-        doc.roundedRect(55, moduleY - 7, 485, rowHeight, 4).strokeColor("#dbe5f5").stroke();
+        doc
+          .roundedRect(55, moduleY - 7, 485, rowHeight, 4)
+          .strokeColor("#dbe5f5")
+          .stroke();
         doc
           .fillColor("#001b44")
           .font("Helvetica")
@@ -843,12 +1379,22 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
           426,
           moduleY - 2,
           104,
-          getPerformanceLabel(module.score_percent) === "Approaching" ? "#f59e0b" : "#0b5fc7"
+          getPerformanceLabel(module.score_percent) === "Approaching"
+            ? "#f59e0b"
+            : "#0b5fc7"
         );
         moduleY += rowHeight + 6;
       });
       moduleY += 14;
     });
+  }
+
+  if (reportSettings.show_badges) {
+    moduleY = drawBadgeGrid(doc, termBadges, moduleY + 6);
+  }
+
+  if (reportSettings.show_competitions) {
+    moduleY = drawCompetitionSection(doc, competitionResults, moduleY + 6);
   }
 
   if (reportFeedback?.comment_text) {
@@ -884,10 +1430,15 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
         .fillColor("#31557d")
         .font("Helvetica-Oblique")
         .fontSize(7.5)
-        .text(`Feedback by ${reportFeedback.updated_by_name}`, 65, moduleY + feedbackHeight - 2, {
-          width: 455,
-          align: "right",
-        });
+        .text(
+          `Feedback by ${reportFeedback.updated_by_name}`,
+          65,
+          moduleY + feedbackHeight - 2,
+          {
+            width: 455,
+            align: "right",
+          }
+        );
     }
   }
   drawReportFooter(doc);
@@ -986,6 +1537,12 @@ module.exports = {
   getWeeklyMarksForLearners,
   getReportFeedback,
   saveReportFeedback,
+  getReportCardSettings,
+  saveReportCardSettings,
+  normalizeReportCardSettings,
+  getTermBadges,
+  drawBadgeGrid,
+  getLearnerCompetitionResults,
   generateLearnerReportPDF,
   generateMultipleReportsPDF,
   getPerformanceLabel,
