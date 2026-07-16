@@ -2734,6 +2734,7 @@ function CourseBuilder() {
     objective: "",
     prompt: "",
   });
+  const builderEditorRef = useRef(null);
 
   const modules = data?.modules || [];
   const selectedModule = useMemo(
@@ -2973,6 +2974,23 @@ function CourseBuilder() {
     setModuleEditForm(moduleToForm(courseModule));
     setEditorMode("edit-module");
     closeMenus();
+  };
+
+  const openQuickAddActivity = (courseModule) => {
+    if (!courseModule) return;
+    setSelectedModuleId(courseModule.id);
+    setSelectedActivityId(null);
+    setEditorMode("add-module");
+    setExpandedModules((current) => ({ ...current, [courseModule.id]: true }));
+    setActivityForm(emptyActivity((courseModule.activities?.length || 0) + 1));
+    closeMenus();
+    setTimeout(() => {
+      setAddActivityOpen(true);
+      builderEditorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
   };
 
   const selectActivityForEdit = (courseModule, activity) => {
@@ -3955,7 +3973,7 @@ function CourseBuilder() {
             </Grid>
 
             <Grid item xs={12} lg={8}>
-              <Card>
+              <Card ref={builderEditorRef}>
                 <MDBox p={2.5}>
                   {editorMode === "edit-module" && selectedModule ? (
                     <>
@@ -4343,6 +4361,7 @@ function CourseBuilder() {
         )}
         <Menu anchorEl={moduleActionAnchor} open={Boolean(moduleActionAnchor)} onClose={closeMenus}>
           <MenuItem onClick={() => selectModuleForEdit(actionTarget)}>Edit</MenuItem>
+          <MenuItem onClick={() => openQuickAddActivity(actionTarget)}>Add Activity</MenuItem>
           {!isTemplate && (
             <MenuItem onClick={() => createEarlyUnlock({ module: actionTarget })}>
               Unlock Early
