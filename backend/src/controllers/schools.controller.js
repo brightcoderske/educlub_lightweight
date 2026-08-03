@@ -1,5 +1,5 @@
 const { query } = require("../config");
-const fs = require("fs");
+const fs = require("fs/promises");
 const path = require("path");
 
 async function ensureSchoolConfigColumns() {
@@ -300,9 +300,9 @@ async function uploadSchoolLogo(req, res) {
       .replace(/[^a-z0-9-]/gi, "-")
       .toLowerCase()}.${extension}`;
     const uploadDir = path.join(__dirname, "../../uploads/school-logos");
-    fs.mkdirSync(uploadDir, { recursive: true });
+    await fs.mkdir(uploadDir, { recursive: true });
     const filePath = path.join(uploadDir, safeName);
-    fs.writeFileSync(filePath, Buffer.from(match[2], "base64"));
+    await fs.writeFile(filePath, Buffer.from(match[2], "base64"), { flag: "wx" });
 
     res.json({
       logo_url: getPublicUploadUrl(req, `/uploads/school-logos/${safeName}`),

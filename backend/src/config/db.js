@@ -1,6 +1,7 @@
 const { Pool } = require("pg");
 const { AsyncLocalStorage } = require("async_hooks");
 const { attachPoolErrorHandler } = require("./poolErrors");
+const logger = require("../utils/logger");
 
 const requestContext = new AsyncLocalStorage();
 
@@ -23,7 +24,7 @@ const pool = new Pool({
       : 5000,
   ssl:
     process.env.NODE_ENV === "production" ||
-    process.env.DATABASE_URL.includes("supabase")
+    (process.env.DATABASE_URL || "").includes("supabase")
       ? { rejectUnauthorized: false }
       : false,
 });
@@ -60,8 +61,15 @@ async function query(text, params) {
     }
 
     const duration = Date.now() - start;
-    if (process.env.DB_QUERY_LOGS === "true") {
-      console.log("Executed query", { text, duration, rows: result.rowCount });
+    const slowQueryMs = Number(process.env.DB_SLOW_QUERY_MS || 500);
+    if (duration >= slowQueryMs) {
+      logger.warn("slow_database_query", {
+        durationMs: duration,
+        rows: result.rowCount,
+        statement: String(text).replace(/\s+/g, " ").trim().slice(0, 240),
+      });
+    } else if (process.env.DB_QUERY_LOGS === "true") {
+      logger.debug("database_query", { durationMs: duration, rows: result.rowCount });
     }
     return result;
   } catch (error) {
@@ -69,10 +77,10 @@ async function query(text, params) {
       try {
         await client.query("ROLLBACK");
       } catch (rollbackError) {
-        console.error("Database rollback error:", rollbackError);
+        logger.error("database_rollback_failed", { message: rollbackError.message });
       }
     }
-    console.error("Database query error:", error);
+    logger.error("database_query_failed", { code: error.code, message: error.message });
     throw error;
   } finally {
     if (client) {
@@ -89,10 +97,10 @@ async function getClient() {
 async function testConnection() {
   try {
     await query("SELECT 1");
-    console.log("Database connection successful");
+    logger.info("database_connection_successful");
     return true;
   } catch (error) {
-    console.error("Database connection failed:", error);
+    logger.error("database_connection_failed", { code: error.code, message: error.message });
     return false;
   }
 }

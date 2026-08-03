@@ -17,19 +17,19 @@ function generateUsernameFromName(fullName) {
   return baseUsername;
 }
 
-async function isUsernameUnique(username) {
-  const result = await query("SELECT id FROM users WHERE username = $1", [
+async function isUsernameUnique(username, queryExecutor = query) {
+  const result = await queryExecutor("SELECT id FROM users WHERE username = $1", [
     username,
   ]);
   return result.rows.length === 0;
 }
 
-async function generateUniqueUsername(fullName) {
+async function generateUniqueUsername(fullName, queryExecutor = query) {
   let baseUsername = generateUsernameFromName(fullName);
   let username = baseUsername;
   let counter = 1;
 
-  while (!(await isUsernameUnique(username))) {
+  while (!(await isUsernameUnique(username, queryExecutor))) {
     username = `${baseUsername}${counter}`;
     counter++;
 

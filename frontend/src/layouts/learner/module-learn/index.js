@@ -449,6 +449,7 @@ DiscussionReplyCard.propTypes = {
 function ActivityBody({
   activity,
   answers,
+  matchingChoices,
   discussion,
   discussionReply,
   submissionText,
@@ -1060,6 +1061,7 @@ function ActivityBody({
 
 ActivityBody.propTypes = {
   answers: PropTypes.object.isRequired,
+  matchingChoices: PropTypes.object.isRequired,
   activity: PropTypes.shape({
     activity_type: PropTypes.string,
     content: PropTypes.object,
@@ -2286,6 +2288,7 @@ function ModuleLearn() {
                     <ActivityBody
                       activity={activeActivity}
                       answers={answers}
+                      matchingChoices={matchingChoices}
                       discussion={discussion}
                       discussionReply={discussionReply}
                       quizResult={quizResult}

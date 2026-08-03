@@ -5,6 +5,7 @@ const { query, runWithDbContext } = require("../config");
 const env = require("../config/env");
 const { sendMFACode, sendPasswordResetLinkEmail } = require("../utils/email");
 const privacyService = require("./privacy.service");
+const sessionService = require("./session.service");
 
 function validatePasswordPolicy(password) {
   const failures = [];
@@ -52,6 +53,16 @@ function hashTrustedDeviceToken(token) {
     .digest("hex");
 }
 
+function hashMfaCode(code) {
+  return crypto.createHmac("sha256", env.jwtSecret).update(String(code || "")).digest("hex");
+}
+
+function safeHashEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left || ""), "hex");
+  const rightBuffer = Buffer.from(String(right || ""), "hex");
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 function createAuthToken(user) {
   return jwt.sign(
     {
@@ -59,6 +70,7 @@ function createAuthToken(user) {
       role: user.role,
       schoolId: user.school_id,
       username: user.username,
+      jti: crypto.randomUUID(),
     },
     env.jwtSecret,
     { expiresIn: env.jwtExpiresIn },
@@ -350,6 +362,7 @@ async function confirmPasswordReset(token, newPassword) {
      VALUES ($1, 'password_reset_completed', 'user', $1, $2)`,
     [reset.user_id, JSON.stringify({ via: "reset_link" })],
   );
+  await sessionService.revokeAllSessions(reset.user_id, "password_reset");
 
   return { message: "Password updated successfully. You can now sign in." };
 }
@@ -375,8 +388,9 @@ async function login(email, password, trustedDeviceToken) {
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
     await query(
-      "UPDATE users SET mfa_code = $1, mfa_code_expires_at = $2 WHERE id = $3",
-      [mfaCode, expiresAt, user.id],
+      `UPDATE users SET mfa_code = NULL, mfa_code_hash = $1, mfa_code_attempts = 0,
+       mfa_code_created_at = NOW(), mfa_code_expires_at = $2 WHERE id = $3`,
+      [hashMfaCode(mfaCode), expiresAt, user.id],
     );
 
     // Send MFA code via email
@@ -415,18 +429,28 @@ async function verify2FA(
     throw new Error("User not found");
   }
 
-  // Check if MFA code is valid and not expired
-  if (user.mfa_code !== code) {
-    throw new Error("Invalid MFA code");
+  if (!user.mfa_code_hash || new Date() > new Date(user.mfa_code_expires_at)) {
+    throw new Error("MFA code has expired");
   }
 
-  if (new Date() > new Date(user.mfa_code_expires_at)) {
-    throw new Error("MFA code has expired");
+  if (Number(user.mfa_code_attempts || 0) >= 5) {
+    throw new Error("Too many MFA attempts. Request a new code.");
+  }
+
+  if (!safeHashEqual(user.mfa_code_hash, hashMfaCode(code))) {
+    await query(
+      `UPDATE users SET mfa_code_attempts = mfa_code_attempts + 1,
+       mfa_code_hash = CASE WHEN mfa_code_attempts + 1 >= 5 THEN NULL ELSE mfa_code_hash END
+       WHERE id = $1`,
+      [user.id],
+    );
+    throw new Error("Invalid MFA code");
   }
 
   // Clear the MFA code after successful verification
   await query(
-    "UPDATE users SET mfa_code = NULL, mfa_code_expires_at = NULL WHERE id = $1",
+    `UPDATE users SET mfa_code = NULL, mfa_code_hash = NULL, mfa_code_attempts = 0,
+     mfa_code_created_at = NULL, mfa_code_expires_at = NULL WHERE id = $1`,
     [user.id],
   );
 
@@ -485,6 +509,7 @@ async function resetPassword(userId, oldPassword, newPassword) {
     [hashedPassword, userId],
   );
   await revokeTrustedMfaDevices(userId);
+  await sessionService.revokeAllSessions(userId, "password_changed");
 
   return { message: "Password reset successfully" };
 }
@@ -508,6 +533,7 @@ async function resetPasswordByAdmin(userId, newPassword) {
     [hashedPassword, userId],
   );
   await revokeTrustedMfaDevices(userId);
+  await sessionService.revokeAllSessions(userId, "admin_password_reset");
 
   return {
     message: "Password reset successfully. User must change on next login.",
@@ -515,8 +541,7 @@ async function resetPasswordByAdmin(userId, newPassword) {
 }
 
 function generateMFACode() {
-  // Generate a 6-digit numeric code
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 module.exports = {
@@ -533,5 +558,6 @@ module.exports = {
   getMfaPolicy,
   updateMfaPolicy,
   generateMFACode,
+  hashMfaCode,
   validatePasswordPolicy,
 };

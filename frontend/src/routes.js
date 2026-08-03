@@ -6,49 +6,52 @@
 * Copyright 2024 eduClub
 */
 
-// eduClub layouts
-import SystemAdminDashboard from "layouts/system-admin";
-import SystemAdminSchools from "layouts/system-admin/schools";
-import SystemAdminLearners from "layouts/system-admin/learners";
-import SystemAdminSchoolAdmins from "layouts/system-admin/school-admins";
-import SystemAdminCourses from "layouts/system-admin/courses";
-import CourseBuilder from "layouts/course-builder";
-import CourseReviews from "layouts/course-reviews";
-import SystemAdminAcademic from "layouts/system-admin/academic";
-import SystemAdminCompetitions from "layouts/system-admin/competitions";
-import SystemAdminReports from "layouts/system-admin/reports";
-import SystemAdminCertificates from "layouts/system-admin/certificates";
-import SystemAdminAiSettings from "layouts/system-admin/ai-settings";
-import SchoolAdminDashboard from "layouts/school-admin";
-import SchoolAdminLearners from "layouts/school-admin/learners";
-import SchoolAdminAllocations from "layouts/school-admin/allocations";
-import SchoolAdminCertificates from "layouts/school-admin/certificates";
-import SchoolSettings from "layouts/school-admin/settings";
-import SchoolAdminCompetitions from "layouts/school-admin/competitions";
-import SchoolAdminProgress from "layouts/school-admin/progress";
-import TypingTutorReport from "layouts/school-admin/typing-tutor";
-import LearnerDashboard from "layouts/learner";
-import LearnerCertificates from "layouts/learner/certificates";
-import LearnerCompetitions from "layouts/learner/competitions";
-import MyTypingTutor from "layouts/learner/typing-tutor";
-import CourseOverview from "layouts/learner/course-overview";
-import ModuleLearn from "layouts/learner/module-learn";
-import LearnerProgress from "layouts/learner/progress";
-import LearnerProfile from "layouts/learner/profile";
-import WeeklyLearning from "layouts/weekly-learning";
-import SignIn from "layouts/authentication/sign-in";
-import ResetPassword from "layouts/authentication/reset-password";
-import ForgotPassword from "layouts/authentication/forgot-password";
-import SetPassword from "layouts/authentication/set-password";
-import PrivacyConsent from "layouts/authentication/privacy-consent";
-import RegistrationLanding from "layouts/landing";
-import PublicSite, { PublicNotFound } from "layouts/public-site";
+import { lazy } from "react";
+
+// Route modules are loaded on demand so each role downloads only the screens it opens.
+const SystemAdminDashboard = lazy(() => import("layouts/system-admin"));
+const SystemAdminSchools = lazy(() => import("layouts/system-admin/schools"));
+const SystemAdminLearners = lazy(() => import("layouts/system-admin/learners"));
+const SystemAdminSchoolAdmins = lazy(() => import("layouts/system-admin/school-admins"));
+const SystemAdminCourses = lazy(() => import("layouts/system-admin/courses"));
+const CourseBuilder = lazy(() => import("layouts/course-builder"));
+const CourseReviews = lazy(() => import("layouts/course-reviews"));
+const SystemAdminAcademic = lazy(() => import("layouts/system-admin/academic"));
+const SystemAdminCompetitions = lazy(() => import("layouts/system-admin/competitions"));
+const SystemAdminReports = lazy(() => import("layouts/system-admin/reports"));
+const SystemAdminCertificates = lazy(() => import("layouts/system-admin/certificates"));
+const SystemAdminAiSettings = lazy(() => import("layouts/system-admin/ai-settings"));
+const SchoolAdminDashboard = lazy(() => import("layouts/school-admin"));
+const SchoolAdminLearners = lazy(() => import("layouts/school-admin/learners"));
+const SchoolAdminAllocations = lazy(() => import("layouts/school-admin/allocations"));
+const SchoolAdminCertificates = lazy(() => import("layouts/school-admin/certificates"));
+const SchoolSettings = lazy(() => import("layouts/school-admin/settings"));
+const SchoolAdminCompetitions = lazy(() => import("layouts/school-admin/competitions"));
+const SchoolAdminProgress = lazy(() => import("layouts/school-admin/progress"));
+const TypingTutorReport = lazy(() => import("layouts/school-admin/typing-tutor"));
+const LearnerDashboard = lazy(() => import("layouts/learner"));
+const LearnerCertificates = lazy(() => import("layouts/learner/certificates"));
+const LearnerCompetitions = lazy(() => import("layouts/learner/competitions"));
+const MyTypingTutor = lazy(() => import("layouts/learner/typing-tutor"));
+const CourseOverview = lazy(() => import("layouts/learner/course-overview"));
+const ModuleLearn = lazy(() => import("layouts/learner/module-learn"));
+const LearnerProgress = lazy(() => import("layouts/learner/progress"));
+const LearnerProfile = lazy(() => import("layouts/learner/profile"));
+const WeeklyLearning = lazy(() => import("layouts/weekly-learning"));
+const SignIn = lazy(() => import("layouts/authentication/sign-in"));
+const ResetPassword = lazy(() => import("layouts/authentication/reset-password"));
+const ForgotPassword = lazy(() => import("layouts/authentication/forgot-password"));
+const SetPassword = lazy(() => import("layouts/authentication/set-password"));
+const PrivacyConsent = lazy(() => import("layouts/authentication/privacy-consent"));
+const RegistrationLanding = lazy(() => import("layouts/landing"));
+const PublicSite = lazy(() => import("layouts/public-site"));
+const PublicNotFound = lazy(() => import("layouts/public-site").then((module) => ({ default: module.PublicNotFound })));
 import { PUBLIC_ALIASES, PUBLIC_PAGE_PATHS } from "layouts/public-site/publicPages";
-import Reports from "layouts/school-admin/reports";
-import Leaderboard from "layouts/school-admin/leaderboard";
-import Courses from "layouts/school-admin/courses";
-import TeacherDashboard from "layouts/teacher";
-import Teachers from "layouts/school-admin/teachers";
+const Reports = lazy(() => import("layouts/school-admin/reports"));
+const Leaderboard = lazy(() => import("layouts/school-admin/leaderboard"));
+const Courses = lazy(() => import("layouts/school-admin/courses"));
+const TeacherDashboard = lazy(() => import("layouts/teacher"));
+const Teachers = lazy(() => import("layouts/school-admin/teachers"));
 
 // @mui icons
 import Icon from "@mui/material/Icon";

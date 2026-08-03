@@ -1,7 +1,7 @@
 const coursesService = require("../services/courses.service");
 const { writeModulePdf } = require("../services/modulePdf.service");
 const flutterwave = require("../services/flutterwave.service");
-const fs = require("fs");
+const fs = require("fs/promises");
 const path = require("path");
 
 const SUBMISSION_FILE_TYPES = [
@@ -79,7 +79,7 @@ function getPublicUploadUrl(req, relativePath) {
   return `${req.protocol}://${req.get("host")}${relativePath}`;
 }
 
-function saveDataUpload(req, folder, options = {}) {
+async function saveDataUpload(req, folder, options = {}) {
   const { fileName, dataUrl } = req.body || {};
   const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl || "");
   if (!match) throw new Error(options.error || "Please upload a valid file.");
@@ -119,8 +119,8 @@ function saveDataUpload(req, folder, options = {}) {
     .replace(/[^a-z0-9_-]/gi, "-")
     .toLowerCase()}.${extension}`;
   const uploadDir = path.join(__dirname, "../../uploads", folder);
-  fs.mkdirSync(uploadDir, { recursive: true });
-  fs.writeFileSync(path.join(uploadDir, safeName), buffer);
+  await fs.mkdir(uploadDir, { recursive: true });
+  await fs.writeFile(path.join(uploadDir, safeName), buffer, { flag: "wx" });
   return getPublicUploadUrl(req, `/uploads/${folder}/${safeName}`);
 }
 
@@ -369,7 +369,7 @@ async function gradeActivityForLearner(req, res) {
 
 async function uploadActivityImage(req, res) {
   try {
-    const url = saveDataUpload(req, "activity-images", {
+    const url = await saveDataUpload(req, "activity-images", {
       allowedTypes: ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"],
       allowedExtensions: [".png", ".jpg", ".jpeg", ".gif", ".webp"],
       defaultName: "activity-image",
@@ -389,7 +389,7 @@ async function uploadActivityImage(req, res) {
 
 async function uploadSubmissionFile(req, res) {
   try {
-    const url = saveDataUpload(req, "activity-submissions", {
+    const url = await saveDataUpload(req, "activity-submissions", {
       isAllowed: isAllowedSubmissionFile,
       defaultName: "activity-submission",
       error: "Upload an image, PDF, text, Word, or Scratch .sb3 project file.",

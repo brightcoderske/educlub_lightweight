@@ -1,5 +1,38 @@
 const authService = require("../services/auth.service");
 const { recordSecurityEvent } = require("../services/securityAudit.service");
+const sessionService = require("../services/session.service");
+const { runWithDbContext } = require("../config/db");
+
+const REFRESH_COOKIE = "educlub_refresh";
+
+function readCookie(req, name) {
+  const item = String(req.headers.cookie || "").split(";").map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+  return item ? decodeURIComponent(item.slice(name.length + 1)) : null;
+}
+
+function sessionContext(req) {
+  return { ipAddress: req.ip, userAgent: req.get("user-agent"), deviceName: req.body?.deviceName };
+}
+
+function setRefreshCookie(res, session) {
+  res.cookie(REFRESH_COOKIE, session.token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/api/auth",
+    expires: session.expiresAt,
+  });
+}
+
+function clearRefreshCookie(res) {
+  res.clearCookie(REFRESH_COOKIE, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/api/auth",
+  });
+}
 
 async function login(req, res) {
   try {
@@ -12,6 +45,7 @@ async function login(req, res) {
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
+    if (result.user) setRefreshCookie(res, await sessionService.createSession(result.user.id, sessionContext(req)));
     res.json(result);
   } catch (error) {
     console.error("Login error:", error);
@@ -35,6 +69,7 @@ async function verify2FA(req, res) {
       req.ip,
       req.get("user-agent"),
     );
+    setRefreshCookie(res, await sessionService.createSession(result.user.id, sessionContext(req)));
     res.json(result);
   } catch (error) {
     console.error("2FA verification error:", error);
@@ -43,12 +78,26 @@ async function verify2FA(req, res) {
 }
 
 async function logout(req, res) {
+  await sessionService.revokeSession(readCookie(req, REFRESH_COOKIE), req.user?.userId || null);
+  clearRefreshCookie(res);
   res.json({ message: "Logged out successfully" });
+}
+
+async function logoutAll(req, res) {
+  await sessionService.revokeAllSessions(req.user.userId, "logout_all");
+  clearRefreshCookie(res);
+  res.json({ message: "Logged out from all devices successfully" });
 }
 
 async function refreshSession(req, res) {
   try {
-    res.json(await authService.refreshSession(req.user.userId));
+    const rotated = await sessionService.rotateSession(
+      readCookie(req, REFRESH_COOKIE) || req.body?.refreshToken,
+      sessionContext(req),
+    );
+    const result = await runWithDbContext(rotated.authContext, () => authService.refreshSession(rotated.userId));
+    setRefreshCookie(res, rotated);
+    res.json(result);
   } catch (error) {
     console.error("Refresh session error:", error);
     res.status(401).json({ error: error.message });
@@ -73,6 +122,7 @@ async function resetPassword(req, res) {
       oldPassword,
       newPassword,
     );
+    clearRefreshCookie(res);
     res.json(result);
   } catch (error) {
     console.error("Reset password error:", error);
@@ -144,6 +194,7 @@ module.exports = {
   login,
   verify2FA,
   logout,
+  logoutAll,
   refreshSession,
   getCurrentUser,
   resetPassword,

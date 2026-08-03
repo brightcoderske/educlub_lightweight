@@ -1,5 +1,4 @@
-const { query } = require("../config");
-const { ensureAiDefaults } = require("./aiSettings.service");
+const { query } = require("../config/db");
 
 const statements = [
   "ALTER TABLE IF EXISTS schools ADD COLUMN IF NOT EXISTS is_independent_school BOOLEAN DEFAULT FALSE",
@@ -316,27 +315,28 @@ const statements = [
     )`,
 ];
 
-async function ensureStartupSchema() {
+async function runStartupSchemaMigration(client) {
+  const migrationQuery = client.query.bind(client);
   for (const statement of statements) {
-    await query(statement);
+    await migrationQuery(statement);
   }
-  await query(
+  await migrationQuery(
     "UPDATE courses SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''"
   );
-  await query(
+  await migrationQuery(
     "UPDATE course_templates SET course_category = 'general' WHERE course_category IS NULL OR course_category = ''"
   );
-  await query("UPDATE courses SET is_active = TRUE WHERE is_active IS NULL");
-  await query(
+  await migrationQuery("UPDATE courses SET is_active = TRUE WHERE is_active IS NULL");
+  await migrationQuery(
     "UPDATE course_templates SET is_active = TRUE WHERE is_active IS NULL"
   );
-  await query(
+  await migrationQuery(
     `UPDATE schools
      SET is_independent_school = TRUE
      WHERE LOWER(code) = 'educlub-independent'
         OR LOWER(name) LIKE '%independent learners%'`
   );
-  await query(
+  await migrationQuery(
     `UPDATE courses c
      SET school_id = source.school_id
      FROM (
@@ -350,9 +350,17 @@ async function ensureStartupSchema() {
      WHERE c.id = source.course_id
        AND c.school_id IS NULL`
   );
-  await ensureAiDefaults();
+  // AI defaults are data seeds and remain explicit; schema migrations never silently seed them.
+}
+
+async function ensureStartupSchema() {
+  const result = await query("SELECT to_regclass('public.schema_migrations') AS migrations, to_regclass('public.users') AS users");
+  if (!result.rows[0]?.migrations || !result.rows[0]?.users) {
+    throw new Error("Database schema is not ready. Run `npm run db:migrate` before starting the server.");
+  }
 }
 
 module.exports = {
   ensureStartupSchema,
+  runStartupSchemaMigration,
 };
