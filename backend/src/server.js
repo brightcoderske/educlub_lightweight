@@ -3,6 +3,11 @@ const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
+const compression = require("compression");
+const crypto = require("node:crypto");
+const { info } = require("./utils/logger");
+const { getDatabaseHealth } = require("./database/health");
+const { pool } = require("./config/db");
 
 const env = require("./config/env");
 const { errorHandler, notFoundHandler } = require("./middleware");
@@ -12,9 +17,6 @@ const {
   permissionsPolicy,
   securityHeaders,
 } = require("./middleware/security.middleware");
-const {
-  importBuiltInTemplates,
-} = require("./services/builtInTemplates.service");
 const { ensureStartupSchema } = require("./services/startupSchema.service");
 
 // Import routes
@@ -64,6 +66,7 @@ const rateLimitJsonHandler = (req, res, next, options) => {
 app.use(blockSuspiciousPaths);
 app.use(securityHeaders(env));
 app.use(permissionsPolicy);
+app.use(compression());
 app.use(
   cors({
     origin: env.corsOrigins,
@@ -129,15 +132,35 @@ app.use(
   express.static(path.join(__dirname, "../uploads")),
 );
 
-// Request logging middleware
+// Correlated structured request logging.
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  const startedAt = process.hrtime.bigint();
+  req.requestId = req.get("x-request-id") || crypto.randomUUID();
+  res.setHeader("X-Request-Id", req.requestId);
+  res.on("finish", () => info("http_request", {
+    requestId: req.requestId,
+    method: req.method,
+    route: req.originalUrl,
+    status: res.statusCode,
+    durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6,
+    userId: req.user?.userId,
+    schoolId: req.user?.schoolId,
+  }));
   next();
 });
 
 // Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({ status: "ok", timestamp: new Date().toISOString(), version: process.env.APP_VERSION || "1.0.0" });
+});
+app.get("/health/live", (req, res) => res.json({ status: "ok" }));
+app.get("/health/ready", async (req, res, next) => {
+  try {
+    const database = await getDatabaseHealth();
+    res.status(database.status === "ok" ? 200 : 503).json({ status: database.status, database });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // API routes
@@ -175,26 +198,34 @@ app.use(errorHandler);
 const PORT = env.port;
 
 if (env.nodeEnv !== "test") {
+  let server;
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    info("server_shutdown_started", { signal });
+    const forceTimer = setTimeout(() => process.exit(1), 15_000);
+    forceTimer.unref();
+    if (server) await new Promise((resolve) => server.close(resolve));
+    await pool.end();
+    clearTimeout(forceTimer);
+    info("server_shutdown_complete", { signal });
+  };
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+
   ensureStartupSchema()
-    .then(() => importBuiltInTemplates())
-    .then((result) => {
-      console.log(
-        `Built-in templates ready: ${result.imported} imported, ${result.skipped} preserved, ${result.modules} modules, ${result.activities} activities.`,
-      );
-      app.listen(PORT, () => {
-        console.log(`eduClub Backend Server running on port ${PORT}`);
-        console.log(`Environment: ${env.nodeEnv}`);
-        console.log(
-          `Database URL: ${env.databaseUrl ? "configured" : "not configured"}`,
-        );
-        console.log(
-          `Standalone LMS: ${env.standaloneLmsEnabled ? "enabled" : "disabled"}`,
-        );
+    .then(() => {
+      server = app.listen(PORT, () => {
+        info("server_started", { port: PORT, environment: env.nodeEnv, standaloneLms: env.standaloneLmsEnabled });
       });
+      server.requestTimeout = Number(process.env.HTTP_REQUEST_TIMEOUT_MS || 30_000);
+      server.headersTimeout = Number(process.env.HTTP_HEADERS_TIMEOUT_MS || 35_000);
+      server.keepAliveTimeout = Number(process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS || 5_000);
     })
     .catch((error) => {
       console.error(
-        "Built-in template import failed; server was not started:",
+        "Database health check failed; server was not started:",
         error,
       );
       process.exitCode = 1;

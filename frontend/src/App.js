@@ -6,7 +6,7 @@
 * Copyright 2026 eduClub
 */
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation, matchPath } from "react-router-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -15,6 +15,8 @@ import MaterialDashboard from "assets/theme";
 import eduClubLogo from "assets/images/brand/educlub-logo.png";
 import Sidenav from "examples/Sidenav";
 import IdleTimeoutGuard from "components/IdleTimeoutGuard";
+import MDBox from "components/MDBox";
+import MDTypography from "components/MDTypography";
 
 // eduClub routes
 import routes from "routes";
@@ -112,7 +114,15 @@ function AppContent() {
         />
       )}
       <IdleTimeoutGuard active={Boolean(user)} onTimeout={logout} />
-      <Routes>{getRoutes()}</Routes>
+      <Suspense
+        fallback={
+          <MDBox minHeight="50vh" display="flex" alignItems="center" justifyContent="center">
+            <MDTypography role="status" aria-live="polite">Loading your workspace…</MDTypography>
+          </MDBox>
+        }
+      >
+        <Routes>{getRoutes()}</Routes>
+      </Suspense>
     </>
   );
 }

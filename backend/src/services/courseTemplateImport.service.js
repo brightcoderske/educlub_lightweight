@@ -1,11 +1,13 @@
 const { validateTemplateDefinition } = require("../courseTemplates/templateDefinition");
+const { withTransaction } = require("../database/transaction");
 
-async function importTemplateDefinition(input, query) {
+async function importTemplateDefinition(input, queryFunction) {
   const definition = validateTemplateDefinition(input);
-  let moduleCount = 0;
-  let activityCount = 0;
-  await query("BEGIN");
-  try {
+  const client = { query: queryFunction };
+  return withTransaction(async (transactionClient) => {
+    const query = transactionClient.query.bind(transactionClient);
+    let moduleCount = 0;
+    let activityCount = 0;
     const templateResult = await query(
       `INSERT INTO course_templates (
          name, code, description, target_level, image_url, estimated_weeks,
@@ -75,12 +77,8 @@ async function importTemplateDefinition(input, query) {
        WHERE template_id = $1 AND position > $2`,
       [templateId, definition.modules.length],
     );
-    await query("COMMIT");
     return { template_id: templateId, modules: moduleCount, activities: activityCount };
-  } catch (error) {
-    await query("ROLLBACK");
-    throw error;
-  }
+  }, { client });
 }
 
 module.exports = { importTemplateDefinition };

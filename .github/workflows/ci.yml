@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: educlub
+          POSTGRES_PASSWORD: educlub_test
+          POSTGRES_DB: educlub_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U educlub -d educlub_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://educlub:educlub_test@127.0.0.1:5432/educlub_test
+      JWT_SECRET: ci-only-jwt-secret-that-is-longer-than-thirty-two-characters
+      EMAIL_HOST: localhost
+      EMAIL_PORT: 1025
+      EMAIL_USER: ci@educlub.invalid
+      EMAIL_PASSWORD: ci-only-password
+      DEFAULT_ADMIN_PASSWORD: CiAdminPassword1!
+      DEFAULT_SCHOOL_ADMIN_PASSWORD: CiSchoolAdminPassword1!
+      DEFAULT_LEARNER_PASSWORD: CiLearnerPassword1!
+      SYSTEM_ADMIN_EMAIL: admin@educlub.invalid
+      FRONTEND_URL: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3000
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci
+      - name: Migrate database
+        working-directory: backend
+        run: npm run db:migrate
+      - name: Verify migration state
+        working-directory: backend
+        run: npm run db:health
+      - name: Backend lint and tests
+        working-directory: backend
+        run: npm run lint && npm test && npm run test:integration
+      - name: Frontend lint, tests, and build
+        working-directory: frontend
+        run: npm run lint && npm test -- --runInBand && npm run build
+      - name: Production dependency audit
+        run: npm --prefix backend run security:audit && npm --prefix frontend run security:audit

@@ -132,6 +132,7 @@ export const AuthProvider = ({ children }) => {
 
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, trustedDeviceToken }),
       });
@@ -162,6 +163,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/2fa/verify`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tempToken, code, rememberDevice }),
       });
@@ -191,6 +193,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -210,6 +213,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
