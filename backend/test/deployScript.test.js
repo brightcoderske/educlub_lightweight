@@ -17,3 +17,7 @@ test("cPanel deployment copies and restores backend utility scripts", () => {
     /cp -a "\$SOURCE_ROOT\/backend\/scripts" "\$APP_ROOT\/scripts"/,
   );
 });
+
+test("cPanel deployment migrates the database before restarting", () => {
+  assert.match(deploymentScript, /npm run db:migrate\s+mkdir -p "\$APP_ROOT\/tmp"/);
+});

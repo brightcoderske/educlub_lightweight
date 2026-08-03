@@ -31,6 +31,7 @@ backend/uploads/competition-banners/*
 !backend/uploads/competition-banners/.gitkeep
 uploads/school-logos/*
 !uploads/school-logos/.gitkeep
+output/pdf/*
 .aider*
 .cursor
 .superpowers/

@@ -67,6 +67,7 @@ source "$NODE_ENV_ROOT/bin/activate"
 set -u
 cd "$APP_ROOT"
 npm install --omit=dev --no-audit --no-fund
+npm run db:migrate
 
 mkdir -p "$APP_ROOT/tmp"
 touch "$APP_ROOT/tmp/restart.txt"
