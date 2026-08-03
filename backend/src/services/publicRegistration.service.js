@@ -281,6 +281,7 @@ async function registerLearner(data, ipAddress, userAgent) {
 
     const username = await learnersService.generateUniqueUsername(
       valid.fullName,
+      client.query.bind(client),
     );
     const passwordHash = await hashPassword(valid.password);
     const userResult = await client.query(

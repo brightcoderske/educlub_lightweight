@@ -25,8 +25,7 @@
     "react-chartjs-2": "5.2.0",
     "react-dom": "18.2.0",
     "react-github-btn": "1.4.0",
-    "react-router-dom": "^6.30.3",
-    "react-scripts": "5.0.1",
+    "react-router-dom": "^7.18.2",
     "react-table": "7.8.0",
     "read-excel-file": "^5.8.8",
     "stylis": "4.1.4",
@@ -34,10 +33,12 @@
     "yup": "1.1.1"
   },
   "scripts": {
-    "start": "node scripts/run-react-scripts.js start",
-    "build": "node scripts/run-react-scripts.js build && node scripts/generate-public-seo.js",
+    "start": "vite",
+    "build": "vite build && node scripts/generate-public-seo.js",
     "test": "jest --config jest.config.cjs",
-    "eject": "react-scripts eject",
+    "lint": "eslint src",
+    "security:audit": "npm audit --omit=dev --audit-level=high",
+    "validate": "npm run lint && npm test -- --runInBand && npm run build",
     "install:clean": "rm -rf node_modules/ && rm -rf package-lock.json && npm install && npm start"
   },
   "eslintConfig": {
@@ -59,7 +60,11 @@
     ]
   },
   "devDependencies": {
+    "@babel/preset-env": "^7.29.5",
+    "@babel/preset-react": "^7.28.5",
+    "@vitejs/plugin-react": "^6.0.5",
     "ajv": "^8.20.0",
+    "babel-jest": "^30.4.1",
     "eslint": "8.39.0",
     "eslint-config-prettier": "8.8.0",
     "eslint-plugin-import": "2.27.5",
@@ -67,13 +72,19 @@
     "eslint-plugin-prettier": "4.2.1",
     "eslint-plugin-react": "7.32.2",
     "eslint-plugin-react-hooks": "4.6.0",
-    "prettier": "2.8.8"
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
+    "prettier": "2.8.8",
+    "vite": "^8.2.0"
   },
   "overrides": {
-    "svgo": "3.3.3",
+    "svgo": "4.0.2",
     "serialize-javascript": "7.0.5",
     "underscore": "1.13.8",
     "@tootallnate/once": "3.0.1",
-    "postcss": "8.5.15"
+    "postcss": "8.5.25",
+    "shell-quote": "1.10.0",
+    "websocket-driver": "0.7.5",
+    "ws": "8.21.1"
   }
 }

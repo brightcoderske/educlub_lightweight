@@ -3,20 +3,30 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-test("authenticated users can refresh an active session without a refresh-token table", () => {
+test("refresh uses rotating hashed server-side sessions without requiring an access token", () => {
   const routes = fs.readFileSync(
     path.join(__dirname, "../src/routes/auth.routes.js"),
     "utf8",
   );
   const service = fs.readFileSync(
-    path.join(__dirname, "../src/services/auth.service.js"),
+    path.join(__dirname, "../src/services/session.service.js"),
     "utf8",
   );
 
-  assert.match(routes, /router\.post\("\/refresh", authenticateToken/);
-  assert.match(service, /async function refreshSession/);
-  assert.match(service, /WHERE u\.id = \$1[\s\S]*u\.is_active = true/);
-  assert.doesNotMatch(service, /INSERT INTO refresh_tokens/);
+  assert.match(routes, /router\.post\("\/refresh"[\s\S]*authController\.refreshSession/);
+  assert.doesNotMatch(routes, /router\.post\("\/refresh", authenticateToken/);
+  assert.match(service, /async function rotateSession/);
+  assert.match(service, /refresh_token_hash/);
+  assert.match(service, /FOR UPDATE/);
+  assert.match(service, /token_reuse/);
+});
+
+test("MFA codes are hashed, attempt-limited, and compared in constant time", () => {
+  const service = fs.readFileSync(path.join(__dirname, "../src/services/auth.service.js"), "utf8");
+  assert.match(service, /createHmac\("sha256"/);
+  assert.match(service, /timingSafeEqual/);
+  assert.match(service, /mfa_code_attempts[\s\S]*>= 5/);
+  assert.doesNotMatch(service, /SET mfa_code = \$1/);
 });
 
 test("password reset tokens are handled through the internal RLS context", () => {

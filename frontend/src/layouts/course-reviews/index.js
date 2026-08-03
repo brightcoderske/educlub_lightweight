@@ -708,7 +708,6 @@ function CourseReviews() {
             This action is audited. Enter the reason identity is required for this review.
           </MDTypography>
           <TextField
-            autoFocus
             fullWidth
             multiline
             minRows={3}
