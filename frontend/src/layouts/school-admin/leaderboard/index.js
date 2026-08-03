@@ -33,10 +33,6 @@ function Leaderboard() {
   const [showTrend, setShowTrend] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
-  if (!isSchoolAdmin()) {
-    return <MDBox>Access denied. School Admin only.</MDBox>;
-  }
-
   const fetchLeaderboard = async (background = false) => {
     const cacheKey = `school-admin:${user?.schoolId}:leaderboard:${weekNumber}:${term}:${academicYear}:${category}`;
     const cached = getCachedPage(cacheKey)?.value;
@@ -123,6 +119,10 @@ function Leaderboard() {
     if (score <= 80) return "warning";
     return "success";
   };
+
+  if (!isSchoolAdmin()) {
+    return <MDBox>Access denied. School Admin only.</MDBox>;
+  }
 
   return (
     <DashboardLayout>

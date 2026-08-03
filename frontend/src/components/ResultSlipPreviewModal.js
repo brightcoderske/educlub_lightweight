@@ -23,6 +23,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Chip from "@mui/material/Chip";
+import Divider from "@mui/material/Divider";
 import { apiClient } from "lib/api";
 
 function ResultSlipPreviewModal({ open, onClose, learnerId, term, academicYear }) {

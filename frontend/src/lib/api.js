@@ -64,16 +64,13 @@ class ApiClient {
     if (!token) return null;
 
     const secondsRemaining = tokenSecondsRemaining(token);
-    if (secondsRemaining !== null && secondsRemaining <= 0) {
-      dispatchAuthExpired();
-      throw new Error("Your session has expired. Please sign in again, then retry.");
-    }
-    if (!force && !shouldRefreshToken(token)) return null;
+    if (!force && secondsRemaining !== null && secondsRemaining > 0 && !shouldRefreshToken(token)) return null;
     if (refreshPromise) return refreshPromise;
 
     refreshPromise = fetch(`${this.baseUrl}/auth/refresh`, {
       method: "POST",
       headers: this.getHeaders(),
+      credentials: "include",
     })
       .then((response) => this.parseResponse(response))
       .then((payload) => {
@@ -96,6 +93,7 @@ class ApiClient {
     const options = {
       method,
       headers: this.getHeaders(),
+      credentials: "include",
     };
     if (data !== undefined) {
       options.body = JSON.stringify(data);
@@ -114,6 +112,7 @@ class ApiClient {
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: "GET",
       headers: this.getHeaders(),
+      credentials: "include",
     });
 
     if (!response.ok) {

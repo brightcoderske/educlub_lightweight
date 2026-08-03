@@ -1,5 +1,5 @@
 const { query } = require("../config");
-const fs = require("fs");
+const fs = require("fs/promises");
 const path = require("path");
 const competitionsService = require("../services/competitions.service");
 const flutterwave = require("../services/flutterwave.service");
@@ -97,8 +97,8 @@ async function uploadBanner(req, res) {
       .replace(/[^a-z0-9-]/gi, "-")
       .toLowerCase()}.${extension}`;
     const uploadDir = path.join(__dirname, "../../uploads/competition-banners");
-    fs.mkdirSync(uploadDir, { recursive: true });
-    fs.writeFileSync(path.join(uploadDir, safeName), buffer);
+    await fs.mkdir(uploadDir, { recursive: true });
+    await fs.writeFile(path.join(uploadDir, safeName), buffer, { flag: "wx" });
 
     res.json({
       image_url: getPublicUploadUrl(
