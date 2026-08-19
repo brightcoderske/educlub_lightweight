@@ -1,5 +1,17 @@
 ---
+# Runs when "Deploy HEAD Commit" is pressed in cPanel > Git Version Control,
+# after "Update from Remote" has pulled the latest commit from GitHub.
+#
+# Deploy directory: /home/codecham/domains/learn.educlub.co.ke/educlub-source
+#
+# Both tasks use absolute paths on purpose. cPanel executes each task in its own
+# shell and does not guarantee the working directory, so nothing here may depend
+# on pwd or on state carried over from the previous task.
 deployment:
   tasks:
+    # Write the pulled commit into the deploy directory.
     - /usr/bin/git --git-dir=/home/codecham/domains/learn.educlub.co.ke/educlub-lightweight.git --work-tree=/home/codecham/domains/learn.educlub.co.ke/educlub-source checkout -f main
-    - /bin/bash scripts/deploy-cpanel-git.sh
+    # Copies backend/ into the app root, installs production dependencies, runs
+    # database migrations, restarts Passenger and health-checks the result. It
+    # restores the previous release automatically if any step fails.
+    - /bin/bash /home/codecham/domains/learn.educlub.co.ke/educlub-source/scripts/deploy-cpanel-git.sh
