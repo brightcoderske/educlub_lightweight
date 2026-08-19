@@ -115,6 +115,42 @@ async function getActiveTerm(termType = "regular") {
   return fallback.rows[0];
 }
 
+// Terms exist only where an operator created them. Any record that stores a
+// term string must resolve it here first, so a client cannot invent one such as
+// a hardcoded "Term 1" and leave an orphan value on a learner or allocation.
+async function resolveTerm(name, academicYear = null) {
+  // Nothing asked for: fall back to the active term. When no term exists at all
+  // the record is left unset rather than blocked or invented - learners.term is
+  // nullable, and the value is filled in once a term exists and they are
+  // allocated. Registering learners must not wait on term setup.
+  if (!name) {
+    const active = await getActiveTerm();
+    return active
+      ? { term: active.name, academic_year: active.academic_year }
+      : { term: null, academic_year: null };
+  }
+
+  const result = await query(
+    `SELECT t.name, ay.year AS academic_year
+     FROM terms t
+     LEFT JOIN academic_years ay ON ay.id = t.academic_year_id
+     WHERE t.name = $1::varchar
+       AND ($2::integer IS NULL OR ay.year = $2::integer)
+     ORDER BY ay.year DESC NULLS LAST
+     LIMIT 1`,
+    [name, academicYear ? Number(academicYear) : null]
+  );
+
+  if (!result.rows[0]) {
+    throw new Error(
+      `Term "${name}" does not exist. Create it under Academic Years and Terms first.`
+    );
+  }
+
+  // Callers store {term, academic_year}; keep one shape for both branches.
+  return { term: result.rows[0].name, academic_year: result.rows[0].academic_year };
+}
+
 async function getAllActiveTerms() {
   const result = await query(
     "SELECT * FROM terms WHERE is_active = true ORDER BY term_type, created_at DESC"
@@ -347,6 +383,7 @@ module.exports = {
   getAllTerms,
   getActiveTerm,
   getAllActiveTerms,
+  resolveTerm,
   createTerm,
   getTermById,
   updateTerm,

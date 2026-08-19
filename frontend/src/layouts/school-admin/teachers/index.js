@@ -80,7 +80,7 @@ function Teachers() {
           </MDButton>
         </MDBox>
         <Card>
-          <MDBox p={3}>
+          <MDBox p={2}>
             {error && (
               <MDTypography variant="body2" color="error" mb={2}>
                 {error}

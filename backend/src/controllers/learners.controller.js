@@ -6,6 +6,8 @@ const authService = require("../services/auth.service");
 const { resolveLearnerSchoolScope } = require("../services/learnerScope");
 const { generateRandomPassword, hashPassword } = require("../utils/password");
 const teacherAssignmentsService = require("../services/teacherAssignments.service");
+const academicService = require("../services/academic.service");
+const { normalizeGrade } = require("../utils/grade");
 
 function canManageLearner(user, learner) {
   if (user.role === "system_admin") {
@@ -121,13 +123,22 @@ async function createLearner(req, res) {
         .json({ error: "First name and second name are required" });
     }
 
+    // Never store a term the operator did not create. With no term supplied
+    // this resolves to the active one instead of a client-side default.
+    let resolvedTerm;
+    try {
+      resolvedTerm = await academicService.resolveTerm(term, academic_year);
+    } catch (termError) {
+      return res.status(400).json({ error: termError.message });
+    }
+
     const result = await learnersService.createLearner({
       school_id: schoolId,
       full_name: fullName,
       email,
-      grade,
-      term,
-      academic_year,
+      grade: normalizeGrade(grade),
+      term: resolvedTerm.term,
+      academic_year: resolvedTerm.academic_year,
       stream,
     });
 
@@ -182,16 +193,29 @@ async function bulkCreateLearners(req, res) {
         continue;
       }
 
+      let rowTerm;
+      try {
+        // Same rule as single create: a spreadsheet cannot introduce a term
+        // that no operator created.
+        rowTerm = await academicService.resolveTerm(
+          row.term || null,
+          row.academic_year || row.academicYear || null,
+        );
+      } catch (termError) {
+        errors.push({ row: rowNumber, message: termError.message });
+        continue;
+      }
+
       try {
         const result = await learnersService.createLearner({
           school_id: schoolId,
           full_name: [firstName, secondName, thirdName]
             .filter(Boolean)
             .join(" "),
-          grade: row.grade || null,
+          grade: normalizeGrade(row.grade),
           stream: row.stream || null,
-          term: row.term || null,
-          academic_year: row.academic_year || row.academicYear || null,
+          term: rowTerm.term,
+          academic_year: rowTerm.academic_year,
         });
         created.push(result);
       } catch (error) {
@@ -302,13 +326,15 @@ async function updateLearner(req, res) {
         nextSchoolId,
         nextFullName,
         email !== undefined ? email : existingLearner.email,
-        grade !== undefined ? grade : existingLearner.grade,
+        grade !== undefined ? normalizeGrade(grade) : existingLearner.grade,
         term !== undefined ? term : existingLearner.term,
         academic_year !== undefined
           ? academic_year
           : existingLearner.academic_year,
         stream !== undefined ? stream : existingLearner.stream,
-        req.user.role === "learner" ? existingLearner.next_grade : next_grade,
+        req.user.role === "learner"
+          ? existingLearner.next_grade
+          : normalizeGrade(next_grade),
         req.user.role === "learner" ? existingLearner.next_term : next_term,
         req.params.id,
       ]
@@ -349,26 +375,52 @@ async function promoteLearners(req, res) {
         .json({ error: "Next grade or next term is required" });
     }
 
+    // Promotion moves learners into a term, so that term must be one an
+    // operator created. Without this a caller can write any string onto the
+    // whole cohort at once, which is the widest-blast-radius term write here.
+    let promotionTerm = null;
+    if (next_term) {
+      try {
+        promotionTerm = await academicService.resolveTerm(next_term, academic_year);
+      } catch (termError) {
+        return res.status(400).json({ error: termError.message });
+      }
+    }
+
     const params = [];
     let paramIndex = 1;
     const updates = [];
     let queryText = "UPDATE learners SET ";
 
-    if (next_grade) {
+    // Promotion targets a real class, so the same canonical form applies here
+    // as on create: "Grade 7", never a bare "7" from a caller.
+    const promotionGrade = normalizeGrade(next_grade);
+    if (next_grade && !promotionGrade) {
+      return res
+        .status(400)
+        .json({ error: "Next grade must be a grade between 1 and 12." });
+    }
+
+    if (promotionGrade) {
       updates.push(`grade = $${paramIndex}`);
-      params.push(next_grade);
+      params.push(promotionGrade);
       paramIndex++;
     }
 
-    if (next_term) {
+    if (promotionTerm) {
       updates.push(`term = $${paramIndex}`);
-      params.push(next_term);
+      params.push(promotionTerm.term);
       paramIndex++;
     }
 
-    if (academic_year) {
+    // Keep the year tied to the resolved term rather than trusting a separate
+    // client value, so term and academic_year cannot disagree on the record.
+    const resolvedAcademicYear = promotionTerm
+      ? promotionTerm.academic_year
+      : academic_year;
+    if (resolvedAcademicYear) {
       updates.push(`academic_year = $${paramIndex}`);
-      params.push(academic_year);
+      params.push(resolvedAcademicYear);
       paramIndex++;
     }
 

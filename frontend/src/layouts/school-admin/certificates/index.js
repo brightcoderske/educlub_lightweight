@@ -70,14 +70,14 @@ function SchoolAdminCertificates() {
   };
 
   if (!isSchoolAdmin()) {
-    return <MDBox p={3}>Access denied. School Admin only.</MDBox>;
+    return <MDBox p={2}>Access denied. School Admin only.</MDBox>;
   }
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3}>
+        <MDBox mb={2}>
           <DashboardIdentity
             user={user}
             title="Certificates"
@@ -85,7 +85,7 @@ function SchoolAdminCertificates() {
           />
         </MDBox>
         <Card>
-          <MDBox p={3}>
+          <MDBox p={2}>
             {error && (
               <MDTypography variant="caption" color="error" display="block" mb={2}>
                 {error}

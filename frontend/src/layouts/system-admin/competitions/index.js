@@ -308,7 +308,7 @@ function SystemAdminCompetitions() {
   };
 
   if (!isSystemAdmin()) {
-    return <MDBox p={3}>Access denied. System Admin only.</MDBox>;
+    return <MDBox p={2}>Access denied. System Admin only.</MDBox>;
   }
 
   return (
@@ -324,7 +324,7 @@ function SystemAdminCompetitions() {
         <Grid container spacing={3} mt={1}>
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={2}>
                 <MDTypography variant="h5" fontWeight="bold" mb={2}>
                   {editingId ? "Edit Competition" : "New Competition"}
                 </MDTypography>
@@ -511,7 +511,7 @@ function SystemAdminCompetitions() {
 
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={2}>
                 <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <MDTypography variant="h5" fontWeight="bold">
                     Available Competitions
@@ -639,7 +639,7 @@ function SystemAdminCompetitions() {
           </Grid>
         </Grid>
         <Card sx={{ mt: 3 }}>
-          <MDBox p={3}>
+          <MDBox p={2}>
             <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <MDTypography variant="h5" fontWeight="bold">
                 Competition Reporting

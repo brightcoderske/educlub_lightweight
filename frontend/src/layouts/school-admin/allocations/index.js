@@ -228,14 +228,14 @@ function SchoolAdminAllocations() {
   });
 
   if (!isSchoolAdmin()) {
-    return <MDBox p={3}>Access denied. School Admin only.</MDBox>;
+    return <MDBox p={2}>Access denied. School Admin only.</MDBox>;
   }
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3}>
+        <MDBox mb={2}>
           <DashboardIdentity
             user={user}
             title="Course Allocation"
@@ -246,8 +246,8 @@ function SchoolAdminAllocations() {
         <Grid container spacing={3}>
           <Grid item xs={12} lg={6}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   Single Learner
                 </MDTypography>
                 <Grid container spacing={2}>
@@ -366,8 +366,8 @@ function SchoolAdminAllocations() {
 
           <Grid item xs={12} lg={6}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   Bulk Allocation
                 </MDTypography>
                 <Grid container spacing={2}>
@@ -466,8 +466,8 @@ function SchoolAdminAllocations() {
 
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   Current Allocations
                 </MDTypography>
                 <Grid container spacing={2} mb={2}>

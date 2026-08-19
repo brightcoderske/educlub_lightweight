@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import Dialog from "@mui/material/Dialog";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
@@ -33,6 +35,8 @@ function average(rows, key) {
 }
 
 function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
+  const theme = useTheme();
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
   const [learner, setLearner] = useState(null);
   const [allocations, setAllocations] = useState([]);
   const [certificates, setCertificates] = useState([]);
@@ -176,7 +180,10 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
       onClose={onClose}
       maxWidth="lg"
       fullWidth
-      PaperProps={{ sx: { borderRadius: 2 } }}
+      // A large modal on a phone is mostly margin. Below sm it takes the whole
+      // screen instead, so the learner detail is actually readable there.
+      fullScreen={isSmallScreen}
+      PaperProps={{ sx: { borderRadius: isSmallScreen ? 0 : 2 } }}
     >
       <DialogTitle sx={{ pb: 1 }}>
         <MDBox display="flex" justifyContent="space-between" alignItems="center">
@@ -311,7 +318,7 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
                   }}
                   SelectProps={{ native: true }}
                 >
-                  <option value={selectedTerm}>{selectedTerm || "Current term"}</option>
+                  {terms.length === 0 && <option value="">No terms configured</option>}
                   {terms.map((termItem) => (
                     <option key={termItem.id} value={termItem.name}>
                       {termItem.name} ({termItem.academic_year || "Year not set"})

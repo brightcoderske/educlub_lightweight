@@ -8,6 +8,8 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Icon from "@mui/material/Icon";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
@@ -28,14 +30,15 @@ import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
 
+// No term or academic year here on purpose: the Add Learner form does not ask
+// for them, so the backend resolves the active term rather than this form
+// silently stamping every new learner with a hardcoded "Term 1".
 const emptyForm = {
   first_name: "",
   second_name: "",
   third_name: "",
   grade: "",
   stream: "",
-  term: "Term 1",
-  academic_year: new Date().getFullYear(),
 };
 
 function SchoolAdminLearners() {
@@ -51,6 +54,9 @@ function SchoolAdminLearners() {
     next_term: "",
     academic_year: new Date().getFullYear(),
   });
+  // Which of the roster forms is open as a dialog: "add", "upload",
+  // "graduate", or null for none. The table owns the full width otherwise.
+  const [openForm, setOpenForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -60,6 +66,7 @@ function SchoolAdminLearners() {
   const [streamFilter, setStreamFilter] = useState("");
   const [selectedLearnerId, setSelectedLearnerId] = useState(null);
   const [graduationCandidate, setGraduationCandidate] = useState(null);
+  const [academicTerms, setAcademicTerms] = useState([]);
 
   const cacheKey = `school-admin:${user?.schoolId}:learners`;
 
@@ -72,12 +79,14 @@ function SchoolAdminLearners() {
     setLoading(!cached && !background);
     setError("");
     try {
-      const [response, schoolRes] = await Promise.all([
+      const [response, schoolRes, termsRes] = await Promise.all([
         apiClient.get(`/learners?school_id=${user?.schoolId}`),
         apiClient.get(`/schools/${user?.schoolId}`),
+        apiClient.get("/academic/terms").catch(() => []),
       ]);
       setLearners(response);
       setSchool(schoolRes);
+      setAcademicTerms(Array.isArray(termsRes) ? termsRes : []);
       setCachedPage(cacheKey, { learners: response, school: schoolRes });
     } catch (err) {
       setError(err.message);
@@ -118,8 +127,13 @@ function SchoolAdminLearners() {
     new Set(learners.map((learner) => learner.stream).filter(Boolean))
   );
   const streams = school?.streams_config?.length ? school.streams_config : learnerStreams;
-  const terms = ["Term 1", "Term 2", "Term 3"];
-  const academicYears = Array.from({ length: 5 }, (_, index) => new Date().getFullYear() + index);
+  // Terms and academic years are owned by the Academic module. Nothing here may
+  // invent them: offering a term that was never created writes an orphan term
+  // string onto learner and allocation records.
+  const terms = academicTerms.map((item) => item.name);
+  const academicYears = [
+    ...new Set(academicTerms.map((item) => item.academic_year).filter(Boolean)),
+  ].sort();
 
   const handleCreate = async () => {
     setSaving(true);
@@ -128,6 +142,7 @@ function SchoolAdminLearners() {
       await apiClient.post("/learners", form);
       setForm(emptyForm);
       await loadLearners(true);
+      setOpenForm(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -146,6 +161,7 @@ function SchoolAdminLearners() {
       delete payload.learner_id;
       await apiClient.post("/learners/promote", payload);
       await loadLearners(true);
+      setOpenForm(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -253,28 +269,50 @@ function SchoolAdminLearners() {
   };
 
   if (!isSchoolAdmin()) {
-    return <MDBox p={3}>Access denied. School Admin only.</MDBox>;
+    return <MDBox p={2}>Access denied. School Admin only.</MDBox>;
   }
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3}>
+        <MDBox
+          mb={2}
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          flexWrap="wrap"
+          gap={1}
+        >
           <DashboardIdentity
             user={user}
             title="Learners"
             subtitle="Add learners and keep your school roster ready for course allocation."
           />
+          <MDBox display="flex" gap={1} flexWrap="wrap">
+            <MDButton variant="gradient" color="info" onClick={() => setOpenForm("add")}>
+              <Icon>person_add</Icon>&nbsp;Add Learner
+            </MDButton>
+            <MDButton variant="outlined" color="info" onClick={() => setOpenForm("upload")}>
+              <Icon>upload_file</Icon>&nbsp;Bulk Upload
+            </MDButton>
+            <MDButton variant="outlined" color="success" onClick={() => setOpenForm("graduate")}>
+              <Icon>school</Icon>&nbsp;Bulk Graduate
+            </MDButton>
+          </MDBox>
         </MDBox>
 
         <Grid container spacing={3}>
-          <Grid item xs={12} lg={4}>
-            <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
-                  Add Learner
-                </MDTypography>
+          {/* Dialogs portal out of the grid, so they take no layout space here. */}
+          <>
+            <Dialog
+              open={openForm === "add"}
+              onClose={() => setOpenForm(null)}
+              fullWidth
+              maxWidth="sm"
+            >
+              <DialogTitle>Add Learner</DialogTitle>
+              <DialogContent dividers>
                 <Grid container spacing={2}>
                   {[
                     ["first_name", "First Name"],
@@ -331,24 +369,30 @@ function SchoolAdminLearners() {
                     {error}
                   </MDTypography>
                 )}
-                <MDBox mt={3}>
-                  <MDButton
-                    variant="gradient"
-                    color="info"
-                    fullWidth
-                    onClick={handleCreate}
-                    disabled={saving || !form.first_name || !form.second_name}
-                  >
-                    {saving ? "Saving..." : "Add Learner"}
-                  </MDButton>
-                </MDBox>
-              </MDBox>
-            </Card>
-            <Card sx={{ mt: 3 }}>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={1}>
-                  Bulk Upload
-                </MDTypography>
+              </DialogContent>
+              <DialogActions>
+                <MDButton variant="text" color="secondary" onClick={() => setOpenForm(null)}>
+                  Cancel
+                </MDButton>
+                <MDButton
+                  variant="gradient"
+                  color="info"
+                  onClick={handleCreate}
+                  disabled={saving || !form.first_name || !form.second_name}
+                >
+                  {saving ? "Saving..." : "Add Learner"}
+                </MDButton>
+              </DialogActions>
+            </Dialog>
+
+            <Dialog
+              open={openForm === "upload"}
+              onClose={() => setOpenForm(null)}
+              fullWidth
+              maxWidth="sm"
+            >
+              <DialogTitle>Bulk Upload</DialogTitle>
+              <DialogContent dividers>
                 <MDTypography variant="caption" color="text" display="block" mb={2}>
                   Upload CSV or Excel with columns: first_name, second_name, third_name, grade,
                   stream. First and second names are required.
@@ -367,18 +411,25 @@ function SchoolAdminLearners() {
                     {importMessage}
                   </MDTypography>
                 )}
-                <MDBox mt={2}>
-                  <MDButton variant="text" color="info" onClick={downloadCredentialCards}>
-                    Download Learner Login Cards
-                  </MDButton>
-                </MDBox>
-              </MDBox>
-            </Card>
-            <Card sx={{ mt: 3 }}>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
-                  Bulk Graduate
-                </MDTypography>
+              </DialogContent>
+              <DialogActions>
+                <MDButton variant="text" color="info" onClick={downloadCredentialCards}>
+                  Download Learner Login Cards
+                </MDButton>
+                <MDButton variant="text" color="secondary" onClick={() => setOpenForm(null)}>
+                  Close
+                </MDButton>
+              </DialogActions>
+            </Dialog>
+
+            <Dialog
+              open={openForm === "graduate"}
+              onClose={() => setOpenForm(null)}
+              fullWidth
+              maxWidth="sm"
+            >
+              <DialogTitle>Bulk Graduate</DialogTitle>
+              <DialogContent dividers>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
                     <MDInput
@@ -515,80 +566,83 @@ function SchoolAdminLearners() {
                     </MDInput>
                   </Grid>
                 </Grid>
-                <MDBox mt={3}>
-                  <MDButton
-                    variant="gradient"
-                    color="success"
-                    fullWidth
-                    onClick={handlePromote}
-                    disabled={saving || (!promotion.next_grade && !promotion.next_term)}
-                  >
-                    Graduate Learners
-                  </MDButton>
-                </MDBox>
-              </MDBox>
-            </Card>
-          </Grid>
+              </DialogContent>
+              <DialogActions>
+                <MDButton variant="text" color="secondary" onClick={() => setOpenForm(null)}>
+                  Cancel
+                </MDButton>
+                <MDButton
+                  variant="gradient"
+                  color="success"
+                  onClick={handlePromote}
+                  disabled={saving || (!promotion.next_grade && !promotion.next_term)}
+                >
+                  Graduate Learners
+                </MDButton>
+              </DialogActions>
+            </Dialog>
+          </>
 
-          <Grid item xs={12} lg={8}>
+          <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
-                <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <MDBox>
-                    <MDTypography variant="h5">School Learners</MDTypography>
-                    <MDTypography variant="caption" color="text">
-                      Showing {visibleLearners.length} of {filteredLearners.length} matching
-                      learners
-                    </MDTypography>
-                  </MDBox>
-                  <MDButton variant="text" color="info" onClick={loadLearners}>
-                    <Icon>refresh</Icon>&nbsp;Refresh
-                  </MDButton>
+              <MDBox p={2}>
+                {/* Title, count, filters and refresh share a single toolbar row
+                    so the table starts as high up the card as possible. */}
+                <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap" mb={1.5}>
+                  <MDTypography variant="button" fontWeight="medium">
+                    School Learners
+                  </MDTypography>
+                  <MDTypography variant="caption" color="text">
+                    {visibleLearners.length}/{filteredLearners.length}
+                  </MDTypography>
+                  <MDBox flexGrow={1} />
+                  <MDInput
+                    size="small"
+                    label="Search"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    sx={{ width: { xs: "100%", sm: 190 } }}
+                  />
+                  <MDInput
+                    size="small"
+                    select
+                    label="Grade"
+                    value={gradeFilter}
+                    onChange={(event) => setGradeFilter(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    SelectProps={{ native: true }}
+                    sx={{ width: { xs: "100%", sm: 120 } }}
+                  >
+                    <option value="" />
+                    {grades.map((grade) => (
+                      <option key={grade} value={grade}>
+                        {grade}
+                      </option>
+                    ))}
+                  </MDInput>
+                  <MDInput
+                    size="small"
+                    select
+                    label="Class"
+                    value={streamFilter}
+                    onChange={(event) => setStreamFilter(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    SelectProps={{ native: true }}
+                    sx={{ width: { xs: "100%", sm: 120 } }}
+                  >
+                    <option value="" />
+                    {streams.map((stream) => (
+                      <option key={stream} value={stream}>
+                        {stream}
+                      </option>
+                    ))}
+                  </MDInput>
+                  <Tooltip title="Refresh">
+                    <IconButton size="small" color="info" onClick={loadLearners}>
+                      <Icon fontSize="small">refresh</Icon>
+                    </IconButton>
+                  </Tooltip>
                 </MDBox>
-                <Grid container spacing={2} mb={2}>
-                  <Grid item xs={12} md={6}>
-                    <MDInput
-                      label="Search by learner name"
-                      fullWidth
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <MDInput
-                      select
-                      label="Grade"
-                      fullWidth
-                      value={gradeFilter}
-                      onChange={(event) => setGradeFilter(event.target.value)}
-                      SelectProps={{ native: true }}
-                    >
-                      <option value="" />
-                      {grades.map((grade) => (
-                        <option key={grade} value={grade}>
-                          {grade}
-                        </option>
-                      ))}
-                    </MDInput>
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <MDInput
-                      select
-                      label="Class"
-                      fullWidth
-                      value={streamFilter}
-                      onChange={(event) => setStreamFilter(event.target.value)}
-                      SelectProps={{ native: true }}
-                    >
-                      <option value="" />
-                      {streams.map((stream) => (
-                        <option key={stream} value={stream}>
-                          {stream}
-                        </option>
-                      ))}
-                    </MDInput>
-                  </Grid>
-                </Grid>
                 {loading ? (
                   <MDTypography variant="body2">Loading learners...</MDTypography>
                 ) : learners.length === 0 ? (
@@ -597,7 +651,16 @@ function SchoolAdminLearners() {
                   </MDTypography>
                 ) : (
                   <TableContainer sx={{ maxHeight: 560 }}>
-                    <Table>
+                    <Table
+                      size="small"
+                      sx={{
+                        "& .MuiTableCell-root": {
+                          fontSize: "0.75rem",
+                          lineHeight: 1.3,
+                          whiteSpace: "nowrap",
+                        },
+                      }}
+                    >
                       <TableHead sx={{ display: "table-header-group" }}>
                         <TableRow>
                           <TableCell>Name</TableCell>
@@ -614,14 +677,17 @@ function SchoolAdminLearners() {
                         {visibleLearners.map((learner) => (
                           <TableRow key={learner.id}>
                             <TableCell>
-                              <MDButton
-                                variant="text"
+                              {/* Plain clickable text: a button here adds its own
+                                  padding and drives the whole row height up. */}
+                              <MDTypography
+                                variant="button"
+                                fontWeight="medium"
                                 color="info"
-                                size="small"
+                                sx={{ cursor: "pointer", fontSize: "0.75rem" }}
                                 onClick={() => setSelectedLearnerId(learner.id)}
                               >
                                 {learner.full_name}
-                              </MDButton>
+                              </MDTypography>
                             </TableCell>
                             <TableCell>{learner.username || "-"}</TableCell>
                             <TableCell>{learner.email || "-"}</TableCell>
@@ -632,23 +698,25 @@ function SchoolAdminLearners() {
                               {learner.graduation_status === "graduated" ? "Graduated" : "Active"}
                             </TableCell>
                             <TableCell align="center">
-                              <MDButton
-                                variant="outlined"
-                                color="info"
-                                size="small"
-                                onClick={() => setSelectedLearnerId(learner.id)}
-                              >
-                                Manage
-                              </MDButton>
-                              {learner.graduation_status !== "graduated" && (
-                                <MDButton
-                                  variant="text"
-                                  color="success"
+                              <Tooltip title="Manage learner">
+                                <IconButton
                                   size="small"
-                                  onClick={() => setGraduationCandidate(learner)}
+                                  color="info"
+                                  onClick={() => setSelectedLearnerId(learner.id)}
                                 >
-                                  Graduate
-                                </MDButton>
+                                  <Icon fontSize="small">manage_accounts</Icon>
+                                </IconButton>
+                              </Tooltip>
+                              {learner.graduation_status !== "graduated" && (
+                                <Tooltip title="Graduate learner">
+                                  <IconButton
+                                    size="small"
+                                    color="success"
+                                    onClick={() => setGraduationCandidate(learner)}
+                                  >
+                                    <Icon fontSize="small">school</Icon>
+                                  </IconButton>
+                                </Tooltip>
                               )}
                             </TableCell>
                           </TableRow>

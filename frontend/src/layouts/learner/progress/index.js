@@ -112,14 +112,14 @@ function LearnerProgress() {
   }, [user?.email, term, academicYear]);
 
   if (!isLearner()) {
-    return <MDBox p={3}>Access denied. Learner only.</MDBox>;
+    return <MDBox p={2}>Access denied. Learner only.</MDBox>;
   }
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3}>
+        <MDBox mb={2}>
           <DashboardIdentity
             user={user}
             title="My Progress"
@@ -136,7 +136,7 @@ function LearnerProgress() {
               onChange={(e) => setTerm(e.target.value)}
               SelectProps={{ native: true }}
             >
-              <option value={term}>{term}</option>
+              {terms.length === 0 && <option value="">No terms configured</option>}
               {terms.map((termItem) => (
                 <option key={termItem.id} value={termItem.name}>
                   {termItem.name} ({termItem.academic_year || "Year not set"})
@@ -155,7 +155,7 @@ function LearnerProgress() {
           </Grid>
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={2}>
                 {error && (
                   <MDTypography variant="caption" color="error" display="block" mb={2}>
                     {error}

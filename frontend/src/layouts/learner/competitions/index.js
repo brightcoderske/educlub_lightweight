@@ -387,14 +387,14 @@ function LearnerCompetitions() {
   };
 
   if (!isLearner()) {
-    return <MDBox p={3}>Access denied. Learner only.</MDBox>;
+    return <MDBox p={2}>Access denied. Learner only.</MDBox>;
   }
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3} display="flex" justifyContent="space-between" alignItems="center">
+        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center">
           <DashboardIdentity
             user={user}
             title="Competitions"
@@ -439,7 +439,7 @@ function LearnerCompetitions() {
                       sx={{ objectFit: "cover", display: "block" }}
                     />
                   )}
-                  <MDBox p={3}>
+                  <MDBox p={2}>
                     <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                       <Chip
                         color="info"
@@ -487,7 +487,7 @@ function LearnerCompetitions() {
         )}
 
         <Card>
-          <MDBox p={3}>
+          <MDBox p={2}>
             <MDTypography variant="h5" fontWeight="bold" mb={2}>
               Enrolled Competitions
             </MDTypography>

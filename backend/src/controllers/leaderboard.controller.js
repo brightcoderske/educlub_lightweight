@@ -315,7 +315,84 @@ async function getSchoolCompletionSummary(req, res) {
   }
 }
 
+// Whole-cohort weekly marks in one round trip. Deliberately a single set-based
+// query rather than a per-learner fetch: the matrix renders every learner
+// against every week, so anything per-learner would multiply network latency by
+// the size of the school.
+async function getSchoolWeeklyMatrix(req, res) {
+  try {
+    if (!["school_admin", "teacher", "system_admin"].includes(req.user.role)) {
+      return res.status(403).json({ error: "School staff access required" });
+    }
+
+    const schoolId =
+      req.user.role === "system_admin" ? req.query.schoolId : req.user.schoolId;
+    if (!schoolId) {
+      return res.status(400).json({ error: "School is required" });
+    }
+
+    let { term, academicYear } = req.query;
+    if (!term || !academicYear) {
+      const active = await academicService.getActiveTerm();
+      term = term || active?.name || null;
+      academicYear = academicYear || active?.academic_year || null;
+    }
+
+    if (!term || !academicYear) {
+      return res.json({ term: null, academicYear: null, weeks: [], learners: [] });
+    }
+
+    const result = await query(
+      `SELECT l.id AS learner_id, l.full_name, l.grade, l.stream,
+              w.week_number, w.quiz_score, w.typing_score, w.active_course_score
+       FROM learners l
+       LEFT JOIN weekly_marks w
+         ON w.learner_id = l.id
+        AND w.term = $2::varchar
+        AND w.academic_year = $3::integer
+       WHERE l.school_id = $1
+         AND COALESCE(l.graduation_status, 'active') <> 'graduated'
+       ORDER BY l.grade, l.stream, l.full_name, w.week_number`,
+      [schoolId, term, Number(academicYear)]
+    );
+
+    const byLearner = new Map();
+    const weeks = new Set();
+
+    result.rows.forEach((row) => {
+      if (!byLearner.has(row.learner_id)) {
+        byLearner.set(row.learner_id, {
+          learner_id: row.learner_id,
+          full_name: row.full_name,
+          grade: row.grade,
+          stream: row.stream,
+          weeks: {},
+        });
+      }
+      if (row.week_number === null) return;
+      weeks.add(row.week_number);
+      byLearner.get(row.learner_id).weeks[row.week_number] = {
+        quiz_score: row.quiz_score === null ? null : Number(row.quiz_score),
+        typing_score: row.typing_score === null ? null : Number(row.typing_score),
+        active_course_score:
+          row.active_course_score === null ? null : Number(row.active_course_score),
+      };
+    });
+
+    res.json({
+      term,
+      academicYear: Number(academicYear),
+      weeks: [...weeks].sort((left, right) => left - right),
+      learners: [...byLearner.values()],
+    });
+  } catch (error) {
+    console.error("Get school weekly matrix error:", error);
+    res.status(500).json({ error: error.message || "Failed to load weekly matrix" });
+  }
+}
+
 module.exports = {
+  getSchoolWeeklyMatrix,
   getWeeklyLeaderboard,
   getAllWeeklyLeaderboards,
   getLearnerPosition,

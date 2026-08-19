@@ -171,8 +171,8 @@ function SystemAdminSchools() {
         </MDBox>
 
         <Card>
-          <MDBox p={3}>
-            <MDTypography variant="h5" mb={2}>
+          <MDBox p={2}>
+            <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
               Register School
             </MDTypography>
             <Grid container spacing={2}>
@@ -243,8 +243,8 @@ function SystemAdminSchools() {
         </Card>
 
         <Card sx={{ mt: 3 }}>
-          <MDBox p={3}>
-            <MDTypography variant="h5" mb={2}>
+          <MDBox p={2}>
+            <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
               Registered Schools
             </MDTypography>
             {loading ? (

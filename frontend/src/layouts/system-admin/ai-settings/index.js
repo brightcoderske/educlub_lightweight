@@ -125,7 +125,7 @@ function SystemAdminAiSettings() {
   };
 
   if (!isSystemAdmin()) {
-    return <MDBox p={3}>Access denied. System Admin only.</MDBox>;
+    return <MDBox p={2}>Access denied. System Admin only.</MDBox>;
   }
 
   return (
@@ -157,7 +157,7 @@ function SystemAdminAiSettings() {
         <Grid container spacing={3}>
           <Grid item xs={12} lg={4}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={2}>
                 <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <MDBox>
                     <MDTypography variant="h5">Global AI</MDTypography>
@@ -289,8 +289,8 @@ function SystemAdminAiSettings() {
 
           <Grid item xs={12} lg={8}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   Providers
                 </MDTypography>
                 <Grid container spacing={2}>
@@ -388,8 +388,8 @@ function SystemAdminAiSettings() {
 
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   Role Permissions & Limits
                 </MDTypography>
                 <TableContainer sx={{ overflowX: "auto" }}>

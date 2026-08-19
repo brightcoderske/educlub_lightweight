@@ -26,6 +26,28 @@ async function cacheProgress(learnerId, courseId, term, academicYear, progressDa
   );
 }
 
+// Same upsert as cacheProgress, but for a whole cohort in one statement so a
+// school-wide read does not cost one write round trip per learner.
+async function cacheProgressBatch(entries) {
+  if (!entries.length) return;
+
+  await query(
+    `INSERT INTO progress_cache (learner_id, course_id, term, academic_year, progress_data, last_synced_at)
+     SELECT *, NOW()
+     FROM unnest($1::int[], $2::int[], $3::varchar[], $4::int[], $5::jsonb[])
+       AS batch(learner_id, course_id, term, academic_year, progress_data)
+     ON CONFLICT (learner_id, course_id, term, academic_year)
+     DO UPDATE SET progress_data = EXCLUDED.progress_data, last_synced_at = NOW()`,
+    [
+      entries.map((entry) => entry.learnerId),
+      entries.map((entry) => entry.courseId),
+      entries.map((entry) => entry.term),
+      entries.map((entry) => Number(entry.academicYear)),
+      entries.map((entry) => JSON.stringify(entry.progressData)),
+    ]
+  );
+}
+
 async function getCachedProgressForCourse(learnerId, courseId, term, academicYear) {
   const cached = await query(
     `SELECT progress_data
@@ -105,8 +127,61 @@ async function buildNativeCourseProgress(learnerId, course) {
     [learnerId, course.id]
   );
 
-  const moduleMap = new Map();
+  return assembleCourseProgress(course, result.rows);
+}
+
+// Fetches the same activity rows for many learners in one round trip. Only the
+// fetch differs from buildNativeCourseProgress; the maths is the shared
+// assembleCourseProgress below, so both paths always report identical numbers.
+async function buildNativeCourseProgressForLearners(learnerIds, course) {
+  const progressByLearner = new Map();
+  if (!learnerIds.length) return progressByLearner;
+
+  const result = await query(
+    `SELECT
+       target.learner_id,
+       cm.id AS module_id,
+       cm.title AS module_title,
+       cm.position AS module_position,
+       la.id AS activity_id,
+       la.title AS activity_title,
+       la.activity_type,
+       la.position AS activity_position,
+       COALESCE(la.availability_mode, 'required') AS availability_mode,
+       COALESCE(ap.status, 'not_started') AS progress_status,
+       ap.score
+     FROM unnest($1::int[]) AS target(learner_id)
+     CROSS JOIN course_modules cm
+     LEFT JOIN learning_activities la
+       ON la.module_id = cm.id
+      AND la.is_published = true
+     LEFT JOIN activity_progress ap
+       ON ap.activity_id = la.id
+      AND ap.learner_id = target.learner_id
+     WHERE cm.course_id = $2
+       AND cm.is_published = true
+     ORDER BY target.learner_id, cm.position, la.position`,
+    [learnerIds, course.id]
+  );
+
+  const rowsByLearner = new Map();
   result.rows.forEach((row) => {
+    const key = Number(row.learner_id);
+    if (!rowsByLearner.has(key)) rowsByLearner.set(key, []);
+    rowsByLearner.get(key).push(row);
+  });
+
+  learnerIds.forEach((learnerId) => {
+    const key = Number(learnerId);
+    progressByLearner.set(key, assembleCourseProgress(course, rowsByLearner.get(key) || []));
+  });
+
+  return progressByLearner;
+}
+
+function assembleCourseProgress(course, rows) {
+  const moduleMap = new Map();
+  rows.forEach((row) => {
     if (!moduleMap.has(row.module_id)) {
       moduleMap.set(row.module_id, {
         module_number: row.module_position,
@@ -302,24 +377,63 @@ async function getSchoolCourseProgress({
     params.push(stream);
   }
 
+  // Resolve the cohort and its allocation period in one statement. The term,
+  // year and category filters mirror getActiveAllocations so this path selects
+  // exactly the learners the per-learner path used to return.
+  // Derive from params.length: the stream filter above reuses paramIndex
+  // without incrementing it, so paramIndex is not a reliable next-slot marker.
+  const termParam = `$${params.length + 1}`;
+  const yearParam = `$${params.length + 2}`;
+  params.push(term || null, academicYear ? Number(academicYear) : null);
+
   const learnersResult = await query(
-    `SELECT DISTINCT l.id, l.full_name, l.grade, l.stream, l.email
+    `SELECT DISTINCT ON (l.id)
+            l.id, l.full_name, l.grade, l.stream, l.email,
+            a.term AS allocation_term,
+            a.academic_year AS allocation_academic_year,
+            c.name AS course_name
      FROM learners l
      JOIN course_allocations a ON a.learner_id = l.id
+     JOIN courses c ON c.id = a.course_id
      WHERE l.school_id = $1
        AND a.course_id = $2
        AND a.status IN ('active', 'in_progress', 'completed')
+       AND COALESCE(c.course_category, 'general') = 'general'
+       AND (${termParam}::varchar IS NULL OR a.term = ${termParam}::varchar)
+       AND (${yearParam}::integer IS NULL OR a.academic_year = ${yearParam}::integer)
        ${filters}
-     ORDER BY l.grade, l.stream, l.full_name`,
+     ORDER BY l.id, a.allocated_at DESC`,
     params
   );
 
+  const learners = learnersResult.rows.sort(
+    (left, right) =>
+      String(left.grade || "").localeCompare(String(right.grade || "")) ||
+      String(left.stream || "").localeCompare(String(right.stream || "")) ||
+      String(left.full_name || "").localeCompare(String(right.full_name || ""))
+  );
+
+  const course = { id: Number(courseId), name: learners[0]?.course_name };
+  const progressByLearner = await buildNativeCourseProgressForLearners(
+    learners.map((learner) => learner.id),
+    course
+  );
+
+  await cacheProgressBatch(
+    learners.map((learner) => ({
+      learnerId: learner.id,
+      courseId: course.id,
+      term: term || learner.allocation_term || "Term 1",
+      academicYear: Number(
+        academicYear || learner.allocation_academic_year || new Date().getFullYear()
+      ),
+      progressData: progressByLearner.get(Number(learner.id)),
+    }))
+  );
+
   const rows = [];
-  for (const learner of learnersResult.rows) {
-    const progressItems = await getLearnerCourseProgress(learner.id, term, academicYear, {
-      updateWeekly: false,
-    });
-    const progress = progressItems.find((item) => Number(item.course_id) === Number(courseId));
+  for (const learner of learners) {
+    const progress = progressByLearner.get(Number(learner.id));
     if (!progress) continue;
 
     const selectedModule =

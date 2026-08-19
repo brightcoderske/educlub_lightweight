@@ -225,7 +225,7 @@ function CourseOverview() {
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3} display="flex" justifyContent="space-between" alignItems="center" gap={2}>
+        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center" gap={2}>
           <DashboardIdentity
             user={user}
             title={overview?.course?.name || "Course"}

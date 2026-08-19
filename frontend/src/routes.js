@@ -320,7 +320,7 @@ const routes = [
   },
   {
     type: "collapse",
-    name: "Typing Tutor",
+    name: "Weekly Practice",
     key: "school-admin-typing-tutor",
     icon: <Icon fontSize="small">keyboard_alt</Icon>,
     route: "/school-admin/typing-tutor",

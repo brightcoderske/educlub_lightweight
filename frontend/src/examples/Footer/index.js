@@ -25,15 +25,14 @@ import typography from "assets/theme/base/typography";
 
 function Footer() {
   const { size } = typography;
+  // Every role renders this footer, so it only carries links that are valid for
+  // all of them. The learner-only destinations that used to sit here pointed
+  // school and system admins at /learner pages they cannot use.
   const links = [
-    { label: "Dashboard", href: "/learner" },
-    { label: "My Courses", href: "/learner/courses" },
-    { label: "Certificates", href: "/learner/certificates" },
     { label: "Help", href: "/contact" },
     { label: "Privacy", href: "/privacy" },
     { label: "Terms", href: "/user-agreement" },
-    { label: "contact", href: "mailto:support@educlub.co.ke" },
-    { label: "share", href: "https://www.educlub.co.ke" },
+    { label: "Contact", href: "mailto:support@educlub.co.ke" },
   ];
 
   return (
@@ -44,8 +43,8 @@ function Footer() {
       justifyContent="space-between"
       alignItems="center"
       px={1.5}
-      py={2}
-      mt={3}
+      py={0.75}
+      mt={1.5}
       borderTop="1px solid"
       borderColor="grey.200"
     >
@@ -73,7 +72,7 @@ function Footer() {
           alignItems: "center",
           justifyContent: "center",
           listStyle: "none",
-          mt: 3,
+          mt: 0.5,
           mb: 0,
           p: 0,
 

@@ -131,7 +131,7 @@ function SchoolAdminCompetitions() {
   );
 
   if (!isSchoolAdmin()) {
-    return <MDBox p={3}>Access denied. School staff only.</MDBox>;
+    return <MDBox p={2}>Access denied. School staff only.</MDBox>;
   }
 
   const visibleRows = showAll ? rows : rows.slice(0, 10);
@@ -140,7 +140,7 @@ function SchoolAdminCompetitions() {
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3} display="flex" justifyContent="space-between" alignItems="center">
+        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center">
           <DashboardIdentity
             user={user}
             title="Competitions"
@@ -162,7 +162,7 @@ function SchoolAdminCompetitions() {
         )}
 
         <Card>
-          <MDBox p={3}>
+          <MDBox p={2}>
             <MDTypography variant="h5" fontWeight="bold" mb={2}>
               Available Competitions
             </MDTypography>
@@ -208,7 +208,7 @@ function SchoolAdminCompetitions() {
         </Card>
 
         <Card sx={{ mt: 3 }}>
-          <MDBox p={3}>
+          <MDBox p={2}>
             <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <MDTypography variant="h5" fontWeight="bold">
                 {showAll ? "All Competition Learners" : "Top 10 Competition Learners"}

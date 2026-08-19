@@ -17,6 +17,8 @@ import IconButton from "@mui/material/IconButton";
 import Radio from "@mui/material/Radio";
 
 import DashboardIdentity from "components/DashboardIdentity";
+import WeeklyMatrix from "components/WeeklyMatrix";
+import MyWeeklyProgress from "components/MyWeeklyProgress";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
@@ -140,6 +142,11 @@ const gradeOptions = Array.from({ length: 12 }, (_, index) => `Grade ${index + 1
 
 function WeeklyLearning() {
   const { user, isSystemAdmin, isSchoolAdmin, isLearner } = useAuth();
+  // The assessment list is a working tool, not a report: learners start tests
+  // from it and system admins edit/duplicate/delete there. School staff only
+  // got a Review link, and the weekly matrix now covers that, so it is hidden
+  // for them rather than growing a row per quiz added to the term.
+  const showAssessmentList = isLearner() || isSystemAdmin();
   const [searchParams] = useSearchParams();
   const competitionQueryId = searchParams.get("competition_id") || searchParams.get("competition");
   const quizQueryId = searchParams.get("quiz");
@@ -833,10 +840,10 @@ function WeeklyLearning() {
     }
   };
 
-  const openQuizAttemptReview = async (test) => {
+  const openQuizAttemptReview = async (test, learnerName = "") => {
     setError("");
     setQuizAttemptReviewLoading(true);
-    setQuizReviewFilters({ grade: "", stream: "", learnerName: "" });
+    setQuizReviewFilters({ grade: "", stream: "", learnerName });
     setQuizAttemptReview({ test, attempts: [] });
     try {
       const review = await apiClient.get(`/quiz-tests/tests/${test.id}/attempts`);
@@ -864,6 +871,23 @@ function WeeklyLearning() {
     } finally {
       setQuizAttemptReviewLoading(false);
     }
+  };
+
+  // A score in the weekly matrix links to the work behind it: find the weekly
+  // quiz for that week and open the attempt review filtered to that learner,
+  // which is also where per-question marking happens.
+  const openWeekQuizReview = (learner, weekNumber) => {
+    const test = quizTests.find(
+      (item) =>
+        Number(item.week_number) === Number(weekNumber) && item.quiz_type !== "competition"
+    );
+
+    if (!test) {
+      setError(`No weekly quiz found for week ${weekNumber}.`);
+      return;
+    }
+
+    openQuizAttemptReview(test, learner.full_name || "");
   };
 
   const saveQuizAttemptMarks = async (attempt) => {
@@ -1289,7 +1313,7 @@ function WeeklyLearning() {
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3}>
+        <MDBox mb={2}>
           <DashboardIdentity
             user={user}
             title="Typing / Quizzes"
@@ -1300,7 +1324,7 @@ function WeeklyLearning() {
         <Grid container spacing={3}>
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={2}>
                 <MDBox display="flex" gap={1} flexWrap="wrap" mb={2}>
                   {categories.map(([value, label]) => (
                     <MDButton
@@ -2526,7 +2550,7 @@ function WeeklyLearning() {
                   <MDTypography variant="body2" color="text">
                     No typing/quizzes available yet.
                   </MDTypography>
-                ) : (
+                ) : !showAssessmentList ? null : (
                   <TableContainer>
                     <Table>
                       <TableHead sx={{ display: "table-header-group" }}>
@@ -2630,290 +2654,27 @@ function WeeklyLearning() {
                   </TableContainer>
                 )}
 
+                {isLearner() && <MyWeeklyProgress />}
+
                 {category === "weekly_typing" && !isLearner() && (
                   <MDBox mt={3}>
-                    <Grid container spacing={2} mb={2}>
-                      <Grid item xs={12} md={2}>
-                        <MDInput
-                          select
-                          label="Term"
-                          fullWidth
-                          value={typingReportFilters.term}
-                          onChange={(event) =>
-                            setTypingReportFilters({
-                              ...typingReportFilters,
-                              term: event.target.value,
-                            })
-                          }
-                          SelectProps={{ native: true }}
-                        >
-                          <option value="">All terms</option>
-                          {terms.map((term) => (
-                            <option key={term} value={term}>
-                              {term}
-                            </option>
-                          ))}
-                        </MDInput>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <MDInput
-                          select
-                          label="Year"
-                          fullWidth
-                          value={typingReportFilters.academic_year}
-                          onChange={(event) =>
-                            setTypingReportFilters({
-                              ...typingReportFilters,
-                              academic_year: event.target.value,
-                            })
-                          }
-                          SelectProps={{ native: true }}
-                        >
-                          <option value="">All years</option>
-                          {[...new Set(termOptions.map((term) => term.academic_year))]
-                            .filter(Boolean)
-                            .map((year) => (
-                              <option key={year} value={year}>
-                                {year}
-                              </option>
-                            ))}
-                        </MDInput>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <MDInput
-                          select
-                          label="Week"
-                          fullWidth
-                          value={typingReportFilters.week_number}
-                          onChange={(event) =>
-                            setTypingReportFilters({
-                              ...typingReportFilters,
-                              week_number: event.target.value,
-                            })
-                          }
-                          SelectProps={{ native: true }}
-                        >
-                          <option value="">All weeks</option>
-                          {reportWeekOptions.map((weekNumber) => (
-                            <option key={weekNumber} value={weekNumber}>
-                              Week {weekNumber}
-                            </option>
-                          ))}
-                        </MDInput>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <MDInput
-                          select
-                          label="Grade"
-                          fullWidth
-                          value={typingReportFilters.grade}
-                          onChange={(event) =>
-                            setTypingReportFilters({
-                              ...typingReportFilters,
-                              grade: event.target.value,
-                            })
-                          }
-                          SelectProps={{ native: true }}
-                        >
-                          <option value="">All grades</option>
-                          {reportGrades.map((grade) => (
-                            <option key={grade} value={grade}>
-                              {grade}
-                            </option>
-                          ))}
-                        </MDInput>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <MDInput
-                          select
-                          label="Stream"
-                          fullWidth
-                          value={typingReportFilters.stream}
-                          onChange={(event) =>
-                            setTypingReportFilters({
-                              ...typingReportFilters,
-                              stream: event.target.value,
-                            })
-                          }
-                          SelectProps={{ native: true }}
-                        >
-                          <option value="">All streams</option>
-                          {reportStreams.map((streamOption) => (
-                            <option key={streamOption} value={streamOption}>
-                              {streamOption}
-                            </option>
-                          ))}
-                        </MDInput>
-                      </Grid>
-                      <Grid item xs={12} md={2}>
-                        <MDInput
-                          select
-                          label="Attempt"
-                          fullWidth
-                          value={typingReportFilters.attempt_status}
-                          onChange={(event) =>
-                            setTypingReportFilters({
-                              ...typingReportFilters,
-                              attempt_status: event.target.value,
-                            })
-                          }
-                          SelectProps={{ native: true }}
-                        >
-                          <option value="">All learners</option>
-                          <option value="attempted">Attempted</option>
-                          <option value="not_attempted">Not attempted</option>
-                        </MDInput>
-                      </Grid>
-                    </Grid>
-                    <Grid container spacing={2} mb={2}>
-                      <Grid item xs={12} md={6}>
-                        <Card variant="outlined">
-                          <MDBox p={2}>
-                            <MDTypography variant="button" fontWeight="bold">
-                              Attempted
-                            </MDTypography>
-                            <MDTypography variant="h4">{attemptedCount}</MDTypography>
-                            <MDProgress
-                              variant="gradient"
-                              color="success"
-                              value={(attemptedCount / totalTypingRows) * 100}
-                            />
-                          </MDBox>
-                        </Card>
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <Card variant="outlined">
-                          <MDBox p={2}>
-                            <MDTypography variant="button" fontWeight="bold">
-                              Not Attempted
-                            </MDTypography>
-                            <MDTypography variant="h4">{notAttemptedCount}</MDTypography>
-                            <MDProgress
-                              variant="gradient"
-                              color="warning"
-                              value={(notAttemptedCount / totalTypingRows) * 100}
-                            />
-                          </MDBox>
-                        </Card>
-                      </Grid>
-                    </Grid>
-                    <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                      <MDTypography variant="h6" fontWeight="bold">
-                        Typing Performance
-                      </MDTypography>
-                      <MDButton
-                        variant="outlined"
-                        color="info"
-                        size="small"
-                        onClick={exportTypingCsv}
-                        disabled={typingReport.length === 0}
-                      >
-                        Export CSV
-                      </MDButton>
-                    </MDBox>
-                    <TableContainer>
-                      <Table>
-                        <TableHead sx={{ display: "table-header-group" }}>
-                          <TableRow>
-                            <TableCell>Learner</TableCell>
-                            <TableCell>Week</TableCell>
-                            <TableCell>Grade</TableCell>
-                            <TableCell>Class</TableCell>
-                            <TableCell>Test</TableCell>
-                            <TableCell>Progress</TableCell>
-                            <TableCell>Adjusted WPM</TableCell>
-                            <TableCell>Status</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {reportRows.map((row) => (
-                            <TableRow key={`${row.learner_id}-${row.test_id}`}>
-                              <TableCell>{row.full_name}</TableCell>
-                              <TableCell>{row.week_number || "-"}</TableCell>
-                              <TableCell>{row.grade || "-"}</TableCell>
-                              <TableCell>{row.stream || "-"}</TableCell>
-                              <TableCell>{row.test_name}</TableCell>
-                              <TableCell>
-                                {row.completed_lessons}/{row.lesson_count}
-                              </TableCell>
-                              <TableCell>{row.final_score ?? "-"}</TableCell>
-                              <TableCell>
-                                <Chip
-                                  label={
-                                    row.final_score === null
-                                      ? "Not attempted"
-                                      : row.passed
-                                      ? "Passed"
-                                      : "Below threshold"
-                                  }
-                                  color={
-                                    row.final_score === null
-                                      ? "default"
-                                      : row.passed
-                                      ? "success"
-                                      : "warning"
-                                  }
-                                  size="small"
-                                />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
+                    {/* The matrix is the whole staff view here: the old
+                        per-session report and its filters duplicated it a row
+                        at a time and grew with every assessment added. */}
+                    <WeeklyMatrix
+                      defaultMetric="typing_score"
+                      title="Weekly typing matrix"
+                      onScoreClick={openWeekQuizReview}
+                    />
                   </MDBox>
                 )}
                 {category === "weekly_quiz" && !isLearner() && (
                   <MDBox mt={3}>
-                    <MDTypography variant="h6" fontWeight="bold" mb={1}>
-                      Quiz Performance
-                    </MDTypography>
-                    {quizReportRows.length === 0 ? (
-                      <MDTypography variant="body2" color="text">
-                        No quiz attempts recorded for the selected period yet.
-                      </MDTypography>
-                    ) : (
-                      <TableContainer>
-                        <Table>
-                          <TableHead sx={{ display: "table-header-group" }}>
-                            <TableRow>
-                              <TableCell>Learner</TableCell>
-                              <TableCell>Week</TableCell>
-                              <TableCell>Grade</TableCell>
-                              <TableCell>Quiz</TableCell>
-                              <TableCell>Score</TableCell>
-                              <TableCell>Status</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {quizReportRows.map((row) => (
-                              <TableRow key={`${row.learner_id}-${row.test_id}`}>
-                                <TableCell>{row.full_name}</TableCell>
-                                <TableCell>{row.week_number || "-"}</TableCell>
-                                <TableCell>{row.grade || "-"}</TableCell>
-                                <TableCell>{row.test_name}</TableCell>
-                                <TableCell>{row.final_score}%</TableCell>
-                                <TableCell>
-                                  <Chip
-                                    label={
-                                      Number(row.final_score) >= Number(row.pass_score || 0)
-                                        ? "Passed"
-                                        : "Below pass score"
-                                    }
-                                    color={
-                                      Number(row.final_score) >= Number(row.pass_score || 0)
-                                        ? "success"
-                                        : "warning"
-                                    }
-                                    size="small"
-                                  />
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    )}
+                    <WeeklyMatrix
+                      defaultMetric="quiz_score"
+                      title="Weekly quiz matrix"
+                      onScoreClick={openWeekQuizReview}
+                    />
                   </MDBox>
                 )}
               </MDBox>

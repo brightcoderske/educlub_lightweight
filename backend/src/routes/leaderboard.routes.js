@@ -67,6 +67,14 @@ router.get(
   leaderboardController.getSchoolCourseProgress
 );
 
+// Whole-cohort weekly marks matrix: learners as rows, week numbers as columns.
+router.get(
+  "/school-weekly-matrix",
+  authenticateToken,
+  isSchoolAdmin,
+  leaderboardController.getSchoolWeeklyMatrix
+);
+
 // Get school-wide completion summary from cached learner course progress.
 router.get(
   "/school-completion-summary",

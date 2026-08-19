@@ -57,14 +57,14 @@ function LearnerCertificates() {
   }, [user?.email]);
 
   if (!isLearner()) {
-    return <MDBox p={3}>Access denied. Learner only.</MDBox>;
+    return <MDBox p={2}>Access denied. Learner only.</MDBox>;
   }
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3}>
+        <MDBox mb={2}>
           <DashboardIdentity
             user={user}
             title="Certificates & Badges"
@@ -72,7 +72,7 @@ function LearnerCertificates() {
           />
         </MDBox>
         <Card>
-          <MDBox p={3}>
+          <MDBox p={2}>
             <MDTypography variant="h6" fontWeight="bold">
               Learning Badges
             </MDTypography>
@@ -96,7 +96,7 @@ function LearnerCertificates() {
           </MDBox>
         </Card>
         <Card sx={{ mt: 2 }}>
-          <MDBox p={3}>
+          <MDBox p={2}>
             {error && (
               <MDTypography variant="caption" color="error" display="block" mb={2}>
                 {error}

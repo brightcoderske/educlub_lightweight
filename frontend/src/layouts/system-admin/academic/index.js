@@ -209,7 +209,7 @@ function SystemAdminAcademic() {
   };
 
   if (!isSystemAdmin()) {
-    return <MDBox p={3}>Access denied. System Admin only.</MDBox>;
+    return <MDBox p={2}>Access denied. System Admin only.</MDBox>;
   }
 
   return (
@@ -241,8 +241,8 @@ function SystemAdminAcademic() {
         <Grid container spacing={3}>
           <Grid item xs={12} lg={5}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   {editingYearId ? "Edit Academic Year" : "Create Academic Year"}
                 </MDTypography>
                 <Grid container spacing={2}>
@@ -314,8 +314,8 @@ function SystemAdminAcademic() {
 
           <Grid item xs={12} lg={7}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   {editingTermId ? "Edit Term" : "Create Term"}
                 </MDTypography>
                 <Grid container spacing={2}>
@@ -433,8 +433,8 @@ function SystemAdminAcademic() {
 
           <Grid item xs={12} lg={5}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   Academic Years
                 </MDTypography>
                 <TableContainer>
@@ -486,8 +486,8 @@ function SystemAdminAcademic() {
 
           <Grid item xs={12} lg={7}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   Terms
                 </MDTypography>
                 {Object.entries(termsByYear).map(([year, rows]) => (

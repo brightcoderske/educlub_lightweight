@@ -1807,7 +1807,7 @@ function ModuleLearn() {
 
     loadDiscussion();
     const interval =
-      activeActivity?.activity_type === "discussion" ? setInterval(loadDiscussion, 8000) : null;
+      activeActivity?.activity_type === "discussion" ? setInterval(loadDiscussion, 20000) : null;
     return () => {
       if (interval) clearInterval(interval);
     };

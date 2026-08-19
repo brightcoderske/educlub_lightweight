@@ -7,34 +7,36 @@ import { getRoleLabel, getUserDisplayName, getUserInitials } from "lib/userDispl
 
 function DashboardIdentity({ user, title, subtitle }) {
   return (
+    // The navbar above already carries the avatar, name and school - role line,
+    // so this block stays a compact page heading rather than a second identity
+    // card. Every dashboard renders it, so the height saved here is per page.
     <MDBox
       display="flex"
       alignItems="center"
-      gap={{ xs: 1.25, sm: 2 }}
+      gap={{ xs: 1, sm: 1.25 }}
       minWidth={0}
       width={{ xs: "100%", sm: "auto" }}
     >
       <MDAvatar
         bgColor="info"
-        size="lg"
-        shadow="md"
-        sx={{ width: { xs: 54, sm: 74 }, height: { xs: 54, sm: 74 }, flexShrink: 0 }}
+        size="sm"
+        shadow="sm"
+        sx={{ width: { xs: 24, sm: 26 }, height: { xs: 24, sm: 26 }, flexShrink: 0 }}
       >
         {getUserInitials(user)}
       </MDAvatar>
       <MDBox minWidth={0}>
         <MDTypography
-          variant="h3"
+          variant="h5"
           fontWeight="bold"
-          sx={{ fontSize: { xs: "1.65rem", sm: "1.875rem" }, lineHeight: 1.15 }}
+          sx={{ fontSize: { xs: "0.9375rem", sm: "1rem" }, lineHeight: 1.15 }}
         >
           {title}
         </MDTypography>
         <MDTypography
           variant="body2"
           color="text"
-          mt={0.5}
-          sx={{ fontSize: { xs: "0.875rem", sm: "1rem" }, lineHeight: 1.35 }}
+          sx={{ fontSize: { xs: "0.6875rem", sm: "0.75rem" }, lineHeight: 1.25 }}
         >
           {subtitle || `Welcome back, ${getUserDisplayName(user)} (${getRoleLabel(user?.role)})`}
         </MDTypography>

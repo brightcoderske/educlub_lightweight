@@ -17,6 +17,9 @@ Coded by www.creative-tim.com
 import borders from "assets/theme-dark/base/borders";
 import boxShadows from "assets/theme-dark/base/boxShadows";
 
+// Material Dashboard 2 React helper functions
+import pxToRem from "assets/theme-dark/functions/pxToRem";
+
 const { borderRadius } = borders;
 const { xxl } = boxShadows;
 
@@ -25,6 +28,16 @@ const dialog = {
     paper: {
       borderRadius: borderRadius.lg,
       boxShadow: xxl,
+
+      // Below the sm breakpoint (576px) a centred modal is mostly margin, which
+      // leaves forms and detail panes squeezed into a narrow column. Every
+      // dialog claims almost the whole screen there instead.
+      "@media (max-width: 575.98px)": {
+        margin: pxToRem(8),
+        width: "calc(100% - 16px)",
+        maxWidth: "calc(100% - 16px)",
+        maxHeight: "calc(100% - 16px)",
+      },
     },
 
     paperFullScreen: {

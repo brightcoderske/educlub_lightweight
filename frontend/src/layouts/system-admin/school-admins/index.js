@@ -161,7 +161,7 @@ function SystemAdminSchoolAdmins() {
   };
 
   if (!isSystemAdmin()) {
-    return <MDBox p={3}>Access denied. System Admin only.</MDBox>;
+    return <MDBox p={2}>Access denied. System Admin only.</MDBox>;
   }
 
   return (
@@ -176,8 +176,8 @@ function SystemAdminSchoolAdmins() {
         </MDBox>
 
         <Card>
-          <MDBox p={3}>
-            <MDTypography variant="h5" mb={2}>
+          <MDBox p={2}>
+            <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
               Register Staff Account
             </MDTypography>
             <Grid container spacing={2}>
@@ -276,8 +276,8 @@ function SystemAdminSchoolAdmins() {
         </Card>
 
         <Card sx={{ mt: 3 }}>
-          <MDBox p={3}>
-            <MDTypography variant="h5" mb={2}>
+          <MDBox p={2}>
+            <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
               Staff Accounts
             </MDTypography>
             {loading ? (

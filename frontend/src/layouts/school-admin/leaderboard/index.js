@@ -128,7 +128,7 @@ function Leaderboard() {
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3}>
+        <MDBox mb={2}>
           <DashboardIdentity
             user={user}
             title="Weekly Leaderboards"
@@ -139,8 +139,8 @@ function Leaderboard() {
         <Grid container spacing={3}>
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   Filter Options
                 </MDTypography>
 
@@ -163,7 +163,7 @@ function Leaderboard() {
                       onChange={(e) => setTerm(e.target.value)}
                       SelectProps={{ native: true }}
                     >
-                      <option value={term}>{term}</option>
+                      {terms.length === 0 && <option value="">No terms configured</option>}
                       {terms.map((termItem) => (
                         <option key={termItem.id} value={termItem.name}>
                           {termItem.name} ({termItem.academic_year || "Year not set"})
@@ -180,7 +180,6 @@ function Leaderboard() {
                       onChange={(e) => setAcademicYear(Number(e.target.value))}
                       SelectProps={{ native: true }}
                     >
-                      <option value={academicYear}>{academicYear}</option>
                       {[...new Set(terms.map((item) => item.academic_year).filter(Boolean))].map(
                         (year) => (
                           <option key={year} value={year}>
@@ -219,8 +218,8 @@ function Leaderboard() {
 
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
-                <MDTypography variant="h5" mb={2}>
+              <MDBox p={2}>
+                <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                   {category.charAt(0).toUpperCase() + category.slice(1).replace("_", " ")} Top{" "}
                   {showAll ? leaderboard.length : 10} - Week {weekNumber}
                 </MDTypography>
@@ -306,8 +305,8 @@ function Leaderboard() {
           {showTrend && (
             <Grid item xs={12}>
               <Card>
-                <MDBox p={3}>
-                  <MDTypography variant="h5" mb={2}>
+                <MDBox p={2}>
+                  <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
                     Performance Trend -
                     {leaderboard.find((l) => l.learner_id === selectedLearnerId)?.full_name}
                   </MDTypography>

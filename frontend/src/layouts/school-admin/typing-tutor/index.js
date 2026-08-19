@@ -2,16 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid";
+import Icon from "@mui/material/Icon";
+import IconButton from "@mui/material/IconButton";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import TableSortLabel from "@mui/material/TableSortLabel";
+import Tooltip from "@mui/material/Tooltip";
 
 import DashboardIdentity from "components/DashboardIdentity";
 import MDBox from "components/MDBox";
-import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
 import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
@@ -20,116 +23,210 @@ import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 
-function titleCaseTrack(value) {
-  return String(value || "beginner")
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+// Each metric lives on a different scale, so the colour bands cannot be shared:
+// quiz and course marks are percentages, typing is words per minute.
+const METRICS = {
+  typing_score: {
+    label: "Typing (WPM)",
+    unit: "",
+    bands: [
+      [15, "warning"],
+      [30, "info"],
+      [Infinity, "success"],
+    ],
+    format: (value) => Number(value).toFixed(0),
+  },
+  quiz_score: {
+    label: "Quiz (%)",
+    unit: "%",
+    bands: [
+      [50, "warning"],
+      [80, "info"],
+      [Infinity, "success"],
+    ],
+    format: (value) => Number(value).toFixed(0),
+  },
+  active_course_score: {
+    label: "Course (%)",
+    unit: "%",
+    bands: [
+      [50, "warning"],
+      [80, "info"],
+      [Infinity, "success"],
+    ],
+    format: (value) => Number(value).toFixed(0),
+  },
+};
+
+const METRIC_KEYS = Object.keys(METRICS);
+
+// Short tags for the combined cell, where three values share one column.
+const METRIC_TAGS = {
+  typing_score: "T",
+  quiz_score: "Q",
+  active_course_score: "C",
+};
+
+function bandColor(metricKey, value) {
+  const metric = METRICS[metricKey];
+  const found = metric.bands.find(([ceiling]) => Number(value) <= ceiling);
+  return found ? found[1] : "success";
 }
 
-function statusColor(status) {
-  switch (status) {
-    case "progressing":
-      return "success";
-    case "needs_support":
-    case "accuracy_support":
-      return "warning";
-    case "started":
-      return "info";
-    default:
-      return "default";
-  }
+function average(values) {
+  const numbers = values.filter((value) => value !== null && value !== undefined);
+  if (numbers.length === 0) return null;
+  return numbers.reduce((sum, value) => sum + Number(value), 0) / numbers.length;
 }
 
-function statusLabel(status) {
-  switch (status) {
-    case "progressing":
-      return "Progressing";
-    case "needs_support":
-      return "Needs support";
-    case "accuracy_support":
-      return "Accuracy support";
-    case "started":
-      return "Started";
-    default:
-      return "Not started";
-  }
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+function csvEscape(value) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
 
 function TypingTutorReport() {
   const { user, isSchoolAdmin } = useAuth();
-  const [rows, setRows] = useState([]);
+  const [weeks, setWeeks] = useState([]);
+  const [learners, setLearners] = useState([]);
+  const [period, setPeriod] = useState({ term: null, academicYear: null });
+  const [metricKey, setMetricKey] = useState("all");
   const [grade, setGrade] = useState("");
   const [stream, setStream] = useState("");
-  const [q, setQ] = useState("");
+  const [search, setSearch] = useState("");
+  const [orderBy, setOrderBy] = useState("full_name");
+  const [order, setOrder] = useState("asc");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const canView = isSchoolAdmin() || user?.role === "teacher";
+  // "all" stacks every metric in one cell; a single metric fills the cell alone
+  // and then needs no letter tag to disambiguate it.
+  const visibleMetrics = metricKey === "all" ? METRIC_KEYS : [metricKey];
+  const showTags = metricKey === "all";
+
   const grades = useMemo(
-    () => [...new Set(rows.map((row) => row.grade).filter(Boolean))].sort(),
-    [rows]
+    () =>
+      [...new Set(learners.map((row) => row.grade).filter(Boolean))].sort(
+        (left, right) =>
+          (parseInt(String(left).replace(/\D/g, ""), 10) || 0) -
+          (parseInt(String(right).replace(/\D/g, ""), 10) || 0)
+      ),
+    [learners]
   );
   const streams = useMemo(
-    () => [...new Set(rows.map((row) => row.stream).filter(Boolean))].sort(),
-    [rows]
-  );
-  const filteredRows = useMemo(
-    () =>
-      rows.filter((row) => {
-        if (grade && row.grade !== grade) return false;
-        if (stream && row.stream !== stream) return false;
-        if (
-          q &&
-          !String(row.full_name || "")
-            .toLowerCase()
-            .includes(q.toLowerCase())
-        ) {
-          return false;
-        }
-        return true;
-      }),
-    [rows, grade, stream, q]
-  );
-  const summary = useMemo(
-    () => ({
-      learners: filteredRows.length,
-      started: filteredRows.filter((row) => row.status !== "not_started").length,
-      support: filteredRows.filter((row) =>
-        ["needs_support", "accuracy_support"].includes(row.status)
-      ).length,
-      averageWpm:
-        filteredRows.length === 0
-          ? 0
-          : filteredRows.reduce((sum, row) => sum + Number(row.best_net_wpm || 0), 0) /
-            filteredRows.length,
-    }),
-    [filteredRows]
+    () => [...new Set(learners.map((row) => row.stream).filter(Boolean))].sort(),
+    [learners]
   );
 
-  const loadReport = async () => {
+  // One fetch feeds the whole page, so filtering, sorting and the summary tiles
+  // are all derived locally instead of costing another round trip.
+  const rows = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    const filtered = learners.filter((row) => {
+      if (grade && row.grade !== grade) return false;
+      if (stream && row.stream !== stream) return false;
+      if (needle && !String(row.full_name || "").toLowerCase().includes(needle)) return false;
+      return true;
+    });
+
+    // Averages for every metric, not just the visible one: the fetch already
+    // carries all three, so switching the view costs no network call.
+    const withAverages = filtered.map((row) => ({
+      ...row,
+      averages: Object.fromEntries(
+        METRIC_KEYS.map((key) => [
+          key,
+          average(weeks.map((week) => row.weeks[week]?.[key] ?? null)),
+        ])
+      ),
+    }));
+
+    const sortMetric = metricKey === "all" ? "typing_score" : metricKey;
+    const direction = order === "asc" ? 1 : -1;
+    return withAverages.sort((left, right) => {
+      if (orderBy === "average") {
+        return (
+          ((left.averages[sortMetric] ?? -1) - (right.averages[sortMetric] ?? -1)) * direction
+        );
+      }
+      return String(left[orderBy] || "").localeCompare(String(right[orderBy] || "")) * direction;
+    });
+  }, [learners, weeks, metricKey, grade, stream, search, order, orderBy]);
+
+  const summary = useMemo(() => {
+    const averageFor = (key) => {
+      const scored = rows.map((row) => row.averages[key]).filter((value) => value !== null);
+      return scored.length ? average(scored) : null;
+    };
+    return {
+      learners: rows.length,
+      withRecords: rows.filter((row) =>
+        METRIC_KEYS.some((key) => row.averages[key] !== null)
+      ).length,
+      byMetric: Object.fromEntries(METRIC_KEYS.map((key) => [key, averageFor(key)])),
+    };
+  }, [rows]);
+
+  const loadMatrix = async () => {
     setLoading(true);
     setError("");
     try {
-      setRows(await apiClient.get("/typing-practice/report"));
+      const data = await apiClient.get("/leaderboard/school-weekly-matrix");
+      setWeeks(Array.isArray(data.weeks) ? data.weeks : []);
+      setLearners(Array.isArray(data.learners) ? data.learners : []);
+      setPeriod({ term: data.term, academicYear: data.academicYear });
     } catch (err) {
-      setError(err.message || "Could not load typing tutor report.");
+      setError(err.message || "Could not load the weekly matrix.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (canView) loadReport();
+    if (canView) loadMatrix();
   }, [canView]);
+
+  const sortHandler = (field) => () => {
+    if (orderBy === field) {
+      setOrder(order === "asc" ? "desc" : "asc");
+      return;
+    }
+    setOrderBy(field);
+    setOrder("asc");
+  };
+
+  const exportCsv = () => {
+    const header = [
+      "Learner",
+      "Class",
+      "Stream",
+      ...weeks.flatMap((week) =>
+        visibleMetrics.map((key) => `Week ${week} ${METRICS[key].label}`)
+      ),
+      ...visibleMetrics.map((key) => `Average ${METRICS[key].label}`),
+    ];
+    const body = rows.map((row) => [
+      row.full_name,
+      row.grade,
+      row.stream,
+      ...weeks.flatMap((week) =>
+        visibleMetrics.map((key) => {
+          const value = row.weeks[week]?.[key];
+          return value === null || value === undefined ? "-" : METRICS[key].format(value);
+        })
+      ),
+      ...visibleMetrics.map((key) =>
+        row.averages[key] === null ? "-" : METRICS[key].format(row.averages[key])
+      ),
+    ]);
+    const csv = [header, ...body].map((line) => line.map(csvEscape).join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `weekly-${metricKey}-${period.term || "term"}-${period.academicYear || ""}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (!canView) {
     return <MDBox>Access denied. Staff only.</MDBox>;
@@ -139,11 +236,15 @@ function TypingTutorReport() {
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3}>
+        <MDBox mb={2}>
           <DashboardIdentity
             user={user}
-            title="Typing Tutor Progress"
-            subtitle="Lightweight learner practice monitoring. This does not affect report cards."
+            title="Weekly Practice"
+            subtitle={
+              period.term
+                ? `Typing and quiz marks by week - ${period.term} ${period.academicYear}`
+                : "Typing and quiz marks by week."
+            }
           />
         </MDBox>
 
@@ -153,20 +254,24 @@ function TypingTutorReport() {
           </MDTypography>
         )}
 
-        <Grid container spacing={2} mb={2}>
+        <Grid container spacing={1.5} mb={1.5}>
           {[
             ["Learners", summary.learners],
-            ["Started", summary.started],
-            ["Need Support", summary.support],
-            ["Avg Best WPM", summary.averageWpm.toFixed(1)],
+            ["With records", summary.withRecords],
+            ...METRIC_KEYS.filter((key) => visibleMetrics.includes(key)).map((key) => [
+              `Avg ${METRICS[key].label}`,
+              summary.byMetric[key] === null
+                ? "-"
+                : `${METRICS[key].format(summary.byMetric[key])}${METRICS[key].unit}`,
+            ]),
           ].map(([label, value]) => (
             <Grid item xs={6} md={3} key={label}>
               <Card>
-                <MDBox p={2}>
+                <MDBox px={2} py={1}>
                   <MDTypography variant="caption" color="text">
                     {label}
                   </MDTypography>
-                  <MDTypography variant="h4">{value}</MDTypography>
+                  <MDTypography variant="h5">{value}</MDTypography>
                 </MDBox>
               </Card>
             </Grid>
@@ -174,108 +279,194 @@ function TypingTutorReport() {
         </Grid>
 
         <Card>
-          <MDBox p={2.5}>
-            <Grid container spacing={1.5} alignItems="center" mb={2}>
-              <Grid item xs={12} md={3}>
-                <MDInput
-                  label="Search learner"
-                  fullWidth
-                  value={q}
-                  onChange={(event) => setQ(event.target.value)}
-                />
-              </Grid>
-              <Grid item xs={12} md={2}>
-                <MDInput
-                  select
-                  label="Grade"
-                  fullWidth
-                  value={grade}
-                  onChange={(event) => setGrade(event.target.value)}
-                  SelectProps={{ native: true }}
-                >
-                  <option value="">All grades</option>
-                  {grades.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </MDInput>
-              </Grid>
-              <Grid item xs={12} md={2}>
-                <MDInput
-                  select
-                  label="Stream"
-                  fullWidth
-                  value={stream}
-                  onChange={(event) => setStream(event.target.value)}
-                  SelectProps={{ native: true }}
-                >
-                  <option value="">All streams</option>
-                  {streams.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </MDInput>
-              </Grid>
-              <Grid item xs={12} md={2}>
-                <MDButton variant="outlined" color="info" fullWidth onClick={loadReport}>
-                  Refresh
-                </MDButton>
-              </Grid>
-            </Grid>
-
-            <TableContainer>
-              <Table>
-                <TableHead sx={{ display: "table-header-group" }}>
-                  <TableRow>
-                    <TableCell>Learner</TableCell>
-                    <TableCell>Class</TableCell>
-                    <TableCell>Current Path</TableCell>
-                    <TableCell>Completed</TableCell>
-                    <TableCell>Best WPM</TableCell>
-                    <TableCell>Accuracy</TableCell>
-                    <TableCell>Last Practice</TableCell>
-                    <TableCell>Status</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={8}>Loading typing tutor progress...</TableCell>
-                    </TableRow>
-                  ) : filteredRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8}>No typing tutor progress found.</TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredRows.map((row) => (
-                      <TableRow key={row.learner_id}>
-                        <TableCell>{row.full_name}</TableCell>
-                        <TableCell>
-                          {[row.grade, row.stream].filter(Boolean).join(" ") || "-"}
-                        </TableCell>
-                        <TableCell>
-                          {titleCaseTrack(row.current_track)} / Level {row.current_level || 1}
-                        </TableCell>
-                        <TableCell>{row.completed_activities || 0}</TableCell>
-                        <TableCell>{Number(row.best_net_wpm || 0).toFixed(1)}</TableCell>
-                        <TableCell>{Number(row.best_accuracy || 0).toFixed(1)}%</TableCell>
-                        <TableCell>{formatDate(row.last_practiced_at)}</TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            color={statusColor(row.status)}
-                            label={statusLabel(row.status)}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+          <MDBox p={2}>
+            <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
+              <MDInput
+                size="small"
+                label="Search students"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                sx={{ width: { xs: "100%", sm: 180 } }}
+              />
+              <MDInput
+                size="small"
+                select
+                label="Metric"
+                value={metricKey}
+                onChange={(event) => setMetricKey(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+                SelectProps={{ native: true }}
+                sx={{ width: { xs: "100%", sm: 150 } }}
+              >
+                <option value="all">All combined</option>
+                {Object.entries(METRICS).map(([key, item]) => (
+                  <option key={key} value={key}>
+                    {item.label}
+                  </option>
+                ))}
+              </MDInput>
+              <MDInput
+                size="small"
+                select
+                label="Class"
+                value={grade}
+                onChange={(event) => setGrade(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+                SelectProps={{ native: true }}
+                sx={{ width: { xs: "100%", sm: 120 } }}
+              >
+                <option value="">All</option>
+                {grades.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </MDInput>
+              <MDInput
+                size="small"
+                select
+                label="Stream"
+                value={stream}
+                onChange={(event) => setStream(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+                SelectProps={{ native: true }}
+                sx={{ width: { xs: "100%", sm: 120 } }}
+              >
+                <option value="">All</option>
+                {streams.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </MDInput>
+              <MDBox flexGrow={1} />
+              <Tooltip title="Refresh">
+                <IconButton size="small" color="info" onClick={loadMatrix}>
+                  <Icon fontSize="small">refresh</Icon>
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Export CSV">
+                <IconButton size="small" color="info" onClick={exportCsv}>
+                  <Icon fontSize="small">download</Icon>
+                </IconButton>
+              </Tooltip>
+            </MDBox>
           </MDBox>
+
+          <TableContainer sx={{ boxShadow: "none" }}>
+            <Table size="small" sx={{ "& .MuiTableCell-root": { whiteSpace: "nowrap" } }}>
+              <TableHead sx={{ display: "table-header-group" }}>
+                <TableRow>
+                  <TableCell sortDirection={orderBy === "full_name" ? order : false}>
+                    <TableSortLabel
+                      active={orderBy === "full_name"}
+                      direction={orderBy === "full_name" ? order : "asc"}
+                      onClick={sortHandler("full_name")}
+                    >
+                      Name
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell>Class</TableCell>
+                  <TableCell>Stream</TableCell>
+                  {weeks.map((week) => (
+                    <TableCell key={week} align="center">
+                      W{week}
+                    </TableCell>
+                  ))}
+                  <TableCell align="center" sortDirection={orderBy === "average" ? order : false}>
+                    <TableSortLabel
+                      active={orderBy === "average"}
+                      direction={orderBy === "average" ? order : "asc"}
+                      onClick={sortHandler("average")}
+                    >
+                      Avg
+                    </TableSortLabel>
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.learner_id} hover>
+                    <TableCell>
+                      <MDTypography variant="button" fontWeight="medium" sx={{ fontSize: "0.75rem" }}>
+                        {row.full_name}
+                      </MDTypography>
+                    </TableCell>
+                    <TableCell>{row.grade || "-"}</TableCell>
+                    <TableCell>{row.stream || "-"}</TableCell>
+                    {weeks.map((week) => (
+                      <TableCell key={week} align="center">
+                        <MDBox
+                          display="flex"
+                          flexDirection="column"
+                          alignItems="center"
+                          gap={0.25}
+                        >
+                          {visibleMetrics.map((key) => {
+                            const value = row.weeks[week]?.[key];
+                            if (value === null || value === undefined) {
+                              return (
+                                <MDTypography
+                                  key={key}
+                                  variant="caption"
+                                  color="text"
+                                  sx={{ fontSize: "0.65rem" }}
+                                >
+                                  {showTags ? `${METRIC_TAGS[key]} -` : "-"}
+                                </MDTypography>
+                              );
+                            }
+                            return (
+                              <Tooltip key={key} title={METRICS[key].label}>
+                                <Chip
+                                  size="small"
+                                  label={`${showTags ? `${METRIC_TAGS[key]} ` : ""}${METRICS[
+                                    key
+                                  ].format(value)}${METRICS[key].unit}`}
+                                  color={bandColor(key, value)}
+                                  sx={{ height: 18, "& .MuiChip-label": { fontSize: "0.65rem" } }}
+                                />
+                              </Tooltip>
+                            );
+                          })}
+                        </MDBox>
+                      </TableCell>
+                    ))}
+                    <TableCell align="center">
+                      <MDBox display="flex" flexDirection="column" alignItems="center">
+                        {visibleMetrics.map((key) => (
+                          <MDTypography
+                            key={key}
+                            variant="button"
+                            fontWeight="medium"
+                            sx={{ fontSize: "0.7rem" }}
+                          >
+                            {row.averages[key] === null
+                              ? `${showTags ? `${METRIC_TAGS[key]} ` : ""}-`
+                              : `${showTags ? `${METRIC_TAGS[key]} ` : ""}${METRICS[key].format(
+                                  row.averages[key]
+                                )}${METRICS[key].unit}`}
+                          </MDTypography>
+                        ))}
+                      </MDBox>
+                    </TableCell>
+                  </TableRow>
+                ))}
+
+                {rows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={weeks.length + 4} align="center">
+                      <MDBox py={3}>
+                        <MDTypography variant="button" color="text">
+                          {loading ? "Loading weekly marks..." : "No learners match these filters."}
+                        </MDTypography>
+                      </MDBox>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </Card>
       </MDBox>
       <Footer />

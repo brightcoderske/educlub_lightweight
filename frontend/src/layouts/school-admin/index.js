@@ -116,7 +116,7 @@ function SchoolAdminDashboard() {
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3} display="flex" justifyContent="space-between" alignItems="center">
+        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center">
           <DashboardIdentity
             user={user}
             title="School Admin Dashboard"

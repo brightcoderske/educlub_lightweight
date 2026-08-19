@@ -159,7 +159,7 @@ function Courses() {
     <DashboardLayout>
       <DashboardNavbar />
       <MDBox py={3}>
-        <MDBox mb={3} display="flex" justifyContent="space-between" alignItems="center">
+        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center">
           <DashboardIdentity
             user={user}
             title="Courses"
@@ -265,7 +265,7 @@ function Courses() {
         <Grid container spacing={3}>
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={2}>
                 <MDTypography variant="h6" fontWeight="bold" mb={2}>
                   My School Courses
                 </MDTypography>
@@ -453,7 +453,7 @@ function Courses() {
           {user?.role === "school_admin" && (
             <Grid item xs={12}>
               <Card>
-                <MDBox p={3}>
+                <MDBox p={2}>
                   <MDTypography variant="h6" fontWeight="bold" mb={2}>
                     Available Templates
                   </MDTypography>

@@ -25,7 +25,7 @@ const tableHead = {
   styleOverrides: {
     root: {
       display: "block",
-      padding: `${pxToRem(16)} ${pxToRem(16)} 0  ${pxToRem(16)}`,
+      padding: `${pxToRem(8)} ${pxToRem(12)} 0  ${pxToRem(12)}`,
       borderRadius: `${borderRadius.xl} ${borderRadius.xl} 0 0`,
     },
   },

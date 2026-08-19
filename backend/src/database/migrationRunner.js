@@ -6,10 +6,18 @@ const { pool } = require("../config/db");
 
 const migrationsDirectory = path.join(__dirname, "migrations");
 
+// Checksums must stay stable across platforms. Windows checkouts convert these
+// files to CRLF, so hash line-ending-normalised bytes and keep the digest equal
+// to the LF value already recorded in schema_migrations.
+async function readNormalised(filePath) {
+  const contents = await fs.readFile(filePath, "utf8");
+  return Buffer.from(contents.replace(/\r\n/g, "\n"), "utf8");
+}
+
 async function checksumMigration(filePath, migration) {
   const hash = crypto.createHash("sha256");
-  hash.update(await fs.readFile(filePath));
-  for (const source of migration.sources || []) hash.update(await fs.readFile(source));
+  hash.update(await readNormalised(filePath));
+  for (const source of migration.sources || []) hash.update(await readNormalised(source));
   return hash.digest("hex");
 }
 
