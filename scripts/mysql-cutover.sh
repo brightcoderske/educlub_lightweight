@@ -63,6 +63,34 @@ die() { echo; echo "!! $1" >&2; exit 1; }
 
 running() { [[ "$FROM_STEP" -le "$1" ]]; }
 
+# CloudLinux's Node.js Selector replaces npm with a wrapper that redirects every
+# install into the virtual environment's shared node_modules, and refuses to let
+# an application root hold a real one. That is correct for the app root, which
+# cPanel symlinks into the environment, but this script installs into the source
+# checkout, where the wrapper reports "up to date" and writes nothing. Calling
+# npm's own CLI with node skips the wrapper. NODE_PATH carries the platform's
+# node_modules, so require.resolve finds it without a hard-coded path.
+npm_cli() {
+  local cli candidate
+  cli="$(node -e 'console.log(require.resolve("npm/bin/npm-cli.js"))' 2>/dev/null || true)"
+
+  if [[ -z "$cli" || ! -f "$cli" ]]; then
+    # NODE_PATH is not always set the way require.resolve needs, so the
+    # platform's own npm is looked up directly before giving up on it.
+    for candidate in \
+      "${CL_NODEHOME:-}/usr/lib/node_modules/npm/bin/npm-cli.js" \
+      /opt/alt/alt-nodejs*/root/lib/node_modules/npm/bin/npm-cli.js; do
+      if [[ -f "$candidate" ]]; then cli="$candidate"; break; fi
+    done
+  fi
+
+  if [[ -n "$cli" && -f "$cli" ]]; then
+    node "$cli" "$@"
+  else
+    npm "$@"
+  fi
+}
+
 confirm() {
   [[ "$ASSUME_YES" == "1" ]] && return 0
   local reply
@@ -206,7 +234,18 @@ if running 2; then
   # mysql2 and pg are both production dependencies, so --omit=dev is enough.
   # This installs into the source tree and leaves the running app alone.
   cd "$DEPLOY_DIR/backend"
-  npm install --omit=dev --no-audit --no-fund
+  npm_cli install --omit=dev --no-audit --no-fund
+
+  # Checked rather than assumed: the wrapper this works around fails by printing
+  # "up to date" and installing nothing, which otherwise surfaces two steps later
+  # as a missing module and looks like a broken release.
+  for module in mysql2 pg dotenv; do
+    [[ -d "node_modules/$module" ]] || die "npm reported success but node_modules/$module is not there.
+
+Install it directly and re-run with --from 3:
+  cd $DEPLOY_DIR/backend
+  node \"\$(node -e 'console.log(require.resolve(\"npm/bin/npm-cli.js\"))')\" install --omit=dev"
+  done
   ok "dependencies installed in the source tree"
 fi
 
