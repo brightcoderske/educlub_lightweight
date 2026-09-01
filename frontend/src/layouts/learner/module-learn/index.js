@@ -83,16 +83,44 @@ function discussionCardColor(index, depth = 0) {
   return colors[(index + depth) % colors.length];
 }
 
-function ExecutableRichContent({ html }) {
+// Recalculates every progress bar inside a rendered lesson. Checkboxes, mini
+// quizzes, sorters and reflections all count towards it.
+function refreshRichProgress(root) {
+  if (!root) return;
+  root.querySelectorAll("[data-rich-progress]").forEach((progress) => {
+    const container = progress.closest("[data-rich-root]") || root;
+    const checks = Array.from(container.querySelectorAll("[data-rich-check]"));
+    const reflections = Array.from(container.querySelectorAll("[data-rich-reflection]"));
+    const quizzes = container.querySelectorAll("[data-rich-quiz]");
+    const sorters = container.querySelectorAll("[data-sorter]");
+
+    const total = checks.length + quizzes.length + sorters.length + reflections.length;
+    const doneCount =
+      checks.filter((item) => item.checked).length +
+      container.querySelectorAll("[data-rich-quiz].answered").length +
+      container.querySelectorAll("[data-sorter].answered").length +
+      reflections.filter((item) => item.value.trim()).length;
+
+    const percent = total ? Math.round((doneCount / total) * 100) : 0;
+    const fill = progress.querySelector("[data-rich-progress-fill]");
+    const text = progress.querySelector("[data-rich-progress-text]");
+    if (fill) fill.style.width = `${percent}%`;
+    if (text) text.textContent = `${percent}% complete`;
+  });
+}
+
+function ExecutableRichContent({ html, storageScope }) {
   const contentRef = useRef(null);
   const [previewImage, setPreviewImage] = useState("");
-
-  const storageKey = (key) => `educlub-rich:${key}`;
 
   useEffect(() => {
     const root = contentRef.current;
     if (!root) return undefined;
     const cleanups = [];
+    // Scoped to the learner. Schools share devices, so an unscoped key meant the
+    // next child to sign in on the same computer inherited the previous one's
+    // ticked boxes and written reflections.
+    const storageKey = (key) => `educlub-rich:${storageScope || "guest"}:${key}`;
     root.querySelectorAll("[data-executable-code]").forEach((block) => {
       if (block.querySelector("[data-run-executable]")) return;
       const button = document.createElement("button");
@@ -121,31 +149,7 @@ function ExecutableRichContent({ html }) {
       cleanups.push(() => button.removeEventListener("click", run));
     });
 
-    const updateProgress = () => {
-      root.querySelectorAll("[data-rich-progress]").forEach((progress) => {
-        const container = progress.closest("[data-rich-root]") || root;
-        const checks = Array.from(container.querySelectorAll("[data-rich-check]"));
-        const answered = Array.from(container.querySelectorAll("[data-rich-quiz].answered"));
-        const sorted = Array.from(container.querySelectorAll("[data-sorter].answered"));
-        const reflections = Array.from(container.querySelectorAll("[data-rich-reflection]"));
-        const reflectionDone = reflections.filter((item) => item.value.trim()).length;
-        const total =
-          checks.length +
-          container.querySelectorAll("[data-rich-quiz]").length +
-          container.querySelectorAll("[data-sorter]").length +
-          reflections.length;
-        const doneCount =
-          checks.filter((item) => item.checked).length +
-          answered.length +
-          sorted.length +
-          reflectionDone;
-        const percent = total ? Math.round((doneCount / total) * 100) : 0;
-        const fill = progress.querySelector("[data-rich-progress-fill]");
-        const text = progress.querySelector("[data-rich-progress-text]");
-        if (fill) fill.style.width = `${percent}%`;
-        if (text) text.textContent = `${percent}% complete`;
-      });
-    };
+    const updateProgress = () => refreshRichProgress(root);
 
     root.querySelectorAll("[data-rich-check]").forEach((checkbox) => {
       const key = checkbox.dataset.richKey;
@@ -272,7 +276,7 @@ function ExecutableRichContent({ html }) {
 
     updateProgress();
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [html]);
+  }, [html, storageScope]);
 
   return (
     <>
@@ -316,28 +320,7 @@ function ExecutableRichContent({ html }) {
                 : "Not yet. Try again, then read the hint or flashcard.";
             }
             quiz?.classList.toggle("answered", correct);
-            const root = quiz?.closest("[data-rich-root]");
-            root?.querySelectorAll("[data-rich-progress]").forEach((progress) => {
-              const checks = Array.from(root.querySelectorAll("[data-rich-check]"));
-              const answered = Array.from(root.querySelectorAll("[data-rich-quiz].answered"));
-              const sorted = Array.from(root.querySelectorAll("[data-sorter].answered"));
-              const reflections = Array.from(root.querySelectorAll("[data-rich-reflection]"));
-              const total =
-                checks.length +
-                root.querySelectorAll("[data-rich-quiz]").length +
-                root.querySelectorAll("[data-sorter]").length +
-                reflections.length;
-              const doneCount =
-                checks.filter((item) => item.checked).length +
-                answered.length +
-                sorted.length +
-                reflections.filter((item) => item.value.trim()).length;
-              const percent = total ? Math.round((doneCount / total) * 100) : 0;
-              const fill = progress.querySelector("[data-rich-progress-fill]");
-              const text = progress.querySelector("[data-rich-progress-text]");
-              if (fill) fill.style.width = `${percent}%`;
-              if (text) text.textContent = `${percent}% complete`;
-            });
+            refreshRichProgress(contentRef.current);
             return;
           }
           const celebrate = target.closest?.("[data-celebrate]");
@@ -391,7 +374,12 @@ function ExecutableRichContent({ html }) {
   );
 }
 
-ExecutableRichContent.propTypes = { html: PropTypes.string.isRequired };
+ExecutableRichContent.propTypes = {
+  html: PropTypes.string.isRequired,
+  storageScope: PropTypes.string,
+};
+
+ExecutableRichContent.defaultProps = { storageScope: "" };
 
 function DiscussionReplyCard({ reply, index, depth, onReply }) {
   return (
@@ -449,6 +437,7 @@ DiscussionReplyCard.propTypes = {
 function ActivityBody({
   activity,
   answers,
+  storageScope,
   matchingChoices,
   discussion,
   discussionReply,
@@ -528,7 +517,7 @@ function ActivityBody({
             </MDTypography>
           )}
           {richHtml ? (
-            <ExecutableRichContent html={richHtml} />
+            <ExecutableRichContent html={richHtml} storageScope={storageScope} />
           ) : body ? (
             <MDTypography variant="body2" color="text" mt={1} sx={{ whiteSpace: "pre-wrap" }}>
               {asText(body)}
@@ -1061,6 +1050,7 @@ function ActivityBody({
 
 ActivityBody.propTypes = {
   answers: PropTypes.object.isRequired,
+  storageScope: PropTypes.string,
   matchingChoices: PropTypes.object.isRequired,
   activity: PropTypes.shape({
     activity_type: PropTypes.string,
@@ -1097,6 +1087,7 @@ ActivityBody.propTypes = {
 };
 
 ActivityBody.defaultProps = {
+  storageScope: "",
   discussion: null,
   quizResult: null,
   replyTarget: null,
@@ -1700,7 +1691,7 @@ function ModuleLearn() {
       const totalActivities = requiredActivities.length;
       const moduleWasDone = Boolean(current.module.is_done);
       const moduleIsDone = totalActivities > 0 && completedActivities === totalActivities;
-      const courseSummary = { ...(current.course_summary || {}) };
+      let courseSummary = { ...(current.course_summary || {}) };
       if (!moduleWasDone && moduleIsDone && "completed_modules" in courseSummary) {
         courseSummary.completed_modules = Number(courseSummary.completed_modules || 0) + 1;
         courseSummary.progress_percent = Math.round(
@@ -1711,19 +1702,28 @@ function ModuleLearn() {
         courseSummary.is_done =
           courseSummary.completed_modules >= Number(courseSummary.total_modules || 1);
       }
+
+      // A completing save carries the server's recalculated gate. It is the only
+      // thing that knows the module score and whether the next module opened, so
+      // it wins over the optimistic figures worked out above.
+      const state = progress.module_state || null;
+      if (state?.course_summary) courseSummary = state.course_summary;
+
       return {
         ...current,
         badge: progress.badge || current.badge,
         course_summary: courseSummary,
+        next_module: state ? state.next_module : current.next_module,
         module: {
           ...current.module,
           activities,
-          completed_activities: completedActivities,
-          total_activities: totalActivities,
-          progress_percent: totalActivities
-            ? Math.round((completedActivities / totalActivities) * 100)
-            : 0,
-          is_done: moduleIsDone,
+          completed_activities: state?.module?.completed_activities ?? completedActivities,
+          total_activities: state?.module?.total_activities ?? totalActivities,
+          progress_percent:
+            state?.module?.progress_percent ??
+            (totalActivities ? Math.round((completedActivities / totalActivities) * 100) : 0),
+          score_percent: state?.module?.score_percent ?? current.module.score_percent,
+          is_done: state?.module?.is_done ?? moduleIsDone,
         },
       };
     });
@@ -1818,13 +1818,17 @@ function ModuleLearn() {
     contentTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [activeActivityId]);
 
-  const updateProgress = async (activity, status) => {
+  // `blocking` drives the busy state. Marking work complete has to block, because
+  // the learner is waiting on the result. Recording that an activity was merely
+  // opened does not: it happens on every click through the module and locking the
+  // page for a network round trip is what made moving between activities feel slow.
+  const updateProgress = async (activity, status, { blocking = true } = {}) => {
     if (!activity) return;
     if (previewMode) {
       patchActivityProgress(activity.id, { status });
       return { status };
     }
-    setSaving(true);
+    if (blocking) setSaving(true);
     try {
       const progress = await apiClient.post(`/courses/activities/${activity.id}/progress`, {
         status,
@@ -1832,11 +1836,13 @@ function ModuleLearn() {
       patchActivityProgress(activity.id, progress);
       return progress;
     } catch (err) {
-      setError(err.message || "Failed to save progress");
-      await loadModule(true);
+      if (blocking) {
+        setError(err.message || "Failed to save progress");
+        await loadModule(true);
+      }
       return null;
     } finally {
-      setSaving(false);
+      if (blocking) setSaving(false);
     }
   };
 
@@ -1858,7 +1864,7 @@ function ModuleLearn() {
     }
   };
 
-  const selectActivity = async (activity) => {
+  const selectActivity = (activity) => {
     if (!activity?.is_unlocked) {
       setError(activity?.lock_reason || "Complete the previous required activity first.");
       return;
@@ -1867,7 +1873,9 @@ function ModuleLearn() {
     setSearchParams({ activity: String(activity.id) }, { replace: true });
     setError("");
     if (activity.status === "not_started") {
-      await updateProgress(activity, "in_progress");
+      // Show the activity now and let the "opened" record catch up. It carries no
+      // marks, so a failure here costs nothing the learner needs to act on.
+      updateProgress(activity, "in_progress", { blocking: false });
     }
   };
 
@@ -1972,7 +1980,9 @@ function ModuleLearn() {
         jsDraft,
         language.toLowerCase() === "html_css_js"
       );
-      setCodeDraft(preview);
+      // Only the preview frame gets the generated document. Writing it back into
+      // codeDraft overwrote the learner's own source in the single-editor
+      // languages, so running twice buried their work under the wrapper markup.
       setCodePreviewHtml(preview);
       setCodeOutput("Rendered browser preview below.");
       return;
@@ -2288,6 +2298,7 @@ function ModuleLearn() {
                     <ActivityBody
                       activity={activeActivity}
                       answers={answers}
+                      storageScope={data?.learner?.id ? String(data.learner.id) : ""}
                       matchingChoices={matchingChoices}
                       discussion={discussion}
                       discussionReply={discussionReply}

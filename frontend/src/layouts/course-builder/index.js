@@ -2993,14 +2993,6 @@ function CourseBuilder() {
     }, 0);
   };
 
-  const selectActivityForEdit = (courseModule, activity) => {
-    setSelectedModuleId(courseModule.id);
-    setSelectedActivityId(activity.id);
-    setActivityEditForm(activityToForm(activity));
-    setEditorMode("edit-activity");
-    closeMenus();
-  };
-
   const openActivityManager = (courseModule, activity) => {
     setSelectedModuleId(courseModule.id);
     setSelectedActivityId(activity.id);

@@ -1,166 +1,78 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
 import Chip from "@mui/material/Chip";
-import Checkbox from "@mui/material/Checkbox";
 import Icon from "@mui/material/Icon";
 import IconButton from "@mui/material/IconButton";
-import Radio from "@mui/material/Radio";
 
-import DashboardIdentity from "components/DashboardIdentity";
-import WeeklyMatrix from "components/WeeklyMatrix";
-import MyWeeklyProgress from "components/MyWeeklyProgress";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
-import MDProgress from "components/MDProgress";
 import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { apiClient } from "lib/api";
 import { useAuth } from "context/AuthContext";
+import { normalizeAcceptableAnswers } from "./quizAnswerUtils";
 import {
-  addAcceptableAnswer,
-  normalizeAcceptableAnswers,
-  removeAcceptableAnswer,
-  updateAcceptableAnswer,
-} from "./quizAnswerUtils";
+  canAuthorAssessments as viewerCanAuthor,
+  canManageAssessment as viewerCanManage,
+} from "./assessmentAccess";
+import AssessmentLibrary from "./AssessmentLibrary";
+import AssessmentTermTools from "./AssessmentTermTools";
 
-const categories = [
-  ["weekly_typing", "Weekly Typing"],
-  ["weekly_quiz", "Weekly Quizzes"],
-];
+import {
+  defaultLessons,
+  emptyTypingForm,
+  defaultQuestions,
+  emptyQuizForm,
+  readFileAsDataUrl,
+  shuffled,
+  formatReviewAnswer,
+  gradeOptions,
+} from "./weeklyLearningUtils";
 
-const defaultLessons = () => [
-  { title: "Lesson 1", passage: "", instructions: "" },
-  { title: "Lesson 2", passage: "", instructions: "" },
-  { title: "Lesson 3", passage: "", instructions: "" },
-];
-
-const emptyTypingForm = () => ({
-  name: "Week 1 Typing Assessment",
-  description: "",
-  term: "Term 1",
-  academic_year: new Date().getFullYear(),
-  week_number: 1,
-  test_type: "weekly",
-  competition_id: "",
-  school_id: "",
-  eligible_grades: [],
-  pass_threshold: 25,
-  allow_reattempts: true,
-  max_attempts: 3,
-  duration_seconds: 300,
-  deadline_at: "",
-  is_published: false,
-  is_open: false,
-  lessons: defaultLessons(),
-});
-
-const defaultQuestions = () => [
-  {
-    position: 1,
-    question_type: "single_choice",
-    prompt: "",
-    options: ["", "", "", ""],
-    correct_answer: "",
-    points: 5,
-  },
-];
-
-const emptyQuizForm = () => ({
-  name: "Week 1 Quiz",
-  description: "",
-  term: "Term 1",
-  academic_year: new Date().getFullYear(),
-  week_number: 1,
-  quiz_type: "weekly",
-  competition_id: "",
-  quiz_category: "quiz",
-  eligible_grades: [],
-  pass_score: 50,
-  max_attempts: 1,
-  duration_seconds: 600,
-  total_points: 5,
-  is_published: false,
-  is_open: false,
-  questions: defaultQuestions(),
-});
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("Could not read image."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function shuffled(items = []) {
-  const next = [...items];
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-  }
-  const unchanged = next.length > 1 && next.every((item, index) => item === items[index]);
-  return unchanged ? [...next.slice(1), next[0]] : next;
-}
-
-function optionLabel(index) {
-  return "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[index] || `${index + 1}`;
-}
-
-function formatWeekDate(value) {
-  if (!value) return "";
-  return new Date(`${String(value).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatReviewAnswer(value) {
-  if (Array.isArray(value)) return value.join(", ");
-  if (value && typeof value === "object") {
-    return Object.entries(value)
-      .map(([left, right]) => `${left}: ${right}`)
-      .join(", ");
-  }
-  return String(value ?? "") || "-";
-}
-
-const gradeOptions = Array.from({ length: 12 }, (_, index) => `Grade ${index + 1}`);
+const TypingStudioForm = lazy(() => import("./TypingStudioForm"));
+const QuizStudioForm = lazy(() => import("./QuizStudioForm"));
+const WeeklyMatrix = lazy(() => import("components/WeeklyMatrix"));
+const MyWeeklyProgress = lazy(() => import("components/MyWeeklyProgress"));
 
 function WeeklyLearning() {
   const { user, isSystemAdmin, isSchoolAdmin, isLearner } = useAuth();
+  // Weekly typing and quizzes belong to the school that runs them: its own
+  // staff author, publish, review and delete them for their own learners. The
+  // system console keeps the two genuinely cross-school things - competitions
+  // and the global library published to every school - and is read-only over
+  // anything a school wrote for itself.
+  const viewer = {
+    isSystemAdmin: isSystemAdmin(),
+    isSchoolStaff: isSchoolAdmin(),
+    schoolId: user?.schoolId,
+  };
+  const canAuthorAssessments = viewerCanAuthor(viewer);
+  const canManageAssessment = (assessment) => viewerCanManage(assessment, viewer);
   // The assessment list is a working tool, not a report: learners start tests
-  // from it and system admins edit/duplicate/delete there. School staff only
-  // got a Review link, and the weekly matrix now covers that, so it is hidden
-  // for them rather than growing a row per quiz added to the term.
-  const showAssessmentList = isLearner() || isSystemAdmin();
+  // from it and staff edit/review/duplicate/delete there.
+  const showAssessmentList = isLearner() || canAuthorAssessments;
   const [searchParams] = useSearchParams();
   const competitionQueryId = searchParams.get("competition_id") || searchParams.get("competition");
   const quizQueryId = searchParams.get("quiz");
   const [courses, setCourses] = useState([]);
   const [typingTests, setTypingTests] = useState([]);
   const [quizTests, setQuizTests] = useState([]);
-  const [quizReport, setQuizReport] = useState([]);
-  const [typingReport, setTypingReport] = useState([]);
-  const [allocations, setAllocations] = useState([]);
   const [learners, setLearners] = useState([]);
   const [school, setSchool] = useState(null);
   const [academicTerms, setAcademicTerms] = useState([]);
+  const [activeAcademicTerm, setActiveAcademicTerm] = useState(null);
   const [competitions, setCompetitions] = useState([]);
-  const [category, setCategory] = useState("weekly_typing");
+  const [authoringPanel, setAuthoringPanel] = useState(
+    canAuthorAssessments ? "weekly_quiz" : null
+  );
+  const [performancePanel, setPerformancePanel] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -203,21 +115,13 @@ function WeeklyLearning() {
     grade: "",
     stream: "",
     course_id: "",
-    term: "Term 1",
-    academic_year: new Date().getFullYear(),
-  });
-  const [syncForm, setSyncForm] = useState({
-    term: "Term 1",
-    academic_year: new Date().getFullYear(),
-    week_number: 1,
-  });
-  const [typingReportFilters, setTypingReportFilters] = useState({
     term: "",
     academic_year: "",
-    week_number: "",
-    grade: "",
-    stream: "",
-    attempt_status: "",
+  });
+  const [syncForm, setSyncForm] = useState({
+    term: "",
+    academic_year: "",
+    week_number: 1,
   });
   const [typingForm, setTypingForm] = useState(emptyTypingForm);
   const [quizForm, setQuizForm] = useState(emptyQuizForm);
@@ -242,138 +146,127 @@ function WeeklyLearning() {
   }, [quizAttemptReview?.attempts, quizReviewFilters]);
 
   const loadData = async (background = false) => {
-    const hasVisibleData =
-      category === "weekly_typing" ? typingTests.length > 0 : quizTests.length > 0;
+    const hasVisibleData = typingTests.length > 0 || quizTests.length > 0;
     setLoading(!background && !hasVisibleData);
     setError("");
     try {
-      if (category === "weekly_typing") {
-        const params = new URLSearchParams();
-        params.set("test_type", competitionQueryId ? "competition" : "weekly");
-        if (searchParams.get("test")) params.set("id", searchParams.get("test"));
-        const tests = await apiClient.get(`/typing/tests?${params.toString()}`);
-        setTypingTests(
-          searchParams.get("test")
-            ? tests.filter((test) => String(test.id) === searchParams.get("test"))
-            : tests
-        );
-        if (!isLearner()) {
-          const reportParams = new URLSearchParams();
-          if (typingReportFilters.term) reportParams.set("term", typingReportFilters.term);
-          if (typingReportFilters.academic_year) {
-            reportParams.set("academic_year", typingReportFilters.academic_year);
-          }
-          if (typingReportFilters.week_number) {
-            reportParams.set("week_number", typingReportFilters.week_number);
-          }
-          if (typingReportFilters.grade) reportParams.set("grade", typingReportFilters.grade);
-          if (typingReportFilters.stream) reportParams.set("stream", typingReportFilters.stream);
-          const report = await apiClient
-            .get(`/typing/report?${reportParams.toString()}`)
-            .catch(() => []);
-          setTypingReport(report);
-        }
-        setCourses([]);
-      } else {
-        const params = new URLSearchParams();
-        params.set("quiz_type", competitionQueryId ? "competition" : "weekly");
-        if (quizQueryId) params.set("id", quizQueryId);
-        if (competitionQueryId) params.set("competition_id", competitionQueryId);
-        const tests = await apiClient.get(`/quiz-tests/tests?${params.toString()}`);
-        setQuizTests(
-          quizQueryId ? tests.filter((test) => String(test.id) === String(quizQueryId)) : tests
-        );
-        if (!isLearner()) {
-          const reportParams = new URLSearchParams();
-          if (typingReportFilters.term) reportParams.set("term", typingReportFilters.term);
-          if (typingReportFilters.academic_year) {
-            reportParams.set("academic_year", typingReportFilters.academic_year);
-          }
-          if (typingReportFilters.week_number) {
-            reportParams.set("week_number", typingReportFilters.week_number);
-          }
-          const report = await apiClient
-            .get(`/quiz-tests/report?${reportParams.toString()}`)
-            .catch(() => []);
-          setQuizReport(report);
-        }
-        setCourses([]);
+      const requestedCategory =
+        searchParams.get("category") === "weekly_quiz" ? "weekly_quiz" : "weekly_typing";
+      const typingParams = new URLSearchParams();
+      typingParams.set(
+        "test_type",
+        competitionQueryId && requestedCategory === "weekly_typing" ? "competition" : "weekly"
+      );
+      if (searchParams.get("test")) typingParams.set("id", searchParams.get("test"));
+
+      const quizParams = new URLSearchParams();
+      quizParams.set(
+        "quiz_type",
+        competitionQueryId && requestedCategory === "weekly_quiz" ? "competition" : "weekly"
+      );
+      if (quizQueryId) quizParams.set("id", quizQueryId);
+      if (competitionQueryId && requestedCategory === "weekly_quiz") {
+        quizParams.set("competition_id", competitionQueryId);
       }
 
+      const assessmentRequest = Promise.all([
+        apiClient.get(`/typing/tests?${typingParams.toString()}`),
+        apiClient.get(`/quiz-tests/tests?${quizParams.toString()}`),
+      ]);
+      const staffMetadataRequest = isLearner()
+        ? Promise.resolve([[], []])
+        : Promise.all([
+            apiClient.get("/academic/terms").catch(() => []),
+            apiClient.get("/competitions").catch(() => []),
+          ]);
+      const schoolContextRequest =
+        !isLearner() && isSchoolAdmin()
+          ? Promise.all([
+              apiClient.get(`/learners?school_id=${user?.schoolId}`),
+              apiClient.get(`/schools/${user?.schoolId}`).catch(() => null),
+            ])
+          : Promise.resolve([[], null]);
+
+      const [
+        currentTerm,
+        [typingRows, quizRows],
+        [termRows, competitionRows],
+        [learnerRows, schoolRes],
+      ] = await Promise.all([
+        apiClient.get("/academic/terms/current").catch(() => null),
+        assessmentRequest,
+        staffMetadataRequest,
+        schoolContextRequest,
+      ]);
+      const currentAcademicYear = currentTerm?.name
+        ? currentTerm.academic_year || new Date(currentTerm.start_date).getFullYear()
+        : null;
+      const currentPeriod =
+        currentTerm?.name && currentAcademicYear
+          ? { ...currentTerm, academic_year: currentAcademicYear }
+          : null;
+      setActiveAcademicTerm(currentPeriod);
+
+      if (!currentPeriod) {
+        setTypingTests([]);
+        setQuizTests([]);
+      } else {
+        const currentTypingRows = Array.isArray(typingRows) ? typingRows : [];
+        const currentQuizRows = Array.isArray(quizRows) ? quizRows : [];
+        setTypingTests(
+          searchParams.get("test")
+            ? currentTypingRows.filter((test) => String(test.id) === searchParams.get("test"))
+            : currentTypingRows
+        );
+        setQuizTests(
+          quizQueryId
+            ? currentQuizRows.filter((test) => String(test.id) === String(quizQueryId))
+            : currentQuizRows
+        );
+      }
+      setCourses([]);
+
       if (!isLearner()) {
-        const [termRows, currentTerm, competitionRows] = await Promise.all([
-          apiClient.get("/academic/terms").catch(() => []),
-          apiClient.get("/academic/terms/current").catch(() => null),
-          apiClient.get("/competitions").catch(() => []),
-        ]);
         setAcademicTerms(Array.isArray(termRows) ? termRows : []);
         if (isSystemAdmin()) {
           setCompetitions(Array.isArray(competitionRows) ? competitionRows : []);
         }
-        if (currentTerm?.name) {
-          const currentAcademicYear =
-            currentTerm.academic_year ||
-            new Date(currentTerm.start_date || Date.now()).getFullYear();
+        if (currentPeriod) {
           setTypingForm((current) =>
-            current.term === "Term 1" && Number(current.academic_year) === new Date().getFullYear()
+            !current.term || !current.academic_year
               ? {
                   ...current,
-                  term: currentTerm.name,
-                  academic_year: currentAcademicYear,
+                  term: currentPeriod.name,
+                  academic_year: currentPeriod.academic_year,
                   week_number: 1,
                 }
               : current
           );
           setQuizForm((current) =>
-            current.term === "Term 1" && Number(current.academic_year) === new Date().getFullYear()
+            !current.term || !current.academic_year
               ? {
                   ...current,
-                  term: currentTerm.name,
-                  academic_year: currentAcademicYear,
+                  term: currentPeriod.name,
+                  academic_year: currentPeriod.academic_year,
                   week_number: 1,
                 }
               : current
           );
+          setBulkForm((current) => ({
+            ...current,
+            term: currentPeriod.name,
+            academic_year: currentPeriod.academic_year,
+          }));
           setSyncForm((current) => ({
             ...current,
-            term: current.term === "Term 1" ? currentTerm.name : current.term,
-            academic_year:
-              current.academic_year === new Date().getFullYear()
-                ? currentTerm.academic_year ||
-                  new Date(currentTerm.start_date || Date.now()).getFullYear()
-                : current.academic_year,
+            term: currentPeriod.name,
+            academic_year: currentPeriod.academic_year,
           }));
-          setTypingReportFilters((current) => {
-            const nextTerm = current.term || currentTerm.name;
-            const nextAcademicYear =
-              current.academic_year ||
-              currentTerm.academic_year ||
-              new Date(currentTerm.start_date || Date.now()).getFullYear();
-            if (
-              current.term === nextTerm &&
-              String(current.academic_year || "") === String(nextAcademicYear || "")
-            ) {
-              return current;
-            }
-            return {
-              ...current,
-              term: nextTerm,
-              academic_year: nextAcademicYear,
-            };
-          });
         }
       }
 
-      if (isLearner()) {
-        setAllocations([]);
-      } else if (isSchoolAdmin()) {
-        const [learnerRows, allocationRows, schoolRes] = await Promise.all([
-          apiClient.get(`/learners?school_id=${user?.schoolId}`),
-          apiClient.get(`/allocations?school_id=${user?.schoolId}&category=${category}`),
-          apiClient.get(`/schools/${user?.schoolId}`).catch(() => null),
-        ]);
+      if (isSchoolAdmin()) {
         setLearners(learnerRows);
-        setAllocations(allocationRows);
         setSchool(schoolRes);
       }
     } catch (err) {
@@ -386,23 +279,20 @@ function WeeklyLearning() {
   useEffect(() => {
     loadData();
   }, [
-    category,
     user?.schoolId,
     searchParams,
-    typingReportFilters,
     competitionQueryId,
     quizQueryId,
   ]);
 
   useEffect(() => {
-    if (searchParams.get("category") === "weekly_quiz") {
-      setCategory("weekly_quiz");
-    }
+    if (searchParams.get("category") === "weekly_quiz") setAuthoringPanel("weekly_quiz");
   }, [searchParams]);
 
   useEffect(() => {
     if (!competitionQueryId || !isSystemAdmin()) return;
     if (searchParams.get("category") === "weekly_quiz") {
+      setAuthoringPanel("weekly_quiz");
       const current = competitions.find((item) => String(item.id) === String(competitionQueryId));
       setQuizForm((form) => ({
         ...form,
@@ -413,7 +303,7 @@ function WeeklyLearning() {
       }));
       return;
     }
-    setCategory("weekly_typing");
+    setAuthoringPanel("weekly_typing");
     setTypingForm((current) => ({
       ...current,
       test_type: "competition",
@@ -463,11 +353,6 @@ function WeeklyLearning() {
       term.name === typingForm.term &&
       String(term.academic_year || "") === String(typingForm.academic_year || "")
   );
-  const selectedReportTerm = termOptions.find(
-    (term) =>
-      term.name === typingReportFilters.term &&
-      String(term.academic_year || "") === String(typingReportFilters.academic_year || "")
-  );
   const weekOptions = Array.isArray(selectedTerm?.weeks) ? selectedTerm.weeks : [];
   const selectedQuizTerm = termOptions.find(
     (term) =>
@@ -502,13 +387,6 @@ function WeeklyLearning() {
       }));
     }
   }, [selectedQuizTerm?.id, selectedQuizTerm?.weeks, quizForm.week_number]);
-  const reportWeekOptions =
-    typingReportFilters.term && selectedReportTerm?.total_weeks
-      ? Array.from(
-          { length: Number(selectedReportTerm.total_weeks || 13) },
-          (_, index) => index + 1
-        )
-      : weekOptions.map((week) => (typeof week === "object" ? week.week_number : week));
   const typingCompetitions = competitions.filter(
     (competition) => competition.competition_type === "typing"
   );
@@ -516,14 +394,16 @@ function WeeklyLearning() {
     ["quiz", "maths", "science", "stem"].includes(competition.competition_type)
   );
 
-  const saveTypingTest = async () => {
+  const saveTypingTest = async (overrides = {}) => {
     setMessage("");
     setError("");
     try {
+      const effectiveForm = { ...typingForm, ...overrides };
       const payload = {
-        ...typingForm,
-        competition_id: typingForm.test_type === "competition" ? typingForm.competition_id : "",
-        eligible_grades: typingForm.eligible_grades,
+        ...effectiveForm,
+        competition_id:
+          effectiveForm.test_type === "competition" ? effectiveForm.competition_id : "",
+        eligible_grades: effectiveForm.eligible_grades,
         eligible_streams: [],
       };
       const response = editingTypingId
@@ -532,6 +412,7 @@ function WeeklyLearning() {
       setMessage(`${editingTypingId ? "Updated" : "Saved"} ${response.name}`);
       setEditingTypingId(null);
       setTypingForm(emptyTypingForm());
+      setAuthoringPanel(null);
       await loadData();
     } catch (err) {
       setError(err.message || "Could not save typing test.");
@@ -541,6 +422,8 @@ function WeeklyLearning() {
   const editTypingTest = async (test) => {
     setMessage("");
     setError("");
+    setAuthoringPanel("weekly_typing");
+    setPerformancePanel(null);
     try {
       const response = await apiClient.get(`/typing/tests/${test.id}`);
       setEditingTypingId(response.id);
@@ -585,6 +468,7 @@ function WeeklyLearning() {
       if (editingTypingId === test.id) {
         setEditingTypingId(null);
         setTypingForm(emptyTypingForm());
+        setAuthoringPanel(null);
       }
       await loadData();
     } catch (err) {
@@ -595,6 +479,7 @@ function WeeklyLearning() {
   const cancelTypingEdit = () => {
     setEditingTypingId(null);
     setTypingForm(emptyTypingForm());
+    setAuthoringPanel(null);
   };
 
   const toggleTypingGrade = (grade) => {
@@ -721,24 +606,26 @@ function WeeklyLearning() {
     }
   };
 
-  const saveQuizTest = async () => {
+  const saveQuizTest = async (overrides = {}) => {
     setMessage("");
     setError("");
     try {
-      const allocated = quizForm.questions.reduce(
+      const effectiveForm = { ...quizForm, ...overrides };
+      const allocated = effectiveForm.questions.reduce(
         (sum, question) => sum + Number(question.points ?? 0),
         0
       );
-      if (allocated > Number(quizForm.total_points ?? 0)) {
+      if (allocated > Number(effectiveForm.total_points ?? 0)) {
         setError(
-          `Question marks total ${allocated}, which exceeds the quiz total of ${quizForm.total_points}.`
+          `Question marks total ${allocated}, which exceeds the quiz total of ${effectiveForm.total_points}.`
         );
         return;
       }
       const payload = {
-        ...quizForm,
-        competition_id: quizForm.quiz_type === "competition" ? quizForm.competition_id : "",
-        questions: quizForm.questions.map((question, index) => ({
+        ...effectiveForm,
+        competition_id:
+          effectiveForm.quiz_type === "competition" ? effectiveForm.competition_id : "",
+        questions: effectiveForm.questions.map((question, index) => ({
           ...question,
           position: index + 1,
           options: question.options.filter((option) =>
@@ -771,6 +658,7 @@ function WeeklyLearning() {
       setMessage(`${editingQuizId ? "Updated" : "Saved"} ${response.name}`);
       setEditingQuizId(null);
       setQuizForm(emptyQuizForm());
+      setAuthoringPanel(null);
       await loadData();
     } catch (err) {
       setError(err.message || "Could not save quiz.");
@@ -780,6 +668,8 @@ function WeeklyLearning() {
   const editQuizTest = async (test) => {
     setMessage("");
     setError("");
+    setAuthoringPanel("weekly_quiz");
+    setPerformancePanel(null);
     try {
       const response = await apiClient.get(`/quiz-tests/tests/${test.id}`);
       setEditingQuizId(response.id);
@@ -821,11 +711,18 @@ function WeeklyLearning() {
       if (editingQuizId === test.id) {
         setEditingQuizId(null);
         setQuizForm(emptyQuizForm());
+        setAuthoringPanel(null);
       }
       await loadData();
     } catch (err) {
       setError(err.message || "Could not delete quiz.");
     }
+  };
+
+  const cancelQuizEdit = () => {
+    setEditingQuizId(null);
+    setQuizForm(emptyQuizForm());
+    setAuthoringPanel(null);
   };
 
   const duplicateQuizTest = async (test) => {
@@ -1040,42 +937,6 @@ function WeeklyLearning() {
     quizStartedAtRef.current = null;
   };
 
-  const exportTypingCsv = () => {
-    const headers = [
-      "Learner",
-      "School",
-      "Grade",
-      "Stream",
-      "Test",
-      "Week",
-      "Lessons",
-      "Completed",
-      "Final Score",
-      "Status",
-    ];
-    const rows = reportRows.map((row) => [
-      row.full_name,
-      row.school_name,
-      row.grade,
-      row.stream,
-      row.test_name,
-      row.week_number,
-      row.lesson_count,
-      row.completed_lessons,
-      row.final_score ?? "",
-      row.final_score === null ? "Not attempted" : row.passed ? "Passed" : "Below threshold",
-    ]);
-    const csv = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `typing-report-${syncForm.term}-${syncForm.academic_year}-week-${syncForm.week_number}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
-  };
 
   const openTypingTest = async (test) => {
     setError("");
@@ -1256,22 +1117,6 @@ function WeeklyLearning() {
     setLessonComplete(false);
   };
 
-  const reportRows = typingReport.filter((row) => {
-    if (typingReportFilters.attempt_status === "attempted" && row.final_score === null) {
-      return false;
-    }
-    if (typingReportFilters.attempt_status === "not_attempted" && row.final_score !== null) {
-      return false;
-    }
-    return true;
-  });
-  const attemptedCount = reportRows.filter((row) => row.final_score !== null).length;
-  const notAttemptedCount = reportRows.filter((row) => row.final_score === null).length;
-  const totalTypingRows = reportRows.length || 1;
-  const reportGrades = [...new Set(typingReport.map((row) => row.grade).filter(Boolean))].sort();
-  const reportStreams = [...new Set(typingReport.map((row) => row.stream).filter(Boolean))].sort();
-  const quizReportRows = quizReport.filter((row) => row.final_score !== null);
-
   const bulkAllocate = async () => {
     setMessage("");
     setError("");
@@ -1295,1392 +1140,257 @@ function WeeklyLearning() {
     }
   };
 
-  const learnerRows =
-    category === "weekly_quiz"
-      ? quizTests
-      : allocations.map((item) => ({
-          id: item.course_id,
-          allocation_id: item.id,
-          name: item.course_name,
-          course_category: item.course_category,
-          term: item.term,
-          academic_year: item.academic_year,
-        }));
+  const openAuthoring = (panel) => {
+    setPerformancePanel(null);
+    setAuthoringPanel(panel);
+  };
 
-  const rows = category === "weekly_quiz" ? quizTests : isLearner() ? learnerRows : courses;
+  const showPerformance = (panel) => {
+    setAuthoringPanel(null);
+    setPerformancePanel((current) => (current === panel ? null : panel));
+  };
+
+  const closeAuthoring = () => {
+    if (authoringPanel === "weekly_quiz") {
+      cancelQuizEdit();
+      return;
+    }
+    cancelTypingEdit();
+  };
+
+  const activeTermLabel = activeAcademicTerm
+    ? activeAcademicTerm.name + " · " + activeAcademicTerm.academic_year
+    : "Not configured for today";
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="Typing / Quizzes"
-            subtitle="Native eduClub typing assessments and lightweight weekly learning records."
-          />
-        </MDBox>
+      <MDBox py={2} display="flex" flexDirection="column" gap={2}>
 
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <Card>
-              <MDBox p={2}>
-                <MDBox display="flex" gap={1} flexWrap="wrap" mb={2}>
-                  {categories.map(([value, label]) => (
-                    <MDButton
-                      key={value}
-                      variant={category === value ? "gradient" : "outlined"}
-                      color={category === value ? "info" : "secondary"}
-                      onClick={() => setCategory(value)}
-                    >
-                      {label}
-                    </MDButton>
-                  ))}
-                </MDBox>
+        {(error || message) && (
+          <Card
+            sx={{
+              border: "1px solid",
+              borderColor: error ? "#fbc8c4" : "#cdebd0",
+              borderRadius: "12px",
+              boxShadow: "none",
+              bgcolor: error ? "#fff7f6" : "#f6fff7",
+            }}
+          >
+            <MDBox px={2} py={1.5} display="flex" alignItems="center" gap={1}>
+              <Icon color={error ? "error" : "success"}>
+                {error ? "error_outline" : "check_circle"}
+              </Icon>
+              <MDTypography variant="body2" color={error ? "error" : "success"}>
+                {error || message}
+              </MDTypography>
+            </MDBox>
+          </Card>
+        )}
 
-                {error && (
-                  <MDTypography variant="caption" color="error" display="block" mb={1}>
-                    {error}
-                  </MDTypography>
-                )}
-                {message && (
-                  <MDTypography variant="caption" color="success" display="block" mb={1}>
-                    {message}
-                  </MDTypography>
-                )}
-
-                {category === "weekly_typing" && isSystemAdmin() && (
-                  <Grid container spacing={2} mb={3}>
-                    <Grid item xs={12}>
-                      <MDTypography variant="h6" fontWeight="bold">
-                        {editingTypingId ? "Edit Typing Setup" : "New Typing Setup"}
-                      </MDTypography>
-                      <MDTypography variant="caption" color="text">
-                        Weekly typing writes to report cards. Typing competitions appear in the
-                        learner Competition tab after enrolment and payment.
-                      </MDTypography>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        label="Assessment Name"
-                        fullWidth
-                        value={typingForm.name}
-                        onChange={(event) =>
-                          setTypingForm({ ...typingForm, name: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        select
-                        label="Type"
-                        fullWidth
-                        value={typingForm.test_type}
-                        onChange={(event) =>
-                          setTypingForm({ ...typingForm, test_type: event.target.value })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="weekly">Weekly</option>
-                        <option value="competition">Competition</option>
-                      </MDInput>
-                    </Grid>
-                    {typingForm.test_type === "competition" ? (
-                      <Grid item xs={12} md={4}>
-                        <MDInput
-                          select
-                          label="Typing Competition"
-                          fullWidth
-                          value={typingForm.competition_id}
-                          onChange={(event) =>
-                            setTypingForm({ ...typingForm, competition_id: event.target.value })
-                          }
-                          SelectProps={{ native: true }}
-                        >
-                          <option value="">Select competition</option>
-                          {typingCompetitions.map((competition) => (
-                            <option key={competition.id} value={competition.id}>
-                              {competition.name}
-                            </option>
-                          ))}
-                        </MDInput>
-                      </Grid>
-                    ) : (
-                      <>
-                        <Grid item xs={12} md={4}>
-                          <MDInput
-                            select
-                            label="Academic Year"
-                            fullWidth
-                            value={typingForm.academic_year}
-                            onChange={(event) => {
-                              const nextYear = event.target.value;
-                              const firstTerm = termOptions.find(
-                                (term) =>
-                                  String(term.academic_year || "") === String(nextYear || "")
-                              );
-                              setTypingForm({
-                                ...typingForm,
-                                academic_year: nextYear,
-                                term: firstTerm?.name || "",
-                                week_number: 1,
-                              });
-                            }}
-                            SelectProps={{ native: true }}
-                          >
-                            {[...new Set(termOptions.map((term) => term.academic_year))]
-                              .filter(Boolean)
-                              .map((year) => (
-                                <option key={year} value={year}>
-                                  {year}
-                                </option>
-                              ))}
-                          </MDInput>
-                        </Grid>
-                        <Grid item xs={12} md={4}>
-                          <MDInput
-                            select
-                            label="Term"
-                            fullWidth
-                            value={typingForm.term}
-                            onChange={(event) =>
-                              setTypingForm({
-                                ...typingForm,
-                                term: event.target.value,
-                                week_number: 1,
-                              })
-                            }
-                            SelectProps={{ native: true }}
-                          >
-                            {typingTerms.map((term) => (
-                              <option key={term.id} value={term.name}>
-                                {term.name}
-                              </option>
-                            ))}
-                          </MDInput>
-                        </Grid>
-                        <Grid item xs={12} md={4}>
-                          <MDInput
-                            select
-                            label="Week"
-                            fullWidth
-                            value={typingForm.week_number}
-                            disabled={!selectedTerm || weekOptions.length === 0}
-                            onChange={(event) =>
-                              setTypingForm({ ...typingForm, week_number: event.target.value })
-                            }
-                            SelectProps={{ native: true }}
-                          >
-                            {weekOptions.length === 0 && <option value="">No seeded weeks</option>}
-                            {weekOptions.map((week) => {
-                              const weekNumber = typeof week === "object" ? week.week_number : week;
-                              return (
-                                <option key={weekNumber} value={weekNumber}>
-                                  Week {weekNumber}
-                                  {typeof week === "object"
-                                    ? ` (${formatWeekDate(week.start_date)} - ${formatWeekDate(
-                                        week.end_date
-                                      )})`
-                                    : ""}
-                                </option>
-                              );
-                            })}
-                          </MDInput>
-                        </Grid>
-                      </>
-                    )}
-                    <Grid item xs={12}>
-                      <MDTypography variant="caption" color="text" display="block" mb={0.5}>
-                        Eligible grades
-                      </MDTypography>
-                      <MDBox display="flex" flexWrap="wrap" gap={0.5}>
-                        {gradeOptions.map((grade) => (
-                          <MDButton
-                            key={grade}
-                            variant={
-                              typingForm.eligible_grades.includes(grade) ? "gradient" : "outlined"
-                            }
-                            color="info"
-                            size="small"
-                            onClick={() => toggleTypingGrade(grade)}
-                          >
-                            {grade.replace("Grade ", "G")}
-                          </MDButton>
-                        ))}
-                      </MDBox>
-                      <MDTypography variant="caption" color="text">
-                        Leave all unselected to make the typing setup visible to every grade.
-                      </MDTypography>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        label="Pass Threshold"
-                        type="number"
-                        fullWidth
-                        value={typingForm.pass_threshold}
-                        onChange={(event) =>
-                          setTypingForm({ ...typingForm, pass_threshold: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        label="Max Attempts"
-                        type="number"
-                        fullWidth
-                        value={typingForm.max_attempts}
-                        onChange={(event) =>
-                          setTypingForm({ ...typingForm, max_attempts: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        label="Duration Seconds"
-                        type="number"
-                        fullWidth
-                        value={typingForm.duration_seconds}
-                        onChange={(event) =>
-                          setTypingForm({ ...typingForm, duration_seconds: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        select
-                        label="Published"
-                        fullWidth
-                        value={typingForm.is_published ? "yes" : "no"}
-                        onChange={(event) =>
-                          setTypingForm({
-                            ...typingForm,
-                            is_published: event.target.value === "yes",
-                          })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="no">Draft</option>
-                        <option value="yes">Published</option>
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        select
-                        label="Open"
-                        fullWidth
-                        value={typingForm.is_open ? "yes" : "no"}
-                        onChange={(event) =>
-                          setTypingForm({
-                            ...typingForm,
-                            is_open: event.target.value === "yes",
-                          })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="no">Closed</option>
-                        <option value="yes">Open</option>
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        select
-                        label="Reattempts"
-                        fullWidth
-                        value={typingForm.allow_reattempts ? "yes" : "no"}
-                        onChange={(event) =>
-                          setTypingForm({
-                            ...typingForm,
-                            allow_reattempts: event.target.value === "yes",
-                          })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="yes">Allowed</option>
-                        <option value="no">Disabled</option>
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <MDInput
-                        label="Description"
-                        fullWidth
-                        multiline
-                        rows={2}
-                        value={typingForm.description}
-                        onChange={(event) =>
-                          setTypingForm({ ...typingForm, description: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    {typingForm.lessons.map((lesson, index) => (
-                      <Grid item xs={12} md={4} key={lesson.title}>
-                        <MDInput
-                          label={`${lesson.title} Passage`}
-                          fullWidth
-                          multiline
-                          rows={5}
-                          value={lesson.passage}
-                          onChange={(event) => {
-                            const lessons = [...typingForm.lessons];
-                            lessons[index] = { ...lessons[index], passage: event.target.value };
-                            setTypingForm({ ...typingForm, lessons });
-                          }}
-                        />
-                      </Grid>
-                    ))}
-                    <Grid item xs={12}>
-                      <MDButton
-                        variant="gradient"
-                        color="info"
-                        onClick={saveTypingTest}
-                        disabled={
-                          !typingForm.name ||
-                          (typingForm.test_type === "competition" && !typingForm.competition_id)
-                        }
-                      >
-                        {editingTypingId ? "Update Typing Setup" : "Save Typing Assessment"}
-                      </MDButton>
-                      {editingTypingId && (
-                        <MDButton variant="text" color="dark" onClick={cancelTypingEdit}>
-                          Cancel Edit
-                        </MDButton>
-                      )}
-                    </Grid>
-                  </Grid>
-                )}
-
-                {category === "weekly_quiz" && isSystemAdmin() && (
-                  <Grid container spacing={2} mb={3}>
-                    <Grid item xs={12}>
-                      <MDTypography variant="h6" fontWeight="bold">
-                        {editingQuizId ? "Edit Quiz Setup" : "New Quiz Setup"}
-                      </MDTypography>
-                      <MDTypography variant="caption" color="text">
-                        Weekly quizzes write to report cards. Competition quizzes support quiz,
-                        maths, science, and STEM challenges.
-                      </MDTypography>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        label="Quiz Name"
-                        fullWidth
-                        value={quizForm.name}
-                        onChange={(event) => setQuizForm({ ...quizForm, name: event.target.value })}
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        select
-                        label="Type"
-                        fullWidth
-                        value={quizForm.quiz_type}
-                        onChange={(event) =>
-                          setQuizForm({ ...quizForm, quiz_type: event.target.value })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="weekly">Weekly</option>
-                        <option value="competition">Competition</option>
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <MDInput
-                        select
-                        label="Category"
-                        fullWidth
-                        value={quizForm.quiz_category}
-                        onChange={(event) =>
-                          setQuizForm({ ...quizForm, quiz_category: event.target.value })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="quiz">General Quiz</option>
-                        <option value="maths">Maths</option>
-                        <option value="science">Science</option>
-                        <option value="stem">STEM</option>
-                      </MDInput>
-                    </Grid>
-                    {quizForm.quiz_type === "competition" ? (
-                      <Grid item xs={12} md={4}>
-                        <MDInput
-                          select
-                          label="Competition"
-                          fullWidth
-                          value={quizForm.competition_id}
-                          onChange={(event) =>
-                            setQuizForm({ ...quizForm, competition_id: event.target.value })
-                          }
-                          SelectProps={{ native: true }}
-                        >
-                          <option value="">Select competition</option>
-                          {quizCompetitions.map((competition) => (
-                            <option key={competition.id} value={competition.id}>
-                              {competition.name}
-                            </option>
-                          ))}
-                        </MDInput>
-                      </Grid>
-                    ) : (
-                      <>
-                        <Grid item xs={12} md={4}>
-                          <MDInput
-                            select
-                            label="Academic Year"
-                            fullWidth
-                            value={quizForm.academic_year}
-                            onChange={(event) => {
-                              const nextYear = event.target.value;
-                              const firstTerm = termOptions.find(
-                                (term) =>
-                                  String(term.academic_year || "") === String(nextYear || "")
-                              );
-                              setQuizForm({
-                                ...quizForm,
-                                academic_year: nextYear,
-                                term: firstTerm?.name || "",
-                                week_number: 1,
-                              });
-                            }}
-                            SelectProps={{ native: true }}
-                          >
-                            {[...new Set(termOptions.map((term) => term.academic_year))]
-                              .filter(Boolean)
-                              .map((year) => (
-                                <option key={year} value={year}>
-                                  {year}
-                                </option>
-                              ))}
-                          </MDInput>
-                        </Grid>
-                        <Grid item xs={12} md={4}>
-                          <MDInput
-                            select
-                            label="Term"
-                            fullWidth
-                            value={quizForm.term}
-                            onChange={(event) =>
-                              setQuizForm({ ...quizForm, term: event.target.value, week_number: 1 })
-                            }
-                            SelectProps={{ native: true }}
-                          >
-                            {quizTerms.map((term) => (
-                              <option key={term.id} value={term.name}>
-                                {term.name}
-                              </option>
-                            ))}
-                          </MDInput>
-                        </Grid>
-                        <Grid item xs={12} md={4}>
-                          <MDInput
-                            select
-                            label="Week"
-                            fullWidth
-                            value={quizForm.week_number}
-                            disabled={!selectedQuizTerm || quizWeekOptions.length === 0}
-                            onChange={(event) =>
-                              setQuizForm({ ...quizForm, week_number: event.target.value })
-                            }
-                            SelectProps={{ native: true }}
-                          >
-                            {quizWeekOptions.length === 0 && (
-                              <option value="">No seeded weeks</option>
-                            )}
-                            {quizWeekOptions.map((week) => {
-                              const weekNumber = typeof week === "object" ? week.week_number : week;
-                              return (
-                                <option key={weekNumber} value={weekNumber}>
-                                  Week {weekNumber}
-                                  {typeof week === "object"
-                                    ? ` (${formatWeekDate(week.start_date)} - ${formatWeekDate(
-                                        week.end_date
-                                      )})`
-                                    : ""}
-                                </option>
-                              );
-                            })}
-                          </MDInput>
-                        </Grid>
-                      </>
-                    )}
-                    <Grid item xs={12}>
-                      <MDTypography variant="caption" color="text" display="block" mb={0.5}>
-                        Eligible grades
-                      </MDTypography>
-                      <MDBox display="flex" flexWrap="wrap" gap={0.5}>
-                        {gradeOptions.map((grade) => (
-                          <MDButton
-                            key={grade}
-                            variant={
-                              quizForm.eligible_grades.includes(grade) ? "gradient" : "outlined"
-                            }
-                            color="info"
-                            size="small"
-                            onClick={() => toggleQuizGrade(grade)}
-                          >
-                            {grade.replace("Grade ", "G")}
-                          </MDButton>
-                        ))}
-                      </MDBox>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        label="Pass Score"
-                        type="number"
-                        fullWidth
-                        value={quizForm.pass_score}
-                        onChange={(event) =>
-                          setQuizForm({ ...quizForm, pass_score: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        label="Max Attempts"
-                        type="number"
-                        fullWidth
-                        value={quizForm.max_attempts}
-                        onChange={(event) =>
-                          setQuizForm({ ...quizForm, max_attempts: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        label="Duration Seconds"
-                        type="number"
-                        fullWidth
-                        value={quizForm.duration_seconds}
-                        onChange={(event) =>
-                          setQuizForm({ ...quizForm, duration_seconds: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        label="Total Marks"
-                        type="number"
-                        fullWidth
-                        value={quizForm.total_points}
-                        onChange={(event) =>
-                          setQuizForm({ ...quizForm, total_points: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        select
-                        label="Status"
-                        fullWidth
-                        value={`${quizForm.is_published ? "published" : "draft"}-${
-                          quizForm.is_open ? "open" : "closed"
-                        }`}
-                        onChange={(event) => {
-                          const [published, open] = event.target.value.split("-");
-                          setQuizForm({
-                            ...quizForm,
-                            is_published: published === "published",
-                            is_open: open === "open",
-                          });
-                        }}
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="draft-closed">Draft</option>
-                        <option value="published-closed">Published, closed</option>
-                        <option value="published-open">Published, open</option>
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <MDInput
-                        label="Description"
-                        fullWidth
-                        multiline
-                        rows={2}
-                        value={quizForm.description}
-                        onChange={(event) =>
-                          setQuizForm({ ...quizForm, description: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    {quizForm.questions.map((question, index) => (
-                      <Grid item xs={12} key={`question-${index + 1}`}>
-                        <Card variant="outlined">
-                          <MDBox p={2}>
-                            <Grid container spacing={1.5}>
-                              <Grid item xs={12} md={6}>
-                                <MDInput
-                                  label={`Question ${index + 1}`}
-                                  fullWidth
-                                  value={question.prompt}
-                                  onChange={(event) =>
-                                    updateQuizQuestion(index, { prompt: event.target.value })
-                                  }
-                                />
-                              </Grid>
-                              <Grid item xs={12} md={3}>
-                                <MDInput
-                                  select
-                                  label="Answer type"
-                                  fullWidth
-                                  value={question.question_type}
-                                  onChange={(event) => {
-                                    const questionType = event.target.value;
-                                    updateQuizQuestion(index, {
-                                      question_type: questionType,
-                                      options:
-                                        questionType === "true_false"
-                                          ? ["True", "False"]
-                                          : questionType === "matching"
-                                          ? [{ left: "", right: "" }]
-                                          : question.options?.some(
-                                              (option) => typeof option === "object"
-                                            )
-                                          ? ["", "", "", ""]
-                                          : question.options,
-                                      correct_answer:
-                                        questionType === "true_false"
-                                          ? "True"
-                                          : questionType === "multiple_choice"
-                                          ? []
-                                          : questionType === "short_answer"
-                                          ? [""]
-                                          : "",
-                                    });
-                                  }}
-                                  SelectProps={{ native: true }}
-                                >
-                                  <option value="single_choice">Single choice</option>
-                                  <option value="multiple_choice">Multiple choice</option>
-                                  <option value="true_false">True or false</option>
-                                  <option value="short_answer">Short answer</option>
-                                  <option value="matching">Matching pairs</option>
-                                  <option value="ordering">Arrange in order</option>
-                                </MDInput>
-                              </Grid>
-                              <Grid item xs={12} md={3}>
-                                <MDInput
-                                  label="Marks"
-                                  type="number"
-                                  fullWidth
-                                  value={question.points}
-                                  onChange={(event) =>
-                                    updateQuizQuestion(index, { points: event.target.value })
-                                  }
-                                />
-                              </Grid>
-                              <Grid item xs={12} display="flex" justifyContent="flex-end">
-                                <MDButton
-                                  variant="text"
-                                  color="error"
-                                  size="small"
-                                  onClick={() => removeQuizQuestion(index)}
-                                >
-                                  <Icon>delete</Icon>&nbsp; Remove Question
-                                </MDButton>
-                              </Grid>
-                              <Grid item xs={12}>
-                                <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
-                                  <MDButton
-                                    component="label"
-                                    variant="outlined"
-                                    color="info"
-                                    size="small"
-                                  >
-                                    {question.image_url ? "Replace Image" : "Add Image"}
-                                    <input
-                                      hidden
-                                      type="file"
-                                      accept="image/png,image/jpeg,image/gif,image/webp"
-                                      onChange={(event) =>
-                                        uploadQuizQuestionImage(index, event.target.files?.[0])
-                                      }
-                                    />
-                                  </MDButton>
-                                  {question.image_url && (
-                                    <>
-                                      <MDBox
-                                        component="img"
-                                        src={question.image_url}
-                                        alt=""
-                                        sx={{
-                                          width: 120,
-                                          maxHeight: 90,
-                                          objectFit: "contain",
-                                          borderRadius: "6px",
-                                        }}
-                                      />
-                                      <MDButton
-                                        variant="text"
-                                        color="error"
-                                        size="small"
-                                        onClick={() => updateQuizQuestion(index, { image_url: "" })}
-                                      >
-                                        Remove
-                                      </MDButton>
-                                    </>
-                                  )}
-                                </MDBox>
-                              </Grid>
-                              {question.question_type === "matching" ? (
-                                <Grid item xs={12}>
-                                  <MDBox display="flex" flexDirection="column" gap={1}>
-                                    {(question.options || []).map((pair, pairIndex) => (
-                                      <Grid container spacing={1} key={`pair-${pairIndex + 1}`}>
-                                        <Grid item xs={5}>
-                                          <MDInput
-                                            label="Item"
-                                            fullWidth
-                                            value={pair.left || ""}
-                                            onChange={(event) => {
-                                              const options = [...question.options];
-                                              options[pairIndex] = {
-                                                ...pair,
-                                                left: event.target.value,
-                                              };
-                                              updateQuizQuestion(index, { options });
-                                            }}
-                                          />
-                                        </Grid>
-                                        <Grid item xs={2}>
-                                          <MDTypography textAlign="center">matches</MDTypography>
-                                        </Grid>
-                                        <Grid item xs={5}>
-                                          <MDInput
-                                            label="Match"
-                                            fullWidth
-                                            value={pair.right || ""}
-                                            onChange={(event) => {
-                                              const options = [...question.options];
-                                              options[pairIndex] = {
-                                                ...pair,
-                                                right: event.target.value,
-                                              };
-                                              updateQuizQuestion(index, { options });
-                                            }}
-                                          />
-                                        </Grid>
-                                        <Grid item xs={12} display="flex" justifyContent="flex-end">
-                                          <MDButton
-                                            variant="text"
-                                            color="error"
-                                            size="small"
-                                            onClick={() => removeQuizOption(index, pairIndex)}
-                                          >
-                                            Remove Pair
-                                          </MDButton>
-                                        </Grid>
-                                      </Grid>
-                                    ))}
-                                    <MDButton
-                                      variant="outlined"
-                                      color="info"
-                                      size="small"
-                                      onClick={() =>
-                                        updateQuizQuestion(index, {
-                                          options: [
-                                            ...(question.options || []),
-                                            { left: "", right: "" },
-                                          ],
-                                        })
-                                      }
-                                    >
-                                      Add Pair
-                                    </MDButton>
-                                  </MDBox>
-                                </Grid>
-                              ) : (
-                                <Grid item xs={12}>
-                                  {question.question_type === "short_answer" ? (
-                                    <MDBox display="flex" flexDirection="column" gap={1}>
-                                      {normalizeAcceptableAnswers(question.correct_answer).map(
-                                        (answer, answerIndex) => (
-                                          <MDBox
-                                            key={`answer-${index}-${answerIndex}`}
-                                            display="flex"
-                                            gap={1}
-                                            alignItems="center"
-                                          >
-                                            <MDInput
-                                              label={
-                                                answerIndex === 0
-                                                  ? "Correct answer"
-                                                  : `Also accept ${answerIndex + 1}`
-                                              }
-                                              fullWidth
-                                              value={answer}
-                                              onChange={(event) =>
-                                                updateQuizQuestion(index, {
-                                                  correct_answer: updateAcceptableAnswer(
-                                                    question.correct_answer,
-                                                    answerIndex,
-                                                    event.target.value
-                                                  ),
-                                                })
-                                              }
-                                            />
-                                            <IconButton
-                                              color="error"
-                                              title="Remove accepted answer"
-                                              onClick={() =>
-                                                updateQuizQuestion(index, {
-                                                  correct_answer: removeAcceptableAnswer(
-                                                    question.correct_answer,
-                                                    answerIndex
-                                                  ),
-                                                })
-                                              }
-                                            >
-                                              <Icon>close</Icon>
-                                            </IconButton>
-                                          </MDBox>
-                                        )
-                                      )}
-                                      <MDButton
-                                        variant="outlined"
-                                        color="info"
-                                        size="small"
-                                        onClick={() =>
-                                          updateQuizQuestion(index, {
-                                            correct_answer: addAcceptableAnswer(
-                                              question.correct_answer
-                                            ),
-                                          })
-                                        }
-                                      >
-                                        Add Accepted Answer
-                                      </MDButton>
-                                    </MDBox>
-                                  ) : (
-                                    <MDBox display="flex" flexDirection="column" gap={1}>
-                                      {(question.options || []).map((option, optionIndex) => {
-                                        const checked =
-                                          question.question_type === "multiple_choice"
-                                            ? (question.correct_answer || []).includes(option)
-                                            : question.question_type === "ordering"
-                                            ? true
-                                            : Boolean(option) && question.correct_answer === option;
-                                        return (
-                                          <MDBox
-                                            key={`quiz-${index}-option-${optionIndex}`}
-                                            display="flex"
-                                            alignItems="center"
-                                            gap={1}
-                                            p={1}
-                                            border="1px solid #e5e7eb"
-                                            borderRadius="md"
-                                            sx={{ bgcolor: "#ffffff" }}
-                                          >
-                                            <MDTypography variant="button" fontWeight="bold">
-                                              {question.question_type === "ordering"
-                                                ? optionIndex + 1
-                                                : optionLabel(optionIndex)}
-                                            </MDTypography>
-                                            {question.question_type === "multiple_choice" && (
-                                              <Checkbox
-                                                checked={checked}
-                                                onChange={() =>
-                                                  toggleQuizCorrectOption(index, option)
-                                                }
-                                              />
-                                            )}
-                                            {question.question_type === "single_choice" && (
-                                              <Radio
-                                                checked={checked}
-                                                onChange={() =>
-                                                  toggleQuizCorrectOption(index, option)
-                                                }
-                                              />
-                                            )}
-                                            {question.question_type === "true_false" && (
-                                              <Radio
-                                                checked={checked}
-                                                onChange={() =>
-                                                  toggleQuizCorrectOption(index, option)
-                                                }
-                                              />
-                                            )}
-                                            <MDInput
-                                              label={
-                                                question.question_type === "ordering"
-                                                  ? `Item ${optionIndex + 1}`
-                                                  : `Option ${optionLabel(optionIndex)}`
-                                              }
-                                              fullWidth
-                                              value={option}
-                                              onChange={(event) => {
-                                                const options = [...question.options];
-                                                const oldOption = options[optionIndex];
-                                                options[optionIndex] = event.target.value;
-                                                let correctAnswer = question.correct_answer;
-                                                if (question.question_type === "ordering") {
-                                                  correctAnswer = options;
-                                                } else if (Array.isArray(correctAnswer)) {
-                                                  correctAnswer = correctAnswer.map((answer) =>
-                                                    answer === oldOption
-                                                      ? event.target.value
-                                                      : answer
-                                                  );
-                                                } else if (correctAnswer === oldOption) {
-                                                  correctAnswer = event.target.value;
-                                                }
-                                                updateQuizQuestion(index, {
-                                                  options,
-                                                  correct_answer: correctAnswer,
-                                                });
-                                              }}
-                                            />
-                                            <IconButton
-                                              color="error"
-                                              title="Remove option"
-                                              onClick={() => removeQuizOption(index, optionIndex)}
-                                            >
-                                              <Icon>close</Icon>
-                                            </IconButton>
-                                          </MDBox>
-                                        );
-                                      })}
-                                      <MDButton
-                                        variant="outlined"
-                                        color="info"
-                                        size="small"
-                                        onClick={() => addQuizOption(index)}
-                                      >
-                                        Add{" "}
-                                        {question.question_type === "ordering"
-                                          ? "Ordered Item"
-                                          : "Option"}
-                                      </MDButton>
-                                      {question.question_type === "ordering" && (
-                                        <MDTypography variant="caption" color="text">
-                                          Arrange the items above in the correct answer order.
-                                        </MDTypography>
-                                      )}
-                                    </MDBox>
-                                  )}
-                                </Grid>
-                              )}
-                            </Grid>
-                          </MDBox>
-                        </Card>
-                      </Grid>
-                    ))}
-                    <Grid item xs={12}>
-                      <MDTypography variant="caption" color="text">
-                        Allocated marks:{" "}
-                        {quizForm.questions.reduce(
-                          (sum, question) => sum + Number(question.points ?? 0),
-                          0
-                        )}{" "}
-                        / {Number(quizForm.total_points || 0)}
-                      </MDTypography>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <MDButton variant="outlined" color="dark" onClick={addQuizQuestion}>
-                        Add Question
-                      </MDButton>
-                      <MDButton
-                        variant="gradient"
-                        color="info"
-                        onClick={saveQuizTest}
-                        disabled={
-                          !quizForm.name ||
-                          quizForm.questions.some((question) => !question.prompt) ||
-                          (quizForm.quiz_type === "competition" && !quizForm.competition_id)
-                        }
-                      >
-                        {editingQuizId ? "Update Quiz" : "Save Quiz"}
-                      </MDButton>
-                    </Grid>
-                  </Grid>
-                )}
-
-                {category === "weekly_quiz" && isSchoolAdmin() && (
-                  <Grid container spacing={2} mb={3}>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        select
-                        label="Grade"
-                        fullWidth
-                        value={bulkForm.grade}
-                        onChange={(event) =>
-                          setBulkForm({ ...bulkForm, grade: event.target.value })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="" />
-                        {grades.map((grade) => (
-                          <option key={grade} value={grade}>
-                            {grade}
-                          </option>
-                        ))}
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        select
-                        label="Stream"
-                        fullWidth
-                        value={bulkForm.stream}
-                        onChange={(event) =>
-                          setBulkForm({ ...bulkForm, stream: event.target.value })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="">All streams</option>
-                        {streams.map((stream) => (
-                          <option key={stream} value={stream}>
-                            {stream}
-                          </option>
-                        ))}
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        select
-                        label="Activity"
-                        fullWidth
-                        value={bulkForm.course_id}
-                        onChange={(event) =>
-                          setBulkForm({ ...bulkForm, course_id: event.target.value })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="" />
-                        {courses.map((course) => (
-                          <option key={course.id} value={course.id}>
-                            {course.name}
-                          </option>
-                        ))}
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        select
-                        label="Term"
-                        fullWidth
-                        value={bulkForm.term}
-                        onChange={(event) => setBulkForm({ ...bulkForm, term: event.target.value })}
-                        SelectProps={{ native: true }}
-                      >
-                        {terms.map((term) => (
-                          <option key={term} value={term}>
-                            {term}
-                          </option>
-                        ))}
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        select
-                        label="Academic Year"
-                        fullWidth
-                        value={bulkForm.academic_year}
-                        onChange={(event) =>
-                          setBulkForm({ ...bulkForm, academic_year: event.target.value })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        {academicYears.map((year) => (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        ))}
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDButton
-                        variant="gradient"
-                        color="info"
-                        fullWidth
-                        onClick={bulkAllocate}
-                        disabled={!bulkForm.grade || !bulkForm.course_id}
-                      >
-                        Allocate
-                      </MDButton>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        select
-                        label="Sync Term"
-                        fullWidth
-                        value={syncForm.term}
-                        onChange={(event) => setSyncForm({ ...syncForm, term: event.target.value })}
-                        SelectProps={{ native: true }}
-                      >
-                        {terms.map((term) => (
-                          <option key={term} value={term}>
-                            {term}
-                          </option>
-                        ))}
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        select
-                        label="Sync Year"
-                        fullWidth
-                        value={syncForm.academic_year}
-                        onChange={(event) =>
-                          setSyncForm({ ...syncForm, academic_year: event.target.value })
-                        }
-                        SelectProps={{ native: true }}
-                      >
-                        {academicYears.map((year) => (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        ))}
-                      </MDInput>
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDInput
-                        label="Week"
-                        type="number"
-                        fullWidth
-                        value={syncForm.week_number}
-                        onChange={(event) =>
-                          setSyncForm({ ...syncForm, week_number: event.target.value })
-                        }
-                      />
-                    </Grid>
-                    <Grid item xs={12} md={3}>
-                      <MDButton variant="outlined" color="success" fullWidth onClick={syncResults}>
-                        Sync Results
-                      </MDButton>
-                    </Grid>
-                  </Grid>
-                )}
-
-                {category === "weekly_typing" ? (
-                  loading ? (
-                    <MDTypography variant="body2" color="text">
-                      Loading typing assessments...
-                    </MDTypography>
-                  ) : typingTests.length === 0 ? (
-                    <MDTypography variant="body2" color="text">
-                      No native typing assessments available.
-                    </MDTypography>
-                  ) : (
-                    <TableContainer>
-                      <Table>
-                        <TableHead sx={{ display: "table-header-group" }}>
-                          <TableRow>
-                            <TableCell>Name</TableCell>
-                            <TableCell>Type</TableCell>
-                            <TableCell>Week</TableCell>
-                            <TableCell>Lessons</TableCell>
-                            <TableCell>Status</TableCell>
-                            <TableCell align="center">Action</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {typingTests.map((test) => (
-                            <TableRow key={test.id}>
-                              <TableCell>{test.name}</TableCell>
-                              <TableCell>
-                                <Chip
-                                  label={
-                                    test.test_type === "competition" ? "Competition" : "Weekly"
-                                  }
-                                  color={test.test_type === "competition" ? "warning" : "info"}
-                                  size="small"
-                                />
-                              </TableCell>
-                              <TableCell>Week {test.week_number || "-"}</TableCell>
-                              <TableCell>{test.lesson_count || 0}</TableCell>
-                              <TableCell>
-                                <Chip
-                                  label={test.effective_is_open ? "Open" : "Closed"}
-                                  color={test.effective_is_open ? "success" : "default"}
-                                  size="small"
-                                />
-                              </TableCell>
-                              <TableCell align="center">
-                                {isLearner() ? (
-                                  <MDButton
-                                    variant="gradient"
-                                    color="info"
-                                    size="small"
-                                    onClick={() => openTypingTest(test)}
-                                  >
-                                    Start
-                                  </MDButton>
-                                ) : isSystemAdmin() ? (
-                                  <MDBox display="flex" gap={0.5} justifyContent="center">
-                                    <MDButton
-                                      variant="text"
-                                      color="info"
-                                      size="small"
-                                      onClick={() => editTypingTest(test)}
-                                    >
-                                      Edit
-                                    </MDButton>
-                                    <MDButton
-                                      variant="text"
-                                      color="success"
-                                      size="small"
-                                      onClick={() => duplicateTypingTest(test)}
-                                    >
-                                      Duplicate
-                                    </MDButton>
-                                    <MDButton
-                                      variant="text"
-                                      color="error"
-                                      size="small"
-                                      onClick={() => deleteTypingTest(test)}
-                                    >
-                                      Delete
-                                    </MDButton>
-                                  </MDBox>
-                                ) : (
-                                  <MDTypography variant="caption" color="text">
-                                    Native
-                                  </MDTypography>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  )
-                ) : loading ? (
-                  <MDTypography variant="body2" color="text">
-                    Loading typing/quizzes...
-                  </MDTypography>
-                ) : rows.length === 0 ? (
-                  <MDTypography variant="body2" color="text">
-                    No typing/quizzes available yet.
-                  </MDTypography>
-                ) : !showAssessmentList ? null : (
-                  <TableContainer>
-                    <Table>
-                      <TableHead sx={{ display: "table-header-group" }}>
-                        <TableRow>
-                          <TableCell>Name</TableCell>
-                          <TableCell>Category</TableCell>
-                          <TableCell>Type</TableCell>
-                          <TableCell>Week</TableCell>
-                          <TableCell>Status</TableCell>
-                          {isLearner() && <TableCell>Term</TableCell>}
-                          <TableCell align="center">Action</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {rows.map((row) => (
-                          <TableRow key={`${row.id}-${row.allocation_id || "course"}`}>
-                            <TableCell>{row.name}</TableCell>
-                            <TableCell>
-                              <Chip
-                                label={row.quiz_category || "quiz"}
-                                color={row.quiz_type === "competition" ? "warning" : "info"}
-                                size="small"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              {row.quiz_type === "competition" ? "Competition" : "Weekly"}
-                            </TableCell>
-                            <TableCell>Week {row.week_number || "-"}</TableCell>
-                            <TableCell>
-                              <Chip
-                                label={row.effective_is_open ? "Open" : "Closed"}
-                                color={row.effective_is_open ? "success" : "default"}
-                                size="small"
-                              />
-                            </TableCell>
-                            {isLearner() && (
-                              <TableCell>
-                                {row.term} | {row.academic_year}
-                              </TableCell>
-                            )}
-                            <TableCell align="center">
-                              {isLearner() ? (
-                                <MDButton
-                                  variant="gradient"
-                                  color="info"
-                                  size="small"
-                                  onClick={() => openQuizTest(row)}
-                                >
-                                  Start
-                                </MDButton>
-                              ) : isSystemAdmin() ? (
-                                <MDBox display="flex" gap={0.5} justifyContent="center">
-                                  <MDButton
-                                    variant="text"
-                                    color="dark"
-                                    size="small"
-                                    onClick={() => openQuizAttemptReview(row)}
-                                  >
-                                    Review
-                                  </MDButton>
-                                  <MDButton
-                                    variant="text"
-                                    color="info"
-                                    size="small"
-                                    onClick={() => editQuizTest(row)}
-                                  >
-                                    Edit
-                                  </MDButton>
-                                  <MDButton
-                                    variant="text"
-                                    color="success"
-                                    size="small"
-                                    onClick={() => duplicateQuizTest(row)}
-                                  >
-                                    Duplicate
-                                  </MDButton>
-                                  <MDButton
-                                    variant="text"
-                                    color="error"
-                                    size="small"
-                                    onClick={() => deleteQuizTest(row)}
-                                  >
-                                    Delete
-                                  </MDButton>
-                                </MDBox>
-                              ) : (
-                                <MDButton
-                                  variant="text"
-                                  color="info"
-                                  size="small"
-                                  onClick={() => openQuizAttemptReview(row)}
-                                >
-                                  Review
-                                </MDButton>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
-
-                {isLearner() && <MyWeeklyProgress />}
-
-                {category === "weekly_typing" && !isLearner() && (
-                  <MDBox mt={3}>
-                    {/* The matrix is the whole staff view here: the old
-                        per-session report and its filters duplicated it a row
-                        at a time and grew with every assessment added. */}
-                    <WeeklyMatrix
-                      defaultMetric="typing_score"
-                      title="Weekly typing matrix"
-                      onScoreClick={openWeekQuizReview}
-                    />
-                  </MDBox>
-                )}
-                {category === "weekly_quiz" && !isLearner() && (
-                  <MDBox mt={3}>
-                    <WeeklyMatrix
-                      defaultMetric="quiz_score"
-                      title="Weekly quiz matrix"
-                      onScoreClick={openWeekQuizReview}
-                    />
-                  </MDBox>
-                )}
+        {!loading && !activeAcademicTerm && (
+          <Card
+            sx={{
+              border: "1px solid #ffd7a3",
+              borderRadius: "14px",
+              boxShadow: "none",
+              bgcolor: "#fffaf3",
+            }}
+          >
+            <MDBox p={2} display="flex" alignItems="flex-start" gap={1.25}>
+              <Icon color="warning">event_busy</Icon>
+              <MDBox>
+                <MDTypography variant="button" color="dark" fontWeight="bold" display="block">
+                  No current academic term
+                </MDTypography>
+                <MDTypography variant="body2" color="text">
+                  Quizzes and typing tests are strictly term-scoped. Create the current term with
+                  valid dates to enable authoring; expired Term 2 content will not be used as a
+                  fallback.
+                </MDTypography>
               </MDBox>
-            </Card>
-          </Grid>
-        </Grid>
+            </MDBox>
+          </Card>
+        )}
+
+        {authoringPanel && canAuthorAssessments && activeAcademicTerm && (
+          <MDBox id="assessment-authoring-studio">
+            <MDBox
+              mb={0.75}
+              display="flex"
+              alignItems="center"
+              justifyContent="space-between"
+              gap={1}
+            >
+              <MDTypography variant="caption" color="text">
+                Assessments&nbsp; / &nbsp;
+                {authoringPanel === "weekly_quiz" ? "Create Quiz" : "Create Typing Test"}
+                &nbsp; / &nbsp;{activeTermLabel}
+              </MDTypography>
+              <MDButton variant="text" color="dark" size="small" onClick={closeAuthoring}>
+                <Icon>close</Icon>&nbsp; Close
+              </MDButton>
+            </MDBox>
+            <Suspense
+              fallback={
+                <MDTypography variant="caption" color="text">
+                  Opening editor...
+                </MDTypography>
+              }
+            >
+                {authoringPanel === "weekly_typing" ? (
+                  <TypingStudioForm
+                    typingForm={typingForm}
+                    setTypingForm={setTypingForm}
+                    editingTypingId={editingTypingId}
+                    saveTypingTest={saveTypingTest}
+                    cancelTypingEdit={cancelTypingEdit}
+                    toggleTypingGrade={toggleTypingGrade}
+                    typingTerms={typingTerms}
+                    typingCompetitions={typingCompetitions}
+                    termOptions={termOptions}
+                    selectedTerm={selectedTerm}
+                    weekOptions={weekOptions}
+                    isSystemAdmin={isSystemAdmin}
+                  />
+                ) : (
+                  <QuizStudioForm
+                    quizForm={quizForm}
+                    setQuizForm={setQuizForm}
+                    editingQuizId={editingQuizId}
+                    saveQuizTest={saveQuizTest}
+                    toggleQuizGrade={toggleQuizGrade}
+                    toggleQuizCorrectOption={toggleQuizCorrectOption}
+                    addQuizQuestion={addQuizQuestion}
+                    removeQuizQuestion={removeQuizQuestion}
+                    updateQuizQuestion={updateQuizQuestion}
+                    addQuizOption={addQuizOption}
+                    removeQuizOption={removeQuizOption}
+                    uploadQuizQuestionImage={uploadQuizQuestionImage}
+                    quizTerms={quizTerms}
+                    quizCompetitions={quizCompetitions}
+                    termOptions={termOptions}
+                    selectedQuizTerm={selectedQuizTerm}
+                    quizWeekOptions={quizWeekOptions}
+                    isSystemAdmin={isSystemAdmin}
+                    termTools={
+                      isSchoolAdmin() ? (
+                        <AssessmentTermTools
+                          grades={grades}
+                          streams={streams}
+                          courses={courses}
+                          terms={terms}
+                          academicYears={academicYears}
+                          bulkForm={bulkForm}
+                          setBulkForm={setBulkForm}
+                          syncForm={syncForm}
+                          setSyncForm={setSyncForm}
+                          bulkAllocate={bulkAllocate}
+                          syncResults={syncResults}
+                        />
+                      ) : null
+                    }
+                  />
+                )}
+            </Suspense>
+          </MDBox>
+        )}
+
+        {showAssessmentList && (
+          <AssessmentLibrary
+            activeAcademicTerm={activeAcademicTerm}
+            loading={loading}
+            quizTests={quizTests}
+            typingTests={typingTests}
+            isLearner={isLearner()}
+            canManageAssessment={canManageAssessment}
+            onCreateQuiz={() => openAuthoring("weekly_quiz")}
+            onCreateTyping={() => openAuthoring("weekly_typing")}
+            onOpenQuiz={openQuizTest}
+            onOpenQuizPerformance={openQuizAttemptReview}
+            onEditQuiz={editQuizTest}
+            onDuplicateQuiz={duplicateQuizTest}
+            onDeleteQuiz={deleteQuizTest}
+            onOpenTyping={openTypingTest}
+            onEditTyping={editTypingTest}
+            onDuplicateTyping={duplicateTypingTest}
+            onDeleteTyping={deleteTypingTest}
+            onShowQuizMatrix={() => showPerformance("weekly_quiz")}
+            onShowTypingMatrix={() => showPerformance("weekly_typing")}
+          />
+        )}
+
+        {performancePanel && !isLearner() && (
+          <Card
+            sx={{
+              border: "1px solid #e4eaf2",
+              borderRadius: "16px",
+              boxShadow: "0 10px 28px rgba(52, 71, 103, 0.05)",
+              overflow: "hidden",
+            }}
+          >
+            <MDBox
+              px={2.5}
+              py={1.75}
+              display="flex"
+              alignItems="center"
+              justifyContent="space-between"
+              sx={{ borderBottom: "1px solid #edf1f6", bgcolor: "#fbfcfe" }}
+            >
+              <MDBox>
+                <MDTypography variant="h6" color="dark" fontWeight="bold">
+                  {performancePanel === "weekly_quiz"
+                    ? "Quiz performance matrix"
+                    : "Typing performance matrix"}
+                </MDTypography>
+                <MDTypography variant="caption" color="text">
+                  Loaded on demand to keep the assessment page fast.
+                </MDTypography>
+              </MDBox>
+              <MDButton
+                variant="text"
+                color="dark"
+                size="small"
+                onClick={() => setPerformancePanel(null)}
+              >
+                <Icon>close</Icon>&nbsp; Close
+              </MDButton>
+            </MDBox>
+            <MDBox p={{ xs: 1, md: 2 }}>
+              <Suspense
+                fallback={
+                  <MDTypography variant="body2" color="text" p={2}>
+                    Loading performance...
+                  </MDTypography>
+                }
+              >
+                <WeeklyMatrix
+                  defaultMetric={
+                    performancePanel === "weekly_quiz" ? "quiz_score" : "typing_score"
+                  }
+                  title={
+                    performancePanel === "weekly_quiz"
+                      ? "Weekly quiz matrix"
+                      : "Weekly typing matrix"
+                  }
+                  onScoreClick={openWeekQuizReview}
+                />
+              </Suspense>
+            </MDBox>
+          </Card>
+        )}
+
+        {isLearner() && (
+          <Suspense
+            fallback={
+              <MDTypography variant="body2" color="text">
+                Loading your weekly progress...
+              </MDTypography>
+            }
+          >
+            <MyWeeklyProgress />
+          </Suspense>
+        )}
       </MDBox>
       <Footer />
       <Dialog

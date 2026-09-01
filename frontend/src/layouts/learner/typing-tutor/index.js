@@ -12,21 +12,23 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
-import { buildTypingPracticePath, progressKey } from "./practicePath";
+import { buildTypingPracticePath, fingerForKey, progressKey } from "./practicePath";
 import { buildProgressMap, calculateStats } from "./typingTutorUtils";
+import {
+  isMuted,
+  playAttemptSaved,
+  playError,
+  playKeyTick,
+  playSuccess,
+  playWordComplete,
+  setMuted,
+} from "./typingSounds";
 
 const keyboardRows = ["QWERTYUIOP", "ASDFGHJKL;", "ZXCVBNM"].map((row) => row.split(""));
+// The eight keys a learner's fingers rest on. Marking them keeps the idea of a
+// home position visible on every level, not only while it is being taught.
+const homeKeys = new Set(["A", "S", "D", "F", "J", "K", "L", ";"]);
 const tracks = buildTypingPracticePath();
-const fingerHints = {
-  A: "left little finger",
-  S: "left ring finger",
-  D: "left middle finger",
-  F: "left index finger",
-  J: "right index finger",
-  K: "right middle finger",
-  L: "right ring finger",
-  ";": "right little finger",
-};
 
 function targetPreview(targetText, typedText) {
   const typed = String(typedText || "").slice(0, targetText.length);
@@ -68,6 +70,8 @@ function MyTypingTutor() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(true);
+  const [soundOn, setSoundOn] = useState(() => !isMuted());
 
   const progressMap = useMemo(() => buildProgressMap(progressRows), [progressRows]);
   const selectedTrack = tracks.find((track) => track.key === selectedTrackKey) || tracks[0];
@@ -84,7 +88,10 @@ function MyTypingTutor() {
   const currentChar = selectedActivity.text[typedText.length] || "";
   const currentKey = currentChar.toUpperCase();
   const preview = targetPreview(selectedActivity.text, typedText);
-  const showKeyboard = selectedTrack.key === "beginner";
+  // The keyboard map used to be hidden outside the beginner track, which is
+  // exactly when the unfamiliar keys start arriving. It is now available on
+  // every track and the learner decides when they no longer need it.
+  const showKeyboard = keyboardVisible;
   const isComplete = typedText.length >= selectedActivity.text.length || remaining <= 0;
   const passed =
     typedText.length >= selectedActivity.text.length &&
@@ -137,7 +144,34 @@ function MyTypingTutor() {
     if (!startedAt && value.length > 0) {
       setStartedAt(Date.now());
     }
+
+    // Sound only on forward progress. Backspacing through a mistake should be
+    // quiet, or correcting an error turns into a burst of noise.
+    if (value.length > typedText.length) {
+      const target = selectedActivity.text;
+      const lastIndex = value.length - 1;
+      if (value[lastIndex] !== target[lastIndex]) {
+        playError();
+      } else if (value[lastIndex] === " " || value.length === target.length) {
+        playWordComplete();
+      } else {
+        playKeyTick();
+      }
+    }
+
     setTypedText(value);
+  };
+
+  // The caret must sit at the end of what has been typed. Without this a learner
+  // who clicks into the middle of the box, or whose tablet keyboard moves the
+  // caret, silently starts inserting characters in the wrong place and every
+  // later letter is marked wrong for no visible reason.
+  const keepCaretAtEnd = (event) => {
+    const field = event.target;
+    const end = field.value.length;
+    if (field.selectionStart !== end || field.selectionEnd !== end) {
+      field.setSelectionRange(end, end);
+    }
   };
 
   const saveAttempt = async () => {
@@ -168,17 +202,18 @@ function MyTypingTutor() {
     setSaving(true);
     setError("");
     try {
+      // The marks and the pass decision are recalculated on the server from the
+      // passage and the keystrokes below, so nothing here is sent as a claim.
       const response = await apiClient.post("/typing-practice/attempts", {
         track_key: selectedTrack.key,
         level_number: selectedLevel.number,
         activity_key: selectedActivity.key,
         activity_title: selectedActivity.title,
-        raw_wpm: stats.rawWpm,
-        net_wpm: stats.netWpm,
-        accuracy: stats.accuracy,
-        mistakes: stats.mistakes,
+        target_text: selectedActivity.text,
+        typed_text: typedText,
+        goal_wpm: selectedActivity.goalWpm,
+        accuracy_goal: selectedActivity.accuracyGoal,
         duration_seconds: Math.max(1, elapsedSeconds),
-        passed,
       });
       setProgressRows((current) => [
         ...current.filter(
@@ -195,8 +230,12 @@ function MyTypingTutor() {
           fewest_mistakes: response.mistakes,
         },
       ]);
+      if (response.passed) playSuccess();
+      else playAttemptSaved();
       setMessage(
-        passed ? "Great work. Activity passed and saved." : "Attempt saved. Try again to pass."
+        response.passed
+          ? "Great work. Activity passed and saved."
+          : "Attempt saved. Try again to pass."
       );
     } catch (err) {
       setError(
@@ -455,12 +494,11 @@ function MyTypingTutor() {
                     <MDBox display="flex" justifyContent="space-between" gap={1} flexWrap="wrap">
                       <MDBox>
                         <MDTypography variant="h5" fontWeight="bold">
-                          {selectedActivity.title}
+                          {selectedLevel.number}.{selectedActivity.order} {selectedActivity.title}
                         </MDTypography>
                         <MDTypography variant="body2" color="text">
                           {selectedActivityUnlocked
-                            ? selectedActivity.instruction ||
-                              "Type the text exactly. Stay calm and keep your fingers returning home."
+                            ? selectedActivity.teaches
                             : "Complete the previous activity to unlock this practice."}
                         </MDTypography>
                       </MDBox>
@@ -472,6 +510,30 @@ function MyTypingTutor() {
                       </MDBox>
                     </MDBox>
 
+                    {/* What this level is for, in the learner's own words. */}
+                    <MDBox
+                      mt={1.25}
+                      p={1.25}
+                      borderRadius="md"
+                      sx={{ bgcolor: "#eff6ff", border: "1px solid #bfdbfe" }}
+                    >
+                      <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                        <MDTypography variant="button" fontWeight="bold">
+                          Level {selectedLevel.number}: {selectedLevel.focus}
+                        </MDTypography>
+                        {selectedLevel.newKeys && (
+                          <Chip
+                            size="small"
+                            color="info"
+                            label={`New keys: ${selectedLevel.newKeys}`}
+                          />
+                        )}
+                      </MDBox>
+                      <MDTypography variant="body2" color="text" mt={0.5}>
+                        {selectedLevel.teaches}
+                      </MDTypography>
+                    </MDBox>
+
                     <MDBox
                       mt={1.25}
                       display="flex"
@@ -479,6 +541,22 @@ function MyTypingTutor() {
                       gap={1}
                       flexWrap="wrap"
                     >
+                      <MDButton
+                        variant="outlined"
+                        color={soundOn ? "info" : "secondary"}
+                        onClick={() => setSoundOn(!setMuted(soundOn))}
+                        startIcon={<Icon>{soundOn ? "volume_up" : "volume_off"}</Icon>}
+                      >
+                        {soundOn ? "Sound On" : "Sound Off"}
+                      </MDButton>
+                      <MDButton
+                        variant="outlined"
+                        color={keyboardVisible ? "info" : "secondary"}
+                        onClick={() => setKeyboardVisible((current) => !current)}
+                        startIcon={<Icon>keyboard_alt</Icon>}
+                      >
+                        {keyboardVisible ? "Hide Keys" : "Show Keys"}
+                      </MDButton>
                       <MDButton
                         variant="outlined"
                         color="dark"
@@ -545,6 +623,17 @@ function MyTypingTutor() {
                       value={typedText}
                       disabled={!practiceReady || isComplete}
                       onChange={(event) => updateTypedText(event.target.value)}
+                      onSelect={keepCaretAtEnd}
+                      onClick={keepCaretAtEnd}
+                      onKeyUp={keepCaretAtEnd}
+                      // Losing focus mid-passage stops the keystrokes reaching the
+                      // box while the timer keeps running, which reads as the tutor
+                      // freezing. Take the caret straight back.
+                      onBlur={() => {
+                        if (practiceReady && !isComplete) {
+                          window.setTimeout(() => inputRef.current?.focus(), 0);
+                        }
+                      }}
                       placeholder="Press Start Practice, then type here..."
                       sx={{
                         mt: 1.5,
@@ -571,7 +660,9 @@ function MyTypingTutor() {
                             Next key: {currentChar === " " ? "Space" : currentChar || "Done"}
                           </MDTypography>
                           <MDTypography variant="caption" color="text" display="block">
-                            {fingerHints[currentKey] || "Use the nearest comfortable finger."}
+                            {currentChar
+                              ? `Use your ${fingerForKey(currentChar)}.`
+                              : "Finished. Every key in this activity is typed."}
                           </MDTypography>
                         </MDBox>
                         {keyboardRows.map((row) => (
@@ -582,23 +673,29 @@ function MyTypingTutor() {
                             gap={{ xs: 0.4, sm: 0.75 }}
                             mb={0.55}
                           >
-                            {row.map((key) => (
-                              <MDBox
-                                key={key}
-                                width={{ xs: 28, sm: 42 }}
-                                height={{ xs: 28, sm: 34 }}
-                                display="grid"
-                                sx={{
-                                  placeItems: "center",
-                                  borderRadius: "7px",
-                                  border: "1px solid #cbd5e1",
-                                  bgcolor: currentKey === key.toUpperCase() ? "#ffb020" : "#ffffff",
-                                  fontWeight: 800,
-                                }}
-                              >
-                                {key}
-                              </MDBox>
-                            ))}
+                            {row.map((key) => {
+                              const isNext = currentKey === key.toUpperCase();
+                              const isHome = homeKeys.has(key.toUpperCase());
+                              return (
+                                <MDBox
+                                  key={key}
+                                  width={{ xs: 28, sm: 42 }}
+                                  height={{ xs: 28, sm: 34 }}
+                                  display="grid"
+                                  sx={{
+                                    placeItems: "center",
+                                    borderRadius: "7px",
+                                    // Home keys stay marked on every level, so the
+                                    // idea of a resting position never disappears.
+                                    border: isHome ? "2px solid #1e88e5" : "1px solid #cbd5e1",
+                                    bgcolor: isNext ? "#ffb020" : isHome ? "#e3f2fd" : "#ffffff",
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  {key}
+                                </MDBox>
+                              );
+                            })}
                           </MDBox>
                         ))}
                       </MDBox>

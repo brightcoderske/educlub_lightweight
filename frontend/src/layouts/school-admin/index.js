@@ -27,7 +27,6 @@ function SchoolAdminDashboard() {
     completionRate: 0,
     syncedAllocations: 0,
   });
-  const [loading, setLoading] = useState(true);
   const [recentActivity, setRecentActivity] = useState([]);
   const [currentTerm, setCurrentTerm] = useState(null);
   const cacheKey = `school-admin:${user?.schoolId}:dashboard`;
@@ -43,7 +42,6 @@ function SchoolAdminDashboard() {
         setStats(cached.stats || stats);
         setRecentActivity(cached.recentActivity || []);
         setCurrentTerm(cached.currentTerm || null);
-        setLoading(false);
       }
       try {
         const [learnersRes, allocationsRes, certificatesRes, coursesRes, termsRes] =
@@ -100,8 +98,6 @@ function SchoolAdminDashboard() {
         });
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
-      } finally {
-        setLoading(false);
       }
     };
 

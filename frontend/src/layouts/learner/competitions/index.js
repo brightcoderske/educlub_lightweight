@@ -73,16 +73,6 @@ function competitionAccessNote(competition) {
   })}.`;
 }
 
-function cleanCompetitionDescription(description) {
-  const text = String(description || "Join the latest eduClub competition.")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return text.length > 170 ? `${text.slice(0, 167)}...` : text;
-}
-
 function LearnerCompetitions() {
   const { user, isLearner } = useAuth();
   const [searchParams] = useSearchParams();

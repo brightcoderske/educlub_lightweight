@@ -22,7 +22,6 @@ function formatTime(value) {
 function LearnerFeedbackChat() {
   const [visible, setVisible] = useState(() => localStorage.getItem("feedbackHidden") !== "true");
   const [open, setOpen] = useState(false);
-  const [thread, setThread] = useState(null);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -47,7 +46,6 @@ function LearnerFeedbackChat() {
   const loadThread = async () => {
     try {
       const response = await apiClient.get("/feedback/learner/thread");
-      setThread(response.thread);
       setMessages(response.messages || []);
       setUnreadReplies(0);
       window.dispatchEvent(new CustomEvent("educlub:feedback-unread-changed"));

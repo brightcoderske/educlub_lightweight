@@ -39,13 +39,9 @@ const initialForm = {
 const grades = Array.from({ length: 12 }, (_, index) => String(index + 1));
 
 const searchPhrases = [
-  "online LMS for kids",
   "free typing tutor for kids",
-  "typing practice for schools",
   "digital skills for children",
-  "monthly national learner competitions",
-  "typing competitions for students",
-  "maths and STEM competitions",
+  "monthly learner competitions",
   "safe online learning platform",
 ];
 
@@ -53,22 +49,22 @@ const benefits = [
   {
     icon: "keyboard",
     title: "Free Typing Tutor",
-    text: "My Typing Tutor helps children practise keyboard skills, grow speed and accuracy, and save progress inside their learner account.",
+    text: "Practise keyboard skills and watch speed and accuracy grow, saved to each learner account.",
   },
   {
     icon: "workspace_premium",
     title: "National Monthly Competitions",
-    text: "Typing, maths, science and STEM challenges give learners a reason to practise, improve and compete.",
+    text: "Typing, maths, science and STEM challenges that give learners a reason to keep practising.",
   },
   {
     icon: "devices",
     title: "Digital Literacy Courses",
-    text: "Over 20 digital literacy courses help children build practical skills for school, creativity and future careers.",
+    text: "Over 20 courses building practical skills for school, creativity and future careers.",
   },
   {
     icon: "verified_user",
     title: "Parent Consent Built In",
-    text: "Learner registration includes guardian details, consent capture and a focused dashboard for safe participation.",
+    text: "Guardian details and consent are captured at registration, so participation stays safe.",
   },
 ];
 
@@ -644,9 +640,8 @@ function RegistrationLanding() {
               lineHeight={1.5}
               sx={{ maxWidth: 760 }}
             >
-              eduClub helps learners practise typing, build digital literacy, follow school-friendly
-              online courses, and join monthly typing, maths, science and STEM competitions from one
-              safe LMS dashboard.
+              Typing practice, digital skills courses and monthly competitions - in one safe
+              dashboard built for schools.
             </MDTypography>
             <MDBox display="flex" flexWrap="wrap" gap={1.2} mt={3}>
               {[
@@ -726,9 +721,8 @@ function RegistrationLanding() {
                 ))}
               </Grid>
               <MDTypography variant="body2" color="white" lineHeight={1.6} mt={2}>
-                Built for schools, parents and learners who want a focused online learning platform
-                with secure course access, typing tutor progress, competition enrolment and digital
-                skills that children can practise every week.
+                For schools, parents and learners who want steady weekly practice that shows real
+                progress.
               </MDTypography>
             </MDBox>
           </Grid>
@@ -766,14 +760,11 @@ function RegistrationLanding() {
         >
           <Grid item xs={12} lg={7}>
             <MDTypography variant="h3" fontWeight="bold">
-              A kids learning platform made for skill, confidence and healthy competition.
+              Built for skill, confidence and healthy competition.
             </MDTypography>
             <MDTypography variant="body1" color="text" lineHeight={1.8} mt={2}>
-              eduClub combines an LMS for schools, a free typing tutor for kids, online courses,
-              digital literacy learning, secure course access, learner progress, parent consent and
-              national monthly competitions. Learners can register, practise keyboard skills, join
-              open competitions, pay where required, open course activities and return to eduClub to
-              see performance and position.
+              Learners register, practise, take courses and compete - and see their progress every
+              step of the way.
             </MDTypography>
             <MDBox display="flex" flexWrap="wrap" gap={1} mt={2}>
               {searchPhrases.map((phrase) => (

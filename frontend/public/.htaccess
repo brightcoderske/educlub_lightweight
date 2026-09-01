@@ -1,6 +1,30 @@
 Options -MultiViews
 RewriteEngine On
 
+# Compression. Without this the app shipped its JavaScript uncompressed: the
+# entry chunk alone is 170 KB raw against 52 KB gzipped, and the MUI chunk
+# 294 KB against 101 KB, so a cold load sent roughly 310 KB more than it needed.
+# LiteSpeed reads mod_deflate configuration, so this covers both servers.
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml
+  AddOutputFilterByType DEFLATE text/javascript application/javascript
+  AddOutputFilterByType DEFLATE application/x-javascript application/json
+  AddOutputFilterByType DEFLATE application/xml application/rss+xml
+  AddOutputFilterByType DEFLATE image/svg+xml application/manifest+json
+
+  # Fonts and images are already compressed; recompressing them costs CPU and
+  # saves nothing.
+  SetEnvIfNoCase Request_URI \.(?:woff2?|gz|br|png|jpe?g|webp|ico)$ no-gzip dont-vary
+</IfModule>
+
+# Caches must key on the encoding, or a proxy can hand a gzipped response to a
+# client that did not ask for one.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(css|js|html|json|svg|xml)$">
+    Header append Vary Accept-Encoding
+  </FilesMatch>
+</IfModule>
+
 <IfModule mod_expires.c>
   ExpiresActive On
   ExpiresByType text/css "access plus 1 year"
