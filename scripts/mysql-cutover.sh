@@ -193,6 +193,21 @@ for key in MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DATABASE MYSQL_
   [[ -n "${!name}" ]] && export "$key=${!name}"
 done
 
+# The connection settings are passed on the command that needs them rather than
+# left to the exports above. cPanel's Node.js environment rewrites parts of the
+# environment when it is entered, and an export that survives the shell but not
+# the child fails as "DATABASE_URL must contain the target MySQL connection URL"
+# - which reads like a missing setting rather than one that was taken away.
+transfer() {
+  DATABASE_URL="$TARGET_URL" \
+  POSTGRES_SOURCE_URL="$SOURCE_URL" \
+  MYSQL_SOCKET="${IN_MYSQL_SOCKET:-}" \
+  MYSQL_USER="${IN_MYSQL_USER:-}" \
+  MYSQL_PASSWORD="${IN_MYSQL_PASSWORD:-}" \
+  MYSQL_DATABASE="${IN_MYSQL_DATABASE:-}" \
+    node postgres-data-transfer.js "$@"
+}
+
 # cPanel keeps the deployment output as the deploy log, so neither URL is
 # printed as-is: both carry a live password.
 summarise() {
@@ -267,13 +282,13 @@ fi
 if running 4 && [[ "$SKIP_DATA" == "0" ]]; then
   say 4 "Reading Supabase into $DUMP_DIR"
   cd "$DEPLOY_DIR/backend/scripts/mysql-migration"
-  node postgres-data-transfer.js audit
+  transfer audit
   rm -rf "$DUMP_DIR"
-  node postgres-data-transfer.js dump --dump "$DUMP_DIR"
-  node postgres-data-transfer.js verify --dump "$DUMP_DIR"
+  transfer dump --dump "$DUMP_DIR"
+  transfer verify --dump "$DUMP_DIR"
   # Checked back against Supabase while Supabase is still authoritative: a short
   # read is only detectable from here.
-  node postgres-data-transfer.js verify-source --dump "$DUMP_DIR"
+  transfer verify-source --dump "$DUMP_DIR"
   ok "dump written and verified against Supabase"
 elif running 4; then
   say 4 "Skipping the data copy (--skip-data)"
@@ -283,8 +298,8 @@ fi
 if running 5 && [[ "$SKIP_DATA" == "0" ]]; then
   say 5 "Loading the dump into MySQL"
   cd "$DEPLOY_DIR/backend/scripts/mysql-migration"
-  node postgres-data-transfer.js import --dump "$DUMP_DIR" --replace
-  node postgres-data-transfer.js verify-target --dump "$DUMP_DIR"
+  transfer import --dump "$DUMP_DIR" --replace
+  transfer verify-target --dump "$DUMP_DIR"
   ok "row counts and foreign keys match the dump"
 elif running 5; then
   say 5 "Seeding the system administrator"
