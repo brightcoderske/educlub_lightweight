@@ -39,9 +39,15 @@ function mysqlSettings() {
   }
 
   const parsed = new URL(value);
+
+  // The cPanel grant is user@localhost, which MariaDB matches only over the unix
+  // socket, so MYSQL_SOCKET replaces the host and port from the URL when set.
+  const socketPath = process.env.MYSQL_SOCKET;
+
   return {
-    host: parsed.hostname || "127.0.0.1",
-    port: Number(parsed.port || 3306),
+    ...(socketPath
+      ? { socketPath }
+      : { host: parsed.hostname || "127.0.0.1", port: Number(parsed.port || 3306) }),
     user: decodeURIComponent(parsed.username || "root"),
     password: decodeURIComponent(parsed.password || ""),
     database: parsed.pathname.replace(/^\//, "") || "educlub",

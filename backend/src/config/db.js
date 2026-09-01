@@ -21,24 +21,41 @@ const connectTimeout = Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000);
 function connectionSettings() {
   const url = process.env.DATABASE_URL;
 
-  if (url && /^mysql:/i.test(url)) {
-    const parsed = new URL(url);
+  const settings = url && /^mysql:/i.test(url)
+    ? (() => {
+        const parsed = new URL(url);
+        return {
+          host: parsed.hostname || "127.0.0.1",
+          port: Number(parsed.port || 3306),
+          user: decodeURIComponent(parsed.username || "root"),
+          password: decodeURIComponent(parsed.password || ""),
+          database: parsed.pathname.replace(/^\//, "") || "educlub",
+        };
+      })()
+    : {
+        host: process.env.MYSQL_HOST || "127.0.0.1",
+        port: Number(process.env.MYSQL_PORT || 3306),
+        user: process.env.MYSQL_USER || "root",
+        password: process.env.MYSQL_PASSWORD || "",
+        database: process.env.MYSQL_DATABASE || "educlub",
+      };
+
+  // cPanel grants the account as user@localhost, and MariaDB matches that only
+  // for connections over the unix socket: a TCP connection reports 127.0.0.1 or
+  // ::1 as its host, matches no grant, and is refused with the same "access
+  // denied" a wrong password gives. MYSQL_SOCKET is how the account connects at
+  // all, so it wins over the host and port, which mysql2 ignores once it is set.
+  const socketPath = process.env.MYSQL_SOCKET;
+  if (socketPath) {
     return {
-      host: parsed.hostname || "127.0.0.1",
-      port: Number(parsed.port || 3306),
-      user: decodeURIComponent(parsed.username || "root"),
-      password: decodeURIComponent(parsed.password || ""),
-      database: parsed.pathname.replace(/^\//, "") || "educlub",
+      socketPath,
+      user: settings.user,
+      password: settings.password,
+      database: settings.database,
     };
   }
 
-  return {
-    host: process.env.MYSQL_HOST || "127.0.0.1",
-    port: Number(process.env.MYSQL_PORT || 3306),
-    user: process.env.MYSQL_USER || "root",
-    password: process.env.MYSQL_PASSWORD || "",
-    database: process.env.MYSQL_DATABASE || "educlub",
-  };
+  return settings;
 }
 
 const pool = mysql.createPool({

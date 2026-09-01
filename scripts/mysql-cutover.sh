@@ -126,7 +126,7 @@ command -v node >/dev/null || die "node is not on PATH after activating the envi
 TARGET_URL="$(env_value DATABASE_URL)"
 SOURCE_URL="$(env_value POSTGRES_SOURCE_URL)"
 
-for key in MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DATABASE; do
+for key in MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DATABASE MYSQL_SOCKET; do
   declare "IN_$key=$(env_value "$key")"
 done
 
@@ -188,7 +188,7 @@ fi
 # so these also win inside the migration scripts.
 export DATABASE_URL="$TARGET_URL"
 export POSTGRES_SOURCE_URL="$SOURCE_URL"
-for key in MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DATABASE; do
+for key in MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DATABASE MYSQL_SOCKET; do
   name="IN_$key"
   [[ -n "${!name}" ]] && export "$key=${!name}"
 done
@@ -205,6 +205,12 @@ process.stdout.write(`${u.username}@${u.hostname}:${u.port || "default"}/${u.pat
 
 TARGET_SUMMARY="$(summarise "$TARGET_URL")"
 SOURCE_SUMMARY="$(summarise "$SOURCE_URL")"
+
+# With a socket the host and port in the URL are ignored by every client here,
+# so showing them would misreport where the connection actually goes.
+if [[ -n "${IN_MYSQL_SOCKET:-}" ]]; then
+  TARGET_SUMMARY="${IN_MYSQL_USER}@${IN_MYSQL_SOCKET}/${IN_MYSQL_DATABASE}"
+fi
 
 mkdir -p "$CUTOVER_ROOT"
 DUMP_DIR="$CUTOVER_ROOT/pg-dump"

@@ -40,9 +40,17 @@ function fromDatabaseUrl() {
 
 const url = fromDatabaseUrl();
 
+// Same reason as apply-schema.js: the cPanel grant is user@localhost, which
+// MariaDB honours only over the unix socket.
+const socketPath = arg("socket", process.env.MYSQL_SOCKET);
+
 const CONFIG = {
-  host: arg("host", process.env.MYSQL_HOST || url.host || "127.0.0.1"),
-  port: Number(arg("port", process.env.MYSQL_PORT || url.port || 3306)),
+  ...(socketPath
+    ? { socketPath }
+    : {
+        host: arg("host", process.env.MYSQL_HOST || url.host || "127.0.0.1"),
+        port: Number(arg("port", process.env.MYSQL_PORT || url.port || 3306)),
+      }),
   user: arg("user", process.env.MYSQL_USER || url.user || "root"),
   password: arg("db-password", process.env.MYSQL_PASSWORD ?? url.password ?? ""),
   database: arg("database", process.env.MYSQL_DATABASE || url.database || "educlub"),

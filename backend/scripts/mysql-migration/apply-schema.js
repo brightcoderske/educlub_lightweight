@@ -49,9 +49,18 @@ const url = fromDatabaseUrl();
 // from MySQL 8 in ways the generated schema runs into.
 let isMariaDb = false;
 
+// cPanel grants the account as user@localhost, which MariaDB matches only over
+// the unix socket. Once socketPath is set mysql2 ignores host and port, so they
+// are left off entirely rather than being set to something misleading.
+const socketPath = arg("socket", process.env.MYSQL_SOCKET);
+
 const CONFIG = {
-  host: arg("host", process.env.MYSQL_HOST || url.host || "127.0.0.1"),
-  port: Number(arg("port", process.env.MYSQL_PORT || url.port || 3306)),
+  ...(socketPath
+    ? { socketPath }
+    : {
+        host: arg("host", process.env.MYSQL_HOST || url.host || "127.0.0.1"),
+        port: Number(arg("port", process.env.MYSQL_PORT || url.port || 3306)),
+      }),
   user: arg("user", process.env.MYSQL_USER || url.user || "root"),
   password: arg("password", process.env.MYSQL_PASSWORD ?? url.password ?? ""),
   database: arg("database", process.env.MYSQL_DATABASE || url.database || "educlub"),
