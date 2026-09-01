@@ -308,10 +308,13 @@ function expandExpressionIndex(name) {
   const spec = EXPRESSION_INDEXES[name];
   if (!spec) return null;
 
+  // STORED rather than MariaDB's PERSISTENT: the two mean the same thing there,
+  // but only STORED is also valid MySQL, and it matches the generated column the
+  // terms index already uses.
   const additions = spec.columns.map(
     (column) =>
       `ALTER TABLE ${spec.table} ADD COLUMN ${column.name} ${column.type}` +
-      ` AS (${column.expression}) PERSISTENT;`,
+      ` GENERATED ALWAYS AS (${column.expression}) STORED;`,
   );
 
   return [
@@ -371,8 +374,12 @@ function translateIndex(sql) {
 function translateAlter(sql) {
   let out = sql.replace(/ALTER TABLE IF EXISTS/i, "ALTER TABLE");
   out = out.replace(/ADD COLUMN IF NOT EXISTS/i, "ADD COLUMN");
-  // A named CHECK is dropped with DROP CHECK in MySQL, not DROP CONSTRAINT.
-  out = out.replace(/DROP CONSTRAINT IF EXISTS (\w+)/i, "DROP CHECK $1");
+  // MySQL spells this DROP CHECK; MariaDB has no such syntax and keeps
+  // DROP CONSTRAINT, which MySQL also accepts from 8.0.19. IF EXISTS is dropped
+  // because MySQL takes no such clause here - apply-schema.js checks
+  // information_schema first, so a constraint that is already gone is skipped
+  // rather than being an error.
+  out = out.replace(/DROP CONSTRAINT IF EXISTS (\w+)/i, "DROP CONSTRAINT $1");
 
   // ADD COLUMN ignores an inline REFERENCES for exactly the same reason
   // CREATE TABLE does. Two of these columns exist only here and nowhere in a

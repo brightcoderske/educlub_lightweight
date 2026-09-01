@@ -108,9 +108,11 @@ async function reasonToSkip(db, statement) {
     return `column ${addColumn[1]}.${addColumn[2]} already present`;
   }
 
-  const dropCheck = statement.match(/^ALTER TABLE (\w+)\s+DROP CHECK (\w+)/i);
+  // Both spellings are recognised: MySQL uses DROP CHECK, MariaDB DROP
+  // CONSTRAINT, and a database migrated before this was settled may hold either.
+  const dropCheck = statement.match(/^ALTER TABLE (\w+)\s+DROP (?:CHECK|CONSTRAINT) (\w+)/i);
   if (dropCheck && !(await constraintExists(db, dropCheck[1], dropCheck[2]))) {
-    return `check ${dropCheck[2]} not present`;
+    return `constraint ${dropCheck[2]} not present`;
   }
 
   const addConstraint = statement.match(/^ALTER TABLE (\w+)\s+ADD CONSTRAINT (\w+)/i);

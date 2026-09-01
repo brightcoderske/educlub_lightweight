@@ -148,10 +148,32 @@ test("the certificates award rule survives as generated columns", () => {
   // COALESCE(x, '') is how the PostgreSQL index made NULLs compare equal. The
   // uniqueness has to outlive the translation, or duplicate certificates become
   // possible with nothing to stop them.
-  assert.match(GENERATED, /ADD COLUMN term_key VARCHAR\(50\) AS \(COALESCE\(term, ''\)\) PERSISTENT/);
-  assert.match(GENERATED, /ADD COLUMN academic_year_key .* AS \(COALESCE\(CAST\(academic_year AS CHAR\), ''\)\) PERSISTENT/);
+  // STORED, not MariaDB's PERSISTENT: identical there, but only STORED is also
+  // valid MySQL.
+  assert.match(
+    GENERATED,
+    /ADD COLUMN term_key VARCHAR\(50\) GENERATED ALWAYS AS \(COALESCE\(term, ''\)\) STORED/,
+  );
+  assert.match(
+    GENERATED,
+    /ADD COLUMN academic_year_key .* GENERATED ALWAYS AS \(COALESCE\(CAST\(academic_year AS CHAR\), ''\)\) STORED/,
+  );
+  assert.doesNotMatch(GENERATED, /\bPERSISTENT\b/, "PERSISTENT is MariaDB-only");
   assert.match(
     GENERATED,
     /CREATE UNIQUE INDEX idx_certificates_unique_award ON certificates\(learner_id, course_id, term_key, academic_year_key\)/,
   );
+});
+
+test("constraints are dropped with the syntax MariaDB accepts", () => {
+  // MySQL spells this DROP CHECK and MariaDB has no such syntax at all. MySQL
+  // accepts DROP CONSTRAINT from 8.0.19, so the one spelling covers both.
+  assert.doesNotMatch(GENERATED, /DROP CHECK\b/i, "MariaDB has no DROP CHECK");
+  assert.match(GENERATED, /ALTER TABLE users DROP CONSTRAINT users_role_check/);
+});
+
+test("no dropped constraint carries an IF EXISTS MySQL would reject", () => {
+  // apply-schema.js checks information_schema before sending these, so the
+  // clause is unnecessary as well as unportable.
+  assert.doesNotMatch(GENERATED, /DROP CONSTRAINT IF EXISTS/i);
 });

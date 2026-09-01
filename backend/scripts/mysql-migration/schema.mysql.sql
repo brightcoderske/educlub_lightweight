@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS users (
   FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE SET NULL
 );
 
-ALTER TABLE users DROP CHECK users_role_check;
+ALTER TABLE users DROP CONSTRAINT users_role_check;
 
 ALTER TABLE users ADD CONSTRAINT users_role_check
   CHECK (role IN ('system_admin', 'school_admin', 'teacher', 'learner'));
@@ -102,7 +102,7 @@ ALTER TABLE schools ADD COLUMN streams_config JSON DEFAULT ('[]');
 
 ALTER TABLE audit_logs ADD COLUMN user_agent TEXT;
 
-ALTER TABLE learners DROP CHECK learners_graduation_status_check;
+ALTER TABLE learners DROP CONSTRAINT learners_graduation_status_check;
 
 ALTER TABLE learners ADD CONSTRAINT learners_graduation_status_check
   CHECK (graduation_status IN ('active', 'graduated'));
@@ -206,7 +206,7 @@ ALTER TABLE courses ADD COLUMN independent_currency VARCHAR(10) DEFAULT 'KES';
 
 ALTER TABLE courses ADD COLUMN course_category VARCHAR(50) DEFAULT 'general';
 
-ALTER TABLE courses DROP CHECK courses_course_category_check;
+ALTER TABLE courses DROP CONSTRAINT courses_course_category_check;
 
 ALTER TABLE courses ADD CONSTRAINT courses_course_category_check
   CHECK (course_category IN ('general', 'weekly_typing', 'weekly_quiz'));
@@ -284,7 +284,7 @@ ALTER TABLE course_template_activities
   ADD COLUMN availability_mode VARCHAR(20) NOT NULL DEFAULT 'required';
 
 ALTER TABLE course_template_activities
-  DROP CHECK course_template_activities_availability_mode_check;
+  DROP CONSTRAINT course_template_activities_availability_mode_check;
 
 ALTER TABLE course_template_activities
   ADD CONSTRAINT course_template_activities_availability_mode_check
@@ -395,7 +395,7 @@ ALTER TABLE learning_activities
   ADD COLUMN availability_mode VARCHAR(20) NOT NULL DEFAULT 'required';
 
 ALTER TABLE learning_activities
-  DROP CHECK learning_activities_availability_mode_check;
+  DROP CONSTRAINT learning_activities_availability_mode_check;
 
 ALTER TABLE learning_activities
   ADD CONSTRAINT learning_activities_availability_mode_check
@@ -657,7 +657,7 @@ ALTER TABLE quiz_questions
   ADD COLUMN image_url TEXT;
 
 ALTER TABLE quiz_questions
-  DROP CHECK quiz_questions_question_type_check;
+  DROP CONSTRAINT quiz_questions_question_type_check;
 
 ALTER TABLE quiz_questions
   ADD CONSTRAINT quiz_questions_question_type_check
@@ -771,7 +771,7 @@ CREATE TABLE IF NOT EXISTS weekly_marks (
   FOREIGN KEY (learner_id) REFERENCES learners(id) ON DELETE CASCADE
 );
 
-ALTER TABLE weekly_marks DROP CHECK weekly_marks_typing_score_check;
+ALTER TABLE weekly_marks DROP CONSTRAINT weekly_marks_typing_score_check;
 
 ALTER TABLE weekly_marks ADD CONSTRAINT weekly_marks_typing_score_check
   CHECK (typing_score >= 0);
@@ -862,7 +862,7 @@ ALTER TABLE activity_grades
 
 ALTER TABLE course_allocations ADD COLUMN access_level VARCHAR(20) DEFAULT 'paid';
 
-ALTER TABLE course_allocations DROP CHECK course_allocations_access_level_check;
+ALTER TABLE course_allocations DROP CONSTRAINT course_allocations_access_level_check;
 
 ALTER TABLE course_allocations ADD CONSTRAINT course_allocations_access_level_check
   CHECK (access_level IN ('preview', 'paid', 'grant', 'scholarship'));
@@ -962,10 +962,10 @@ ALTER TABLE quiz_test_questions
   ADD COLUMN image_url TEXT;
 
 ALTER TABLE quiz_test_questions
-  DROP CHECK quiz_test_questions_chk_1;
+  DROP CONSTRAINT quiz_test_questions_chk_1;
 
 ALTER TABLE quiz_test_questions
-  DROP CHECK quiz_test_questions_question_type_check;
+  DROP CONSTRAINT quiz_test_questions_question_type_check;
 
 ALTER TABLE quiz_test_questions
   ADD CONSTRAINT quiz_test_questions_question_type_check
@@ -1205,7 +1205,7 @@ ALTER TABLE competitions ADD COLUMN competition_type VARCHAR(50) DEFAULT 'quiz';
 
 ALTER TABLE competitions ADD COLUMN eligible_grades JSON DEFAULT ('[]');
 
-ALTER TABLE competitions DROP CHECK competitions_competition_type_check;
+ALTER TABLE competitions DROP CONSTRAINT competitions_competition_type_check;
 
 ALTER TABLE competitions ADD CONSTRAINT competitions_competition_type_check
   CHECK (competition_type IN ('quiz', 'typing', 'maths', 'science', 'stem'));
@@ -1272,12 +1272,12 @@ ALTER TABLE competition_results ADD COLUMN learner_grade VARCHAR(50);
 
 ALTER TABLE competition_results ADD COLUMN competition_type VARCHAR(50) DEFAULT 'quiz';
 
-ALTER TABLE competition_results DROP CHECK competition_results_result_stage_check;
+ALTER TABLE competition_results DROP CONSTRAINT competition_results_result_stage_check;
 
 ALTER TABLE competition_results ADD CONSTRAINT competition_results_result_stage_check
   CHECK (result_stage IN ('practice', 'final'));
 
-ALTER TABLE competition_results DROP CHECK competition_results_competition_id_learner_id_key;
+ALTER TABLE competition_results DROP CONSTRAINT competition_results_competition_id_learner_id_key;
 
 CREATE UNIQUE INDEX idx_competition_results_unique_stage
   ON competition_results(competition_id, learner_id, result_stage);
@@ -1426,8 +1426,8 @@ CREATE INDEX idx_certificates_course_id ON certificates(course_id);
 CREATE INDEX idx_certificates_learner_status ON certificates(learner_id, status, completion_status);
 
 -- idx_certificates_unique_award: MariaDB cannot index an expression, so each one is materialised.
-ALTER TABLE certificates ADD COLUMN term_key VARCHAR(50) AS (COALESCE(term, '')) PERSISTENT;
-ALTER TABLE certificates ADD COLUMN academic_year_key VARCHAR(20) AS (COALESCE(CAST(academic_year AS CHAR), '')) PERSISTENT;
+ALTER TABLE certificates ADD COLUMN term_key VARCHAR(50) GENERATED ALWAYS AS (COALESCE(term, '')) STORED;
+ALTER TABLE certificates ADD COLUMN academic_year_key VARCHAR(20) GENERATED ALWAYS AS (COALESCE(CAST(academic_year AS CHAR), '')) STORED;
 
 CREATE UNIQUE INDEX idx_certificates_unique_award ON certificates(learner_id, course_id, term_key, academic_year_key);
 
