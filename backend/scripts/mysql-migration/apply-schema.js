@@ -12,6 +12,13 @@
  */
 const fs = require("fs");
 const path = require("path");
+
+// The deployment runs this through `npm run db:migrate`, where the only record
+// of the connection settings is backend/.env - cPanel does not put them in the
+// shell. Without this the fallbacks below would win and the release would
+// migrate root@127.0.0.1/educlub, which is either nothing or the wrong database.
+require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+
 const mysql = require("mysql2/promise");
 
 function arg(name, fallback) {
@@ -19,12 +26,31 @@ function arg(name, fallback) {
   return index === -1 ? fallback : process.argv[index + 1];
 }
 
+// One DATABASE_URL is the whole configuration for the running application, so
+// it has to be enough here too. Anything that is not a mysql URL is ignored
+// rather than guessed at, matching src/config/db.js.
+function fromDatabaseUrl() {
+  const value = process.env.DATABASE_URL;
+  if (!value || !/^mysql:/i.test(value)) return {};
+
+  const parsed = new URL(value);
+  return {
+    host: parsed.hostname || undefined,
+    port: parsed.port || undefined,
+    user: decodeURIComponent(parsed.username || "") || undefined,
+    password: decodeURIComponent(parsed.password || "") || undefined,
+    database: parsed.pathname.replace(/^\//, "") || undefined,
+  };
+}
+
+const url = fromDatabaseUrl();
+
 const CONFIG = {
-  host: arg("host", process.env.MYSQL_HOST || "127.0.0.1"),
-  port: Number(arg("port", process.env.MYSQL_PORT || 3306)),
-  user: arg("user", process.env.MYSQL_USER || "root"),
-  password: arg("password", process.env.MYSQL_PASSWORD || ""),
-  database: arg("database", process.env.MYSQL_DATABASE || "educlub"),
+  host: arg("host", process.env.MYSQL_HOST || url.host || "127.0.0.1"),
+  port: Number(arg("port", process.env.MYSQL_PORT || url.port || 3306)),
+  user: arg("user", process.env.MYSQL_USER || url.user || "root"),
+  password: arg("password", process.env.MYSQL_PASSWORD ?? url.password ?? ""),
+  database: arg("database", process.env.MYSQL_DATABASE || url.database || "educlub"),
   multipleStatements: false,
 };
 
