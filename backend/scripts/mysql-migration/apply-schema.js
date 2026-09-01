@@ -149,9 +149,16 @@ async function reasonToSkip(db, statement) {
 function unsupportedReason(statement) {
   if (!isMariaDb) return null;
 
-  const functionalIndex = statement.match(/^CREATE (?:UNIQUE )?INDEX (\w+)\s+ON \w+\s*\(\s*\(/i);
-  if (functionalIndex) {
-    return `${functionalIndex[1]} indexes an expression, which MariaDB cannot do`;
+  // The expression is not always the first key part, so the whole key list is
+  // examined rather than just its start.
+  const index = statement.match(/^CREATE (UNIQUE )?INDEX (\w+)\s+ON \w+\s*\(([\s\S]*)\)\s*$/i);
+  if (index && index[3].includes("(")) {
+    // A UNIQUE index is a rule the data obeys, not an optimisation. Skipping one
+    // would quietly permit duplicates, so it is left to fail loudly instead -
+    // translate-schema.js has an EXPRESSION_INDEXES entry for materialising it
+    // into generated columns, which is where a new one should be handled.
+    if (index[1]) return null;
+    return `${index[2]} indexes an expression, which MariaDB cannot do`;
   }
 
   return null;
@@ -168,26 +175,46 @@ async function main() {
 
   let applied = 0;
   let skipped = 0;
-  const failures = [];
+  let failures = [];
   const unsupported = [];
 
-  for (const statement of statements) {
-    const unsupportedBy = unsupportedReason(statement);
-    if (unsupportedBy) {
-      unsupported.push(unsupportedBy);
-      continue;
+  // schema.sql carries ALTERs from later migrations near the top - the
+  // audit_logs one sits 950 lines above the CREATE TABLE it depends on - so a
+  // statement can fail on the first pass purely because its table does not
+  // exist yet. Retrying what failed, after everything else has been created,
+  // resolves that without reordering a file that is generated. Passes stop as
+  // soon as one fixes nothing, so a genuine error still surfaces.
+  let pending = statements;
+  while (pending.length) {
+    const retry = [];
+    for (const statement of pending) {
+      const unsupportedBy = unsupportedReason(statement);
+      if (unsupportedBy) {
+        unsupported.push(unsupportedBy);
+        continue;
+      }
+      const skip = await reasonToSkip(db, statement);
+      if (skip) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        await db.query(statement);
+        applied += 1;
+      } catch (error) {
+        retry.push({ statement, message: error.message });
+      }
     }
-    const skip = await reasonToSkip(db, statement);
-    if (skip) {
-      skipped += 1;
-      continue;
+
+    if (retry.length === pending.length) {
+      failures = retry.map((item) => ({
+        statement: item.statement.replace(/\s+/g, " ").slice(0, 120),
+        message: item.message,
+      }));
+      break;
     }
-    try {
-      await db.query(statement);
-      applied += 1;
-    } catch (error) {
-      failures.push({ statement: statement.replace(/\s+/g, " ").slice(0, 120), message: error.message });
-    }
+    failures = [];
+    pending = retry.map((item) => item.statement);
   }
 
   await db.end();

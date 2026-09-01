@@ -220,7 +220,7 @@ function hoistForeignKeys(sql) {
   return `${table[1]}${body.trimEnd()}${separator}\n${constraints.join(",\n")}${table[3]}`;
 }
 
-const { translateJsonPaths } = require("./jsonPaths");
+const { translateJsonPaths } = require("../../src/config/jsonPaths");
 
 function translateArrays(sql) {
   // PostgreSQL arrays have no MySQL column type; the app already stores and
@@ -277,8 +277,59 @@ const UNIQUE_PARTIAL_RULES = [
 
 const { parenthesiseExpressions } = require("./indexExpressions");
 
+// MariaDB cannot index an expression at all - MySQL 8 can - but it can index a
+// generated column. Where the expression carries a uniqueness guarantee rather
+// than just speed, dropping the index would drop a rule the data depends on, so
+// the expression is materialised into a column and that is indexed instead.
+//
+// The column type cannot be inferred from an arbitrary expression, so the
+// indexes that matter are declared here rather than guessed at. The remaining
+// expression indexes are LOWER() lookups, which cost only speed; apply-schema.js
+// reports those as not created and refuses to skip a UNIQUE one silently.
+const EXPRESSION_INDEXES = {
+  idx_certificates_unique_award: {
+    table: "certificates",
+    unique: true,
+    // COALESCE(x, '') is how the PostgreSQL index made NULLs compare equal;
+    // academic_year is an INT, so it is cast before being defaulted to ''.
+    columns: [
+      { name: "term_key", type: "VARCHAR(50)", expression: "COALESCE(term, '')" },
+      {
+        name: "academic_year_key",
+        type: "VARCHAR(20)",
+        expression: "COALESCE(CAST(academic_year AS CHAR), '')",
+      },
+    ],
+    keys: ["learner_id", "course_id", "term_key", "academic_year_key"],
+  },
+};
+
+function expandExpressionIndex(name) {
+  const spec = EXPRESSION_INDEXES[name];
+  if (!spec) return null;
+
+  const additions = spec.columns.map(
+    (column) =>
+      `ALTER TABLE ${spec.table} ADD COLUMN ${column.name} ${column.type}` +
+      ` AS (${column.expression}) PERSISTENT;`,
+  );
+
+  return [
+    `-- ${name}: MariaDB cannot index an expression, so each one is materialised.`,
+    ...additions,
+    "",
+    `CREATE ${spec.unique ? "UNIQUE " : ""}INDEX ${name}` +
+      ` ON ${spec.table}(${spec.keys.join(", ")})`,
+  ].join("\n");
+}
+
 function translateIndex(sql) {
   let out = sql.replace(/CREATE (UNIQUE )?INDEX IF NOT EXISTS/i, "CREATE $1INDEX");
+
+  const declared = expandExpressionIndex(
+    (out.match(/CREATE (?:UNIQUE )?INDEX (\w+)/i) || [])[1],
+  );
+  if (declared) return declared;
 
   // GIN indexes have no MySQL equivalent. This one covered competitions
   // .eligible_grades, which no query filters in SQL - grade eligibility is
@@ -358,6 +409,22 @@ function translateUpsert(sql) {
   return sql.slice(0, match.index) + "ON DUPLICATE KEY UPDATE " + assignments;
 }
 
+// PostgreSQL and MySQL both accept a named CHECK written against a column:
+//
+//   question_type VARCHAR(50) DEFAULT 'x'
+//     CONSTRAINT some_name CHECK (question_type IN (...)),
+//
+// MariaDB does not - CONSTRAINT is only allowed on a table-level element there,
+// and the whole CREATE TABLE is rejected. Promoting it to its own element keeps
+// the name, so the ALTER that adds the same constraint later is recognised as
+// already present rather than duplicating it.
+function promoteNamedColumnChecks(sql) {
+  return sql.replace(
+    /([^,(\s])[ \t]*\r?\n\s*CONSTRAINT\s+(\w+)\s*\r?\n?\s*(CHECK\s*\()/g,
+    (match, tail, name, check) => `${tail},\n  CONSTRAINT ${name} ${check}`,
+  );
+}
+
 function translate(statement) {
   let out = statement;
   if (/^CREATE (UNIQUE )?INDEX/i.test(out)) out = translateIndex(out);
@@ -374,6 +441,7 @@ function translate(statement) {
     out = quoteReservedColumns(out);
   }
   if (/^CREATE TABLE/i.test(out)) out = hoistForeignKeys(out);
+  if (/^CREATE TABLE/i.test(out)) out = promoteNamedColumnChecks(out);
   return out;
 }
 

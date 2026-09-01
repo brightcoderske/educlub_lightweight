@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { translateFilterClause } = require("../src/config/filterClause");
-const { translateJsonPaths } = require("../scripts/mysql-migration/jsonPaths");
+const { translateJsonPaths } = require("../src/config/jsonPaths");
 const { parenthesiseExpressions } = require("../scripts/mysql-migration/indexExpressions");
 
 test("FILTER becomes a CASE the aggregate can skip", () => {
@@ -40,19 +40,28 @@ test("SQL without FILTER is left exactly as it was", () => {
   assert.equal(translateFilterClause(sql), sql);
 });
 
-test("chained JSON key lookups collapse into one MySQL path", () => {
+test("chained JSON key lookups collapse into one path, as a function call", () => {
+  // MySQL would accept the -> and ->> operators, but MariaDB implements
+  // neither, so the functions both engines share are emitted instead.
   assert.equal(
     translateJsonPaths("la.content->'module_badge'->>'name'"),
-    "la.content->>'$.module_badge.name'",
+    "JSON_UNQUOTE(JSON_EXTRACT(la.content, '$.module_badge.name'))",
   );
-  assert.equal(translateJsonPaths("content->>'name'"), "content->>'$.name'");
-  // The final operator decides the result type and must survive.
-  assert.equal(translateJsonPaths("a.b->'x'->'y'"), "a.b->'$.x.y'");
+  assert.equal(
+    translateJsonPaths("content->>'name'"),
+    "JSON_UNQUOTE(JSON_EXTRACT(content, '$.name'))",
+  );
+  // The final operator decides the result type and must survive: -> stays JSON.
+  assert.equal(translateJsonPaths("a.b->'x'->'y'"), "JSON_EXTRACT(a.b, '$.x.y')");
 });
 
-test("an already-translated JSON path is not translated twice", () => {
-  const sql = "content->>'$.already'";
-  assert.equal(translateJsonPaths(sql), sql);
+test("a path already in MySQL form still becomes a function call", () => {
+  // It is the operator MariaDB cannot parse, not the path, so this one is
+  // rewritten too rather than passed through.
+  assert.equal(
+    translateJsonPaths("content->>'$.already'"),
+    "JSON_UNQUOTE(JSON_EXTRACT(content, '$.already'))",
+  );
 });
 
 test("index expressions get the parentheses MySQL requires", () => {
@@ -135,4 +144,36 @@ test("ON CONFLICT becomes ON DUPLICATE KEY UPDATE with VALUES()", () => {
     translate("INSERT INTO t (code) VALUES ($1) ON CONFLICT (code) DO NOTHING", [1]).sql,
     "INSERT INTO t (code) VALUES (?) ON DUPLICATE KEY UPDATE `code` = `code`",
   );
+});
+
+test("PostgreSQL JSON operators become functions MariaDB understands", () => {
+  // MariaDB implements no -> or ->> operator at all; its JSON support is
+  // function-based, and its parser rejects the operator outright. These two
+  // shapes are what the services actually write.
+  assert.equal(
+    translate("SELECT NULLIF(pc.progress_data->>'completion_percent', '') FROM x", []).sql,
+    "SELECT NULLIF(JSON_UNQUOTE(JSON_EXTRACT(pc.progress_data, '$.completion_percent')), '') FROM x",
+  );
+  assert.equal(
+    translate("SELECT MAX(la.content->'module_badge'->>'name') FROM y", []).sql,
+    "SELECT MAX(JSON_UNQUOTE(JSON_EXTRACT(la.content, '$.module_badge.name'))) FROM y",
+  );
+});
+
+test("-> keeps JSON, ->> unquotes to text", () => {
+  // The final operator decides the result type, so the chain has to keep it.
+  assert.equal(
+    translate("SELECT c.content->'meta' FROM z", []).sql,
+    "SELECT JSON_EXTRACT(c.content, '$.meta') FROM z",
+  );
+});
+
+test("no query reaches the driver still carrying a JSON operator", () => {
+  for (const sql of [
+    "SELECT a->>'b' FROM t",
+    "SELECT a->'b'->>'c' FROM t",
+    "SELECT a->>'$.b.c' FROM t",
+  ]) {
+    assert.doesNotMatch(translate(sql, []).sql, /->>?/, `left an operator in: ${sql}`);
+  }
 });

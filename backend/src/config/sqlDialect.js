@@ -11,6 +11,7 @@
  */
 
 const { translateFilterClause } = require("./filterClause");
+const { translateJsonPaths } = require("./jsonPaths");
 
 // PostgreSQL numbers its placeholders, so one value can be referenced several
 // times and in any order. MySQL's `?` is strictly positional, so the parameter
@@ -205,6 +206,10 @@ function applyDialectRewrites(sql) {
   out = translateNullOrdering(out);
   out = translateArrayMembership(out);
   out = translateIntervals(out);
+  // The application writes PostgreSQL's -> / ->> in its own queries, and
+  // MariaDB has neither operator. Without this the JSON reads in
+  // courseProgress and moduleBadges fail at runtime rather than at deploy.
+  out = translateJsonPaths(out);
   out = out.replace(/\s+ILIKE\s+/gi, ` COLLATE ${CASE_INSENSITIVE} LIKE `);
   return out;
 }

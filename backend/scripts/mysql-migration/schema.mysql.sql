@@ -620,7 +620,7 @@ FROM (
     cm.course_id,
     cm.id AS module_id,
     COALESCE(AVG(CASE WHEN ap.score IS NOT NULL THEN ap.score END), 100) AS score_percent,
-    COALESCE(MAX(la.content->>'$.module_badge.name'), cm.title) AS badge_name,
+    COALESCE(MAX(JSON_UNQUOTE(JSON_EXTRACT(la.content, '$.module_badge.name'))), cm.title) AS badge_name,
     COUNT(CASE WHEN COALESCE(la.availability_mode, 'required') = 'required'
         AND la.is_published = true THEN la.id END) AS required_total,
     COUNT(CASE WHEN COALESCE(la.availability_mode, 'required') = 'required'
@@ -942,9 +942,8 @@ CREATE TABLE IF NOT EXISTS quiz_test_questions (
   id INT AUTO_INCREMENT PRIMARY KEY,
   quiz_test_id INT,
   position INT NOT NULL DEFAULT 1,
-  question_type VARCHAR(50) DEFAULT 'single_choice'
-    CONSTRAINT quiz_test_questions_question_type_check
-    CHECK (question_type IN ('single_choice', 'multiple_choice', 'true_false', 'short_answer', 'matching', 'ordering')),
+  question_type VARCHAR(50) DEFAULT 'single_choice',
+  CONSTRAINT quiz_test_questions_question_type_check CHECK (question_type IN ('single_choice', 'multiple_choice', 'true_false', 'short_answer', 'matching', 'ordering')),
   prompt TEXT NOT NULL,
   image_url TEXT,
   options JSON DEFAULT ('[]'),
@@ -1426,8 +1425,11 @@ CREATE INDEX idx_certificates_course_id ON certificates(course_id);
 
 CREATE INDEX idx_certificates_learner_status ON certificates(learner_id, status, completion_status);
 
-CREATE UNIQUE INDEX idx_certificates_unique_award
-  ON certificates(learner_id, course_id, (COALESCE(term, '')), (COALESCE(academic_year, '')));
+-- idx_certificates_unique_award: MariaDB cannot index an expression, so each one is materialised.
+ALTER TABLE certificates ADD COLUMN term_key VARCHAR(50) AS (COALESCE(term, '')) PERSISTENT;
+ALTER TABLE certificates ADD COLUMN academic_year_key VARCHAR(20) AS (COALESCE(CAST(academic_year AS CHAR), '')) PERSISTENT;
+
+CREATE UNIQUE INDEX idx_certificates_unique_award ON certificates(learner_id, course_id, term_key, academic_year_key);
 
 CREATE INDEX idx_reports_learner_id ON reports(learner_id);
 
