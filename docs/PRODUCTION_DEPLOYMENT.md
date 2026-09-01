@@ -205,3 +205,5 @@ change that depends on a new API, deploy the backend first.
 starts a MySQL 8 service, applies the schema, re-applies it to prove the runner is
 idempotent, then runs lint, tests, the frontend build, and a production dependency
 audit for both packages. It does not deploy anything.
+
+The one-off move from Supabase PostgreSQL to MySQL is in `docs/MYSQL_CUTOVER.md`. Do that before deploying the release that contains the MySQL rewrite.
