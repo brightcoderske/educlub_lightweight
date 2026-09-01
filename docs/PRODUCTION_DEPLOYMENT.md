@@ -5,11 +5,19 @@
 - Frontend: `https://educlub.co.ke` and `https://www.educlub.co.ke` on Vercel
 - Backend and uploads: `https://learn.educlub.co.ke` on HostAfrica
 - API base: `https://learn.educlub.co.ke/api`
-- Database: Supabase PostgreSQL
+- Database: MySQL 8 on the same HostAfrica cPanel account as the backend
+
+The database moved off Supabase PostgreSQL. It now runs on the cPanel account
+itself, so the application reaches it over `127.0.0.1` and a query no longer pays
+for a network round trip to an external host.
 
 The API is necessarily reachable from learners' browsers. CORS limits which browser
-origins may read responses, while JWT authentication, role checks, school scoping,
-rate limits, and PostgreSQL RLS provide the actual access control.
+origins may read responses, while JWT authentication, role checks, per-request
+school scoping, and rate limits provide the actual access control. Note that
+row-level security is no longer part of that list and never was in practice: the
+API connected as a BYPASSRLS role even on PostgreSQL, so the policies applied
+only to the Supabase API roles. `backend/test/crossSchoolIsolation.test.js`
+asserts the request-path boundaries that do the work.
 
 ## 1. Prepare HostAfrica
 
@@ -74,9 +82,15 @@ EMAIL_FROM=eduClub <noreply@educlub.co.ke>
 EMAIL_REPLY_TO=support@educlub.co.ke
 ```
 
-Use Supabase's pooled connection string when available. Never place
-`DATABASE_URL`, `JWT_SECRET`, email credentials, or Flutterwave secrets in
-Vercel because the React frontend would not use them and must not receive them.
+`DATABASE_URL` must name the `mysql` scheme, or it is ignored and the discrete
+`MYSQL_HOST`/`MYSQL_PORT`/`MYSQL_USER`/`MYSQL_PASSWORD`/`MYSQL_DATABASE` settings
+are used instead. Point it at `127.0.0.1`, not the public hostname, so the
+connection stays on the box. Keep `DB_POOL_MAX` at or below the account's
+`max_user_connections`.
+
+Never place `DATABASE_URL`, `JWT_SECRET`, email credentials, or Flutterwave
+secrets in Vercel because the React frontend would not use them and must not
+receive them.
 
 Keep the HostAfrica mailbox password only in the Node.js application
 environment. After saving the variables and restarting the application, run
@@ -134,64 +148,26 @@ Complete these checks from a private browser window:
 ## 5. Backups and Rollback
 
 - Keep the previous Vercel deployment available for instant rollback.
-- Back up `backend/uploads` daily; Supabase database backups do not include it.
+- Back up `backend/uploads` daily; a database dump does not include it.
+- Take a `mysqldump --single-transaction` before every release, as described in
+  `docs/PRODUCTION_OPERATIONS.md`. The deploy script backs up code, not data.
 - Keep a copy of the current cPanel environment-variable names and values in a
   password manager, never in Git or chat.
 - Before backend updates, archive the application directory and uploads.
 - Deploy backend changes before frontend changes that depend on a new API.
 
 If launch verification fails, point the Vercel production alias back to the
-previous deployment. Do not change the Supabase schema during rollback unless
-the migration itself is known to be incompatible.
+previous deployment. Do not change the database schema during rollback unless
+the migration itself is known to be incompatible: `scripts/deploy-cpanel-git.sh`
+restores the previous code automatically but deliberately does not undo
+migrations, because MySQL commits DDL implicitly and each statement has already
+landed.
 
-## 6. Automatic Backend Deployment
+## 6. Backend Deployment
 
-The workflow at `.github/workflows/deploy-backend.yml` deploys backend changes
-from the `main` branch to HostAfrica. It uses `tar`, `scp`, and SSH because
-`rsync` is unavailable on the shared hosting account.
-
-Add these repository secrets in GitHub under **Settings → Secrets and variables
-→ Actions**:
-
-```text
-HOSTAFRICA_HOST
-HOSTAFRICA_PORT
-HOSTAFRICA_USER
-HOSTAFRICA_SSH_KEY
-HOSTAFRICA_KNOWN_HOSTS
-```
-
-Use `codecham` for `HOSTAFRICA_USER`. Obtain the hostname and port from cPanel's
-SSH Access page. Create a dedicated SSH deployment key without reusing a
-personal key. Add its public half to cPanel's authorized keys and its private
-half to `HOSTAFRICA_SSH_KEY`.
-
-Populate `HOSTAFRICA_KNOWN_HOSTS` from a verified server host key. Compare the
-fingerprint with the value shown by HostAfrica or cPanel before trusting it:
-
-```bash
-ssh-keyscan -p SSH_PORT SSH_HOST
-```
-
-The workflow deploys only:
-
-```text
-backend/src
-backend/package.json
-backend/package-lock.json
-```
-
-It does not deploy or modify `.env`, `uploads`, reports, school logos, or learner
-files. It keeps the five newest code backups under
-`/home/codecham/educlub-backups`, restarts Passenger through
-`tmp/restart.txt`, and verifies the public health endpoint. Database migrations
-remain a deliberate manual operation.
-
-### cPanel Git Alternative
-
-When external SSH is unavailable, initialize the repository through cPanel Git
-using the read-only GitHub deploy key. The repository includes `.cpanel.yml`,
-which invokes `scripts/deploy-cpanel-git.sh`.
+Deployment is driven by cPanel Git Version Control, not by GitHub Actions. The
+repository's `.cpanel.yml` checks the pulled commit into the deploy directory and
+then runs `scripts/deploy-cpanel-git.sh`.
 
 After pushing to GitHub:
 
@@ -199,7 +175,33 @@ After pushing to GitHub:
 2. Select **Update from Remote**.
 3. Select **Deploy HEAD Commit**.
 
-The cPanel deployment follows the same production rules: `.env` and `uploads`
-are preserved, the previous code is backed up, dependencies are installed in
-the application-specific Node.js environment, Passenger is restarted, and
-`https://learn.educlub.co.ke/health` must pass.
+When cPanel's remote fetch is unavailable, the same deployment can be driven from
+the cPanel shell, which performs the fetch itself before handing over to the same
+script:
+
+```bash
+bash scripts/deploy-from-ssh.sh
+```
+
+`scripts/deploy-cpanel-git.sh` copies `backend/src`, `backend/scripts` and the two
+manifests into the application root, installs production dependencies in the
+account's Node.js environment, runs `npm run db:migrate`, touches
+`tmp/restart.txt` so Passenger reloads, and then polls
+`https://learn.educlub.co.ke/health` for up to 60 seconds.
+
+It never touches `.env`, `uploads`, reports, school logos, or learner files. It
+backs up the previous release under `/home/codecham/educlub-backups`, keeps the
+five newest, and restores that backup automatically if any step fails. The
+rollback covers code only; applied migrations are not reverted.
+
+Only the backend is deployed this way. The React frontend builds on Vercel from
+the same `main` branch, so a single push updates the frontend automatically while
+the backend waits for the cPanel deploy above. When a release contains a frontend
+change that depends on a new API, deploy the backend first.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and on pull requests. It
+starts a MySQL 8 service, applies the schema, re-applies it to prove the runner is
+idempotent, then runs lint, tests, the frontend build, and a production dependency
+audit for both packages. It does not deploy anything.

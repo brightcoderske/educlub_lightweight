@@ -32,7 +32,8 @@ npm run import:web-development-1
 ## Local Setup
 
 1. Create a backend `.env` from `.env.example`.
-2. Apply `database/schema.sql` to the Supabase PostgreSQL database.
+2. Create the MySQL 8 database, then apply the schema with `npm run db:migrate`
+   from `backend/`. The runner is idempotent, so it is also the release step.
 3. Create the initial System Admin account deliberately with real operator-provided values:
 
    ```bash
@@ -54,14 +55,21 @@ npm run import:web-development-1
 
 ## Database
 
-Run migrations from the backend folder:
+Apply the schema from the backend folder:
 
 ```bash
 cd backend
-npm run migrate
+npm run db:migrate
 ```
 
-The backend connects through `DATABASE_URL`. Row-level security is enabled on learner-facing records including learners, allocations, weekly marks, certificates, and reports. The API sets the request user, role, and school in PostgreSQL session settings so policies can scope records correctly.
+This applies `scripts/mysql-migration/schema.mysql.sql` and skips any statement
+that would be a no-op, so it is safe to re-run and is the same command the
+deployment uses. Do not use `npm run migrate`: it feeds the PostgreSQL
+`schema.sql`, including its row-level-security statements, to a MySQL server.
+
+The backend connects through `DATABASE_URL`, which must name the `mysql` scheme; the discrete `MYSQL_*` settings are used when it is absent. The application is written in PostgreSQL SQL and `src/config/sqlDialect.js` translates it to MySQL at the single choke point in `src/config/db.js`, so `$n` placeholders and `::type` casts remain valid in application code.
+
+Tenant separation is enforced in the request path: every handler scopes its queries by the caller's role and school, and `test/crossSchoolIsolation.test.js` pins those boundaries down. This is not a change in posture — the API always connected as a role that bypassed PostgreSQL row-level security, so the request-path checks were already the ones doing the work.
 
 Consent records are stored in `user_consents`. Each record stores the user, policy version, policy title, consent timestamp, IP address, user agent, and a JSON snapshot of the exact agreement text accepted by the user.
 
@@ -117,7 +125,7 @@ The agreement explains that eduClub collects account identifiers, school and lea
 - Passwords are bcrypt-hashed and first-login password reset is enforced.
 - MFA is required for System Admin and School Admin roles.
 - JWT access tokens are required for protected API routes.
-- Supabase row-level security is enabled across application tables, with policies scoped by the API request user, role, and school.
+- Every request handler scopes its queries by the caller's role and school, and `backend/test/crossSchoolIsolation.test.js` asserts those boundaries on each push.
 - Database indexes cover dashboard filters, learner records, course allocations, competitions, payments, feedback, notifications, and reporting lookups.
 - Login and MFA verification have stricter rate limits than general API traffic.
 - Temporary token/debug files and local secrets must not be committed. Rotate JWT, email, payment, and any optional integration secrets if they are exposed.

@@ -5,28 +5,32 @@
 Back up the database before every release. Apply immutable migrations as a deployment step before starting the application:
 
 ```sh
-pg_dump --format=custom --no-owner --file educlub-before-release.dump "$DATABASE_URL"
+mysqldump --single-transaction --routines --triggers \
+  --result-file=educlub-before-release.sql \
+  -h "$MYSQL_HOST" -u "$MYSQL_USER" -p "$MYSQL_DATABASE"
 cd backend
 npm ci
-npm run db:migrate:status
 npm run db:migrate
 npm run db:health
 ```
+
+`--single-transaction` keeps the dump consistent without locking the tables the
+live application is reading.
 
 Normal server startup verifies the schema and never changes it. A checksum mismatch means an applied migration was edited; stop the deployment and add a new migration instead.
 
 Restore into a newly created empty database first, verify it, and then switch application traffic:
 
 ```sh
-createdb educlub_restore
-pg_restore --clean --if-exists --no-owner --dbname educlub_restore educlub-before-release.dump
+mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p -e "CREATE DATABASE educlub_restore"
+mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p educlub_restore < educlub-before-release.sql
 ```
 
-Migrations are forward-only because PostgreSQL DDL and data transformations are not always safely reversible. Roll back application code only when it remains schema-compatible. Otherwise restore the pre-release backup into a new database and switch the connection string; never reset the live database destructively.
+Migrations are forward-only because DDL and data transformations are not always safely reversible, and MySQL additionally commits DDL implicitly, so a failed release cannot be unwound inside a transaction. Roll back application code only when it remains schema-compatible. Otherwise restore the pre-release backup into a new database and switch the connection string; never reset the live database destructively.
 
 ## Local verification
 
-Copy `backend/.env.example` to `backend/.env`, replace every placeholder, create the PostgreSQL database, then run:
+Copy `backend/.env.example` to `backend/.env`, replace every placeholder, create the MySQL 8 database, then run:
 
 ```sh
 cd backend

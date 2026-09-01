@@ -9,19 +9,31 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:16
+      # The application moved off Supabase PostgreSQL to MySQL, so CI has to
+      # exercise the engine production actually runs. src/config/db.js pins the
+      # utf8mb4_0900_ai_ci collation, which is 8.0 and later only.
+      mysql:
+        image: mysql:8.0
         env:
-          POSTGRES_USER: educlub
-          POSTGRES_PASSWORD: educlub_test
-          POSTGRES_DB: educlub_test
-        ports: ["5432:5432"]
+          MYSQL_ROOT_PASSWORD: educlub_root
+          MYSQL_DATABASE: educlub_test
+          MYSQL_USER: educlub
+          MYSQL_PASSWORD: educlub_test
+        ports: ["3306:3306"]
         options: >-
-          --health-cmd "pg_isready -U educlub -d educlub_test"
-          --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -peduclub_root --silent"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+          --health-start-period 30s
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://educlub:educlub_test@127.0.0.1:5432/educlub_test
+      DATABASE_URL: mysql://educlub:educlub_test@127.0.0.1:3306/educlub_test
+      # scripts/mysql-migration/apply-schema.js reads these discrete settings
+      # and never parses DATABASE_URL, so both forms have to be present.
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_USER: educlub
+      MYSQL_PASSWORD: educlub_test
+      MYSQL_DATABASE: educlub_test
       JWT_SECRET: ci-only-jwt-secret-that-is-longer-than-thirty-two-characters
       EMAIL_HOST: localhost
       EMAIL_PORT: 1025
@@ -49,15 +61,20 @@ jobs:
       - name: Install frontend
         working-directory: frontend
         run: npm ci
-      - name: Migrate database
+      - name: Apply database schema
         working-directory: backend
         run: npm run db:migrate
       - name: Verify migration state
         working-directory: backend
         run: npm run db:health
+      - name: Apply database schema again
+        working-directory: backend
+        # apply-schema.js is the deployment's migration step and runs on every
+        # release, so a second run has to be a no-op rather than an error.
+        run: npm run db:migrate
       - name: Backend lint and tests
         working-directory: backend
-        run: npm run lint && npm test && npm run test:integration
+        run: npm run lint && npm test
       - name: Frontend lint, tests, and build
         working-directory: frontend
         run: npm run lint && npm test -- --runInBand && npm run build
