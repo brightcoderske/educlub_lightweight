@@ -45,6 +45,10 @@ function fromDatabaseUrl() {
 
 const url = fromDatabaseUrl();
 
+// Set from SELECT VERSION() once connected. cPanel ships MariaDB, which differs
+// from MySQL 8 in ways the generated schema runs into.
+let isMariaDb = false;
+
 const CONFIG = {
   host: arg("host", process.env.MYSQL_HOST || url.host || "127.0.0.1"),
   port: Number(arg("port", process.env.MYSQL_PORT || url.port || 3306)),
@@ -126,16 +130,44 @@ async function reasonToSkip(db, statement) {
   return null;
 }
 
+// MariaDB has never supported indexing an expression - it offers generated
+// columns instead - so the three LOWER() indexes the translation produces are
+// rejected outright there. They are an optimisation for case-insensitive email
+// and username lookups, not a correctness requirement, so the schema is applied
+// without them rather than failing the release. They are reported separately
+// from ordinary skips because losing an index quietly is how a fast login
+// becomes a slow one months later with nothing to point at.
+function unsupportedReason(statement) {
+  if (!isMariaDb) return null;
+
+  const functionalIndex = statement.match(/^CREATE (?:UNIQUE )?INDEX (\w+)\s+ON \w+\s*\(\s*\(/i);
+  if (functionalIndex) {
+    return `${functionalIndex[1]} indexes an expression, which MariaDB cannot do`;
+  }
+
+  return null;
+}
+
 async function main() {
   const sql = fs.readFileSync(path.join(__dirname, "schema.mysql.sql"), "utf8");
   const statements = splitStatements(sql);
   const db = await mysql.createConnection(CONFIG);
 
+  const [versionRows] = await db.query("SELECT VERSION() AS version");
+  const version = String(versionRows[0].version);
+  isMariaDb = /mariadb/i.test(version);
+
   let applied = 0;
   let skipped = 0;
   const failures = [];
+  const unsupported = [];
 
   for (const statement of statements) {
+    const unsupportedBy = unsupportedReason(statement);
+    if (unsupportedBy) {
+      unsupported.push(unsupportedBy);
+      continue;
+    }
     const skip = await reasonToSkip(db, statement);
     if (skip) {
       skipped += 1;
@@ -152,11 +184,17 @@ async function main() {
   await db.end();
 
   console.log(`database : ${CONFIG.database} @ ${CONFIG.host}:${CONFIG.port}`);
+  console.log(`server   : ${version}`);
   console.log(`applied  : ${applied}`);
   console.log(`skipped  : ${skipped} (already present)`);
   console.log(`failed   : ${failures.length}`);
   for (const failure of failures) {
     console.log(`\n  ! ${failure.message}\n    ${failure.statement}`);
+  }
+  if (unsupported.length) {
+    console.log(`\nnot created on this server (${unsupported.length}):`);
+    for (const reason of unsupported) console.log(`  - ${reason}`);
+    console.log("  Lookups still work; they scan instead of using an index.");
   }
   process.exit(failures.length ? 1 : 0);
 }

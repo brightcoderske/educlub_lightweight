@@ -9,19 +9,21 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     services:
-      # The application moved off Supabase PostgreSQL to MySQL, so CI has to
-      # exercise the engine production actually runs. src/config/db.js pins the
-      # utf8mb4_0900_ai_ci collation, which is 8.0 and later only.
-      mysql:
-        image: mysql:8.0
+      # MariaDB, not MySQL, and pinned to the version cPanel actually runs. The
+      # two are not interchangeable here: MariaDB has no utf8mb4_0900_ai_ci and
+      # cannot index an expression, both of which the schema and the ILIKE
+      # translation hit. Testing against MySQL 8 would pass and still break the
+      # release.
+      mariadb:
+        image: mariadb:11.4
         env:
-          MYSQL_ROOT_PASSWORD: educlub_root
-          MYSQL_DATABASE: educlub_test
-          MYSQL_USER: educlub
-          MYSQL_PASSWORD: educlub_test
+          MARIADB_ROOT_PASSWORD: educlub_root
+          MARIADB_DATABASE: educlub_test
+          MARIADB_USER: educlub
+          MARIADB_PASSWORD: educlub_test
         ports: ["3306:3306"]
         options: >-
-          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -peduclub_root --silent"
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
           --health-interval 10s --health-timeout 5s --health-retries 10
           --health-start-period 30s
     env:

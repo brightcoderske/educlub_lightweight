@@ -159,7 +159,12 @@ function translateUpsert(sql) {
 // PostgreSQL did, which means a plain LIKE is case-SENSITIVE here. ILIKE has to
 // force an insensitive collation or it would quietly stop matching. Attaching
 // COLLATE to the left operand covers patterns built with || on the right.
-const CASE_INSENSITIVE = "utf8mb4_0900_ai_ci";
+// utf8mb4_unicode_ci rather than utf8mb4_0900_ai_ci: the _0900_ family is MySQL
+// 8 only and does not exist in MariaDB, which is what cPanel ships, so an ILIKE
+// would fail outright there. utf8mb4_unicode_ci is present in both and is also
+// accent- and case-insensitive, which is the property ILIKE needs.
+// MYSQL_COLLATION overrides it for a database built on something else.
+const CASE_INSENSITIVE = process.env.MYSQL_COLLATION || "utf8mb4_unicode_ci";
 
 // MySQL has no NULLS LAST/FIRST. Its own ordering puts NULLs first ascending
 // and last descending, so only the combinations that differ need an extra

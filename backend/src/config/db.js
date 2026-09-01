@@ -49,7 +49,10 @@ const pool = mysql.createPool({
   // Keeping this off means a single query string can never carry a second
   // statement, which removes a whole class of injection escalation.
   multipleStatements: false,
-  charset: "utf8mb4_0900_ai_ci",
+  // Not utf8mb4_0900_ai_ci: that collation is MySQL 8 only, and cPanel ships
+  // MariaDB, where the connection would be negotiated with an id that means
+  // something else. utf8mb4_unicode_ci exists in both and mysql2 knows it.
+  charset: process.env.MYSQL_COLLATION || "utf8mb4_unicode_ci",
   timezone: "Z",
   enableKeepAlive: true,
 });

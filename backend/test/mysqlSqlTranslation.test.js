@@ -107,7 +107,22 @@ test("NULLS LAST only adds a sort key where MySQL's own ordering differs", () =>
 
 test("ILIKE forces a case-insensitive collation, since the database is case-sensitive", () => {
   // A plain LIKE here would be case-SENSITIVE and silently stop matching.
-  assert.match(translate("WHERE name ILIKE $1", ["a%"]).sql, /COLLATE utf8mb4_0900_ai_ci LIKE/);
+  const { CASE_INSENSITIVE } = require("../src/config/sqlDialect");
+  assert.match(
+    translate("WHERE name ILIKE $1", ["a%"]).sql,
+    new RegExp(`COLLATE ${CASE_INSENSITIVE} LIKE`),
+  );
+});
+
+test("the case-insensitive collation exists on MariaDB as well as MySQL", () => {
+  // cPanel runs MariaDB, which has no utf8mb4_0900_ai_ci - naming it here would
+  // make every ILIKE query fail on the production server while passing locally.
+  const { CASE_INSENSITIVE } = require("../src/config/sqlDialect");
+  assert.doesNotMatch(
+    CASE_INSENSITIVE,
+    /_0900_/,
+    "the _0900_ collation family is MySQL 8 only",
+  );
 });
 
 test("ON CONFLICT becomes ON DUPLICATE KEY UPDATE with VALUES()", () => {

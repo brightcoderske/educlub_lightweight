@@ -45,7 +45,7 @@ function mysqlSettings() {
     user: decodeURIComponent(parsed.username || "root"),
     password: decodeURIComponent(parsed.password || ""),
     database: parsed.pathname.replace(/^\//, "") || "educlub",
-    charset: "utf8mb4_0900_ai_ci",
+    charset: process.env.MYSQL_COLLATION || "utf8mb4_unicode_ci",
     timezone: "Z",
   };
 }
