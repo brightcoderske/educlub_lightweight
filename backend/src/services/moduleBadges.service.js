@@ -111,13 +111,13 @@ async function listLearnerBadges(learnerId) {
          SELECT *, ROW_NUMBER() OVER (
            PARTITION BY typing_test_id
            ORDER BY net_wpm DESC, accuracy DESC, attempt_number ASC
-         ) AS rank
+         ) AS \`rank\`
          FROM completed_trials
        )
        SELECT ranked.*, tt.name AS test_name
        FROM ranked
        JOIN typing_tests tt ON tt.id = ranked.typing_test_id
-       WHERE ranked.rank = 1
+       WHERE ranked.\`rank\` = 1
        ORDER BY ranked.awarded_at DESC`,
       [learnerId],
     ),

@@ -14,7 +14,6 @@ const {
   listLearnerBadges,
 } = require("./moduleBadges.service");
 const {
-  normalizeBooleanAnswer,
   validateCodingChallenge,
   evaluateSourceChecks,
 } = require("./codingChallenges.service");
@@ -22,6 +21,7 @@ const moduleFeedbackService = require("./moduleFeedback.service");
 const teacherAssignmentsService = require("./teacherAssignments.service");
 const certificatesService = require("./certificates.service");
 const { normalizeActivityGrade } = require("./gradingPolicy");
+const { answersMatch } = require("./quizAnswerPolicy");
 const {
   sanitizeActivityContent: sanitizeActivityContentForStorage,
 } = require("../utils/richTextSanitizer");
@@ -311,56 +311,6 @@ function sanitizeActivityContent(content = {}, includeAnswers = false) {
   return sanitized;
 }
 
-function normalizeAnswer(value, preserveOrder = false) {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return Object.entries(value)
-      .map(([key, item]) => [
-        String(key).trim().toLowerCase(),
-        String(item ?? "")
-          .trim()
-          .toLowerCase(),
-      ])
-      .sort(([left], [right]) => left.localeCompare(right));
-  }
-  if (Array.isArray(value)) {
-    const normalized = value.map((item) =>
-      typeof item === "object"
-        ? JSON.stringify(item)
-        : String(item ?? "")
-            .trim()
-            .toLowerCase()
-    );
-    return preserveOrder ? normalized : normalized.sort();
-  }
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
-}
-
-function answersMatch(expected, actual, questionType = "") {
-  if (questionType === "true_false") {
-    return normalizeBooleanAnswer(expected) === normalizeBooleanAnswer(actual);
-  }
-  if (questionType === "short_answer") {
-    const accepted = Array.isArray(expected) ? expected : [expected];
-    const normalizedActual = normalizeAnswer(actual);
-    return accepted.some(
-      (answer) => normalizeAnswer(answer) === normalizedActual
-    );
-  }
-  const preserveOrder = questionType === "ordering";
-  const normalizedExpected = normalizeAnswer(expected, preserveOrder);
-  const normalizedActual = normalizeAnswer(actual, preserveOrder);
-
-  if (Array.isArray(normalizedExpected) || Array.isArray(normalizedActual)) {
-    return (
-      JSON.stringify(normalizedExpected) === JSON.stringify(normalizedActual)
-    );
-  }
-
-  return normalizedExpected === normalizedActual;
-}
-
 function validateQuizAllocation(data = {}) {
   if (data.activity_type !== "quiz") return;
   const questions = Array.isArray(data.content?.questions)
@@ -557,13 +507,17 @@ function applyPreviewAccess(modules = [], allocation = null) {
   };
 }
 
-async function getCourseLearningOverview(courseId, user = {}) {
+// `options.includeContent` exists because activity content holds the full rich
+// lesson HTML, which is megabytes across a template course. Availability checks
+// need none of it, so they ask for the cheap shape.
+async function getCourseLearningOverview(courseId, user = {}, options = {}) {
   const { course, learner, allocation } = await assertCourseAccess(
     courseId,
     user
   );
   if (!course) return null;
 
+  const includeContent = options.includeContent !== false;
   const staffView = isStaff(user);
   const params = [courseId];
   let learnerJoin = "AND ap.learner_id IS NULL";
@@ -593,7 +547,7 @@ async function getCourseLearningOverview(courseId, user = {}) {
        la.template_activity_id,
        la.title AS activity_title,
        la.activity_type,
-       la.content,
+       ${includeContent ? "la.content," : "NULL::jsonb AS content,"}
        la.points,
        la.position AS activity_position,
        la.is_required,
@@ -648,7 +602,9 @@ async function getCourseLearningOverview(courseId, user = {}) {
         template_activity_id: row.template_activity_id,
         title: row.activity_title,
         activity_type: row.activity_type,
-        content: sanitizeActivityContent(row.content || {}, staffView),
+        content: includeContent
+          ? sanitizeActivityContent(row.content || {}, staffView)
+          : {},
         points: Number(row.points || 0),
         position: row.activity_position,
         is_required: row.is_required,
@@ -673,8 +629,10 @@ async function getCourseLearningOverview(courseId, user = {}) {
          AND o.revoked_at IS NULL
          AND (
            o.target_learner_id = $2::integer
-           OR COALESCE(o.target_learner_ids, '[]'::jsonb)
-              @> jsonb_build_array($2::integer)
+           OR JSON_CONTAINS(
+                COALESCE(o.target_learner_ids, JSON_ARRAY()),
+                CAST($2::integer AS JSON)
+              )
            OR (
              o.scope_type = 'class'
              AND (o.target_grade IS NULL OR o.target_grade = $3::varchar)
@@ -805,18 +763,23 @@ async function assertActivityAccess(activityId, user = {}) {
   );
 
   if (!allocation.rows[0]) return { activity: null, learner, staffView: false };
-  const moduleLearning = await getModuleLearning(
-    activity.course_id,
-    activity.module_id,
-    user
+
+  // Availability only, without the rich lesson content. This runs on every
+  // progress save, quiz submission and work submission, and it used to pull the
+  // entire course's activity content back on each one.
+  const overview = await getCourseLearningOverview(activity.course_id, user, {
+    includeContent: false,
+  });
+  const learningModule = overview?.modules?.find(
+    (item) => Number(item.id) === Number(activity.module_id)
   );
-  const learningActivity = moduleLearning?.module?.activities?.find(
+  const learningActivity = learningModule?.activities?.find(
     (item) => Number(item.id) === Number(activityId)
   );
-  if (!moduleLearning?.is_unlocked || !learningActivity?.is_unlocked) {
+  if (!learningModule?.is_unlocked || !learningActivity?.is_unlocked) {
     throw new Error(
       learningActivity?.lock_reason ||
-        moduleLearning?.module?.lock_reason ||
+        learningModule?.lock_reason ||
         "Complete the previous required activity first."
     );
   }
@@ -1341,6 +1304,43 @@ async function processCoursePaymentWebhook(payload = {}) {
   };
 }
 
+// Cheap post-save snapshot: module score and whether the following module has
+// opened. Built without activity content, so it costs a single small query.
+async function summariseModuleState(courseId, moduleId, user = {}) {
+  const overview = await getCourseLearningOverview(courseId, user, {
+    includeContent: false,
+  });
+  if (!overview) return null;
+
+  const index = overview.modules.findIndex(
+    (module) => Number(module.id) === Number(moduleId)
+  );
+  if (index === -1) return null;
+
+  const module = overview.modules[index];
+  const nextModule = overview.modules[index + 1] || null;
+
+  return {
+    module: {
+      id: module.id,
+      is_done: module.is_done,
+      progress_percent: module.progress_percent,
+      score_percent: module.score_percent,
+      completed_activities: module.completed_activities,
+      total_activities: module.total_activities,
+    },
+    next_module: nextModule
+      ? {
+          id: nextModule.id,
+          title: nextModule.title,
+          is_done: nextModule.is_done,
+          is_open: nextModule.is_unlocked || isStaff(user),
+        }
+      : null,
+    course_summary: overview.summary,
+  };
+}
+
 async function upsertActivityProgress(
   activityId,
   user = {},
@@ -1421,27 +1421,50 @@ async function upsertActivityProgress(
     ]
   );
 
-  let badge = null;
-  try {
-    badge = await recalculateModuleBadge(learner.id, access.rows[0].module_id);
-  } catch (error) {
-    console.error("Module badge recalculation error:", error);
+  // Opening an activity cannot finish a module or a course, so the badge and
+  // certificate scans are skipped for it. They are the two most expensive parts
+  // of this call and every "next activity" click used to pay for both.
+  const completes = ["completed", "graded"].includes(result.rows[0].status);
+  if (!completes) {
+    return { ...result.rows[0], badge: null, certificate: null };
   }
 
-  let certificate = null;
-  try {
-    certificate = await maybeCreateCourseCompletionCertificate({
+  const [badge, certificate, moduleState] = await Promise.all([
+    recalculateModuleBadge(learner.id, access.rows[0].module_id).catch(
+      (error) => {
+        console.error("Module badge recalculation error:", error);
+        return null;
+      }
+    ),
+    maybeCreateCourseCompletionCertificate({
       learnerId: learner.id,
       courseId: access.rows[0].course_id,
       term: access.rows[0].allocation_term || learner.term,
       academicYear:
         access.rows[0].allocation_academic_year || learner.academic_year,
-    });
-  } catch (error) {
-    console.error("Course certificate completion check error:", error);
-  }
+    }).catch((error) => {
+      console.error("Course certificate completion check error:", error);
+      return null;
+    }),
+    // Finishing the last activity can open the next module. The learner page
+    // cannot work that out for itself, so send the refreshed gate back with the
+    // save instead of making them reload to see the Next Module button.
+    summariseModuleState(
+      access.rows[0].course_id,
+      access.rows[0].module_id,
+      user
+    ).catch((error) => {
+      console.error("Module state refresh error:", error);
+      return null;
+    }),
+  ]);
 
-  return { ...result.rows[0], badge, certificate };
+  return {
+    ...result.rows[0],
+    badge,
+    certificate,
+    module_state: moduleState,
+  };
 }
 
 async function maybeCreateCourseCompletionCertificate({

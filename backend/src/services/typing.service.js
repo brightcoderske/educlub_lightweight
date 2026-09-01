@@ -1,4 +1,14 @@
 const { query } = require("../config");
+const { scoreTypingAttempt } = require("./typingScoring");
+const {
+  resolveAssessmentSchoolId,
+  resolveAssessmentType,
+  assertAssessmentManageAccess,
+} = require("./assessmentOwnership");
+const {
+  resolveAssessmentScope,
+  requireConfiguredAssessmentScope,
+} = require("./assessmentTermScope");
 
 function normalizeList(value) {
   if (Array.isArray(value)) {
@@ -159,46 +169,6 @@ function sortTests(tests = []) {
   });
 }
 
-function tokenizeWords(value) {
-  return String(value || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-}
-
-function scoreTypingAttempt(passage, typedText, durationSeconds) {
-  const expected = String(passage || "");
-  const typed = String(typedText || "").slice(0, expected.length || undefined);
-  const seconds = Math.max(1, Number(durationSeconds) || 1);
-  const minutes = seconds / 60;
-  const typedCharacters = typed.length;
-  const grossWpm = typedCharacters / 5 / minutes;
-
-  const expectedWords = tokenizeWords(expected);
-  const typedWords = tokenizeWords(typed);
-  const totalWords = Math.max(typedWords.length, 1);
-  let errors = 0;
-
-  for (let index = 0; index < typedWords.length; index += 1) {
-    const expectedWord = expectedWords[index] || "";
-    const typedWord = typedWords[index] || "";
-    if (typedWord !== expectedWord) {
-      errors += 1;
-    }
-  }
-
-  const accuracy = Math.max(0, ((totalWords - errors) / totalWords) * 100);
-  const errorsPerMinute = errors / minutes;
-  const finalScore = Math.max(0, grossWpm - errorsPerMinute);
-
-  return {
-    raw_wpm: Number(grossWpm.toFixed(2)),
-    accuracy: Number(Math.max(0, Math.min(100, accuracy)).toFixed(2)),
-    mistakes: errors,
-    final_score: Number(finalScore.toFixed(2)),
-  };
-}
-
 async function getBestCompletedTrial(testId, learnerId) {
   const lessonCountResult = await query(
     "SELECT COUNT(*)::int AS count FROM typing_lessons WHERE typing_test_id = $1",
@@ -241,19 +211,14 @@ async function listTests(user, filters = {}) {
   const values = [];
   let where = "WHERE 1=1";
 
+  const period = await resolveAssessmentScope(user, filters);
+  if (!period) return [];
+  values.push(period.term, period.academicYear);
+  where += " AND tt.term = $1 AND tt.academic_year = $2";
+
   if (filters.test_type) {
     values.push(filters.test_type);
     where += ` AND tt.test_type = $${values.length}`;
-  }
-
-  if (filters.term) {
-    values.push(filters.term);
-    where += ` AND tt.term = $${values.length}`;
-  }
-
-  if (filters.academic_year) {
-    values.push(Number(filters.academic_year));
-    where += ` AND tt.academic_year = $${values.length}`;
   }
 
   if (filters.week_number) {
@@ -317,7 +282,9 @@ async function listTests(user, filters = {}) {
   return sortTests(filtered);
 }
 
-async function getTest(testId, user) {
+async function getTest(testId, user, filters = {}) {
+  const period = await resolveAssessmentScope(user, filters);
+  if (!period) return null;
   const result = await query(
     `SELECT tt.*,
             schedule.term_start_date,
@@ -341,8 +308,10 @@ async function getTest(testId, user) {
      ) schedule ON true
      LEFT JOIN typing_lessons tl ON tl.typing_test_id = tt.id
      WHERE tt.id = $1
+       AND tt.term = $2
+       AND tt.academic_year = $3
      GROUP BY tt.id, schedule.term_start_date, schedule.term_end_date, schedule.week_start_date, schedule.week_end_date`,
-    [testId]
+    [testId, period.term, period.academicYear]
   );
   const rawTest = result.rows[0];
   if (!rawTest) return null;
@@ -498,8 +467,17 @@ async function saveLessons(testId, lessons = [], defaultDuration) {
   }
 }
 
+async function getTestRow(testId) {
+  const result = await query("SELECT * FROM typing_tests WHERE id = $1", [
+    testId,
+  ]);
+  return result.rows[0] || null;
+}
+
 async function createTest(user, data) {
-  const testType = data.test_type === "competition" ? "competition" : "weekly";
+  const period = await requireConfiguredAssessmentScope(data);
+  const testType = resolveAssessmentType(user, data.test_type);
+  const schoolId = resolveAssessmentSchoolId(user);
   const result = await query(
     `INSERT INTO typing_tests (
        name, description, term, academic_year, week_number, test_type, competition_id,
@@ -512,12 +490,12 @@ async function createTest(user, data) {
     [
       cleanText(data.name),
       data.description || null,
-      data.term || null,
-      data.academic_year ? Number(data.academic_year) : null,
+      period.term,
+      period.academicYear,
       data.week_number ? Number(data.week_number) : null,
       testType,
-      data.competition_id || null,
-      data.school_id || null,
+      testType === "competition" ? data.competition_id || null : null,
+      schoolId,
       JSON.stringify(normalizeList(data.eligible_grades)),
       JSON.stringify(normalizeList(data.eligible_streams)),
       Number(data.pass_threshold || 25),
@@ -535,11 +513,20 @@ async function createTest(user, data) {
     data.lessons || [],
     data.duration_seconds
   );
-  return getTest(result.rows[0].id, user);
+  return getTest(result.rows[0].id, user, {
+    term: period.term,
+    academic_year: period.academicYear,
+  });
 }
 
 async function updateTest(user, testId, data) {
-  const testType = data.test_type === "competition" ? "competition" : "weekly";
+  const existing = await getTestRow(testId);
+  if (!existing) return null;
+  assertAssessmentManageAccess(user, existing, "typing test");
+
+  const period = await requireConfiguredAssessmentScope(data);
+  const testType = resolveAssessmentType(user, data.test_type);
+  const schoolId = resolveAssessmentSchoolId(user);
   const result = await query(
     `UPDATE typing_tests
      SET name = $1,
@@ -565,12 +552,12 @@ async function updateTest(user, testId, data) {
     [
       cleanText(data.name),
       data.description || null,
-      data.term || null,
-      data.academic_year ? Number(data.academic_year) : null,
+      period.term,
+      period.academicYear,
       data.week_number ? Number(data.week_number) : null,
       testType,
-      data.competition_id || null,
-      data.school_id || null,
+      testType === "competition" ? data.competition_id || null : null,
+      schoolId,
       JSON.stringify(normalizeList(data.eligible_grades)),
       JSON.stringify(normalizeList(data.eligible_streams)),
       Number(data.pass_threshold || 25),
@@ -585,11 +572,21 @@ async function updateTest(user, testId, data) {
   );
   if (!result.rows[0]) return null;
   await saveLessons(testId, data.lessons || [], data.duration_seconds);
-  return getTest(testId, user);
+  return getTest(testId, user, {
+    term: period.term,
+    academic_year: period.academicYear,
+  });
 }
 
 async function duplicateTest(user, testId) {
-  const source = await getTest(testId, { ...user, role: "system_admin" });
+  const existing = await getTestRow(testId);
+  if (!existing) return null;
+  assertAssessmentManageAccess(user, existing, "typing test");
+
+  const source = await getTest(testId, user, {
+    term: existing.term,
+    academic_year: existing.academic_year,
+  });
   if (!source) return null;
   return createTest(user, {
     ...source,
@@ -601,8 +598,9 @@ async function duplicateTest(user, testId) {
 }
 
 async function deleteTest(user, testId) {
-  const allowed = await getTest(testId, { ...user, role: "system_admin" });
+  const allowed = await getTestRow(testId);
   if (!allowed) return null;
+  assertAssessmentManageAccess(user, allowed, "typing test");
 
   if (
     allowed.test_type === "weekly" &&
@@ -610,14 +608,28 @@ async function deleteTest(user, testId) {
     allowed.academic_year &&
     allowed.week_number
   ) {
+    // Clearing the week's typing mark must not reach past the school that owns
+    // the test. Unscoped, deleting one school's weekly test wiped that week's
+    // typing score for every learner in every school.
     await query(
       `UPDATE weekly_marks
        SET typing_score = NULL,
            updated_at = NOW()
        WHERE term = $1
          AND academic_year = $2
-         AND week_number = $3`,
-      [allowed.term, allowed.academic_year, allowed.week_number]
+         AND week_number = $3
+         AND (
+           $4::integer IS NULL
+           OR learner_id IN (
+             SELECT id FROM learners WHERE school_id = $4::integer
+           )
+         )`,
+      [
+        allowed.term,
+        allowed.academic_year,
+        allowed.week_number,
+        allowed.school_id || null,
+      ]
     );
   }
 
@@ -753,20 +765,20 @@ async function submitAttempt(user, lessonId, data) {
     );
   }
 
-  const durationSeconds = Math.min(
-    Number(
-      data.duration_seconds ||
-        lesson.duration_seconds ||
-        lesson.test_duration_seconds ||
-        300
-    ),
-    Number(lesson.duration_seconds || lesson.test_duration_seconds || 300)
+  // The elapsed time arrives from the browser, so it is bounded on both sides:
+  // the lesson time limit above, and a passage-derived floor below that stops a
+  // forged duration from producing an impossible words-per-minute.
+  const lessonLimitSeconds = Number(
+    lesson.duration_seconds || lesson.test_duration_seconds || 300
   );
   const score = scoreTypingAttempt(
     lesson.passage,
     data.typed_text,
-    durationSeconds
+    data.duration_seconds,
+    lessonLimitSeconds
   );
+  // duration_seconds is an INTEGER column, and the floor above can be fractional.
+  const durationSeconds = Math.round(score.duration_seconds);
   const result = await query(
     `INSERT INTO typing_attempts (
        typing_test_id, typing_lesson_id, learner_id, attempt_number, typed_text,
@@ -847,16 +859,10 @@ async function refreshAggregateScore(testId, learnerId) {
 }
 
 async function getReport(user, filters = {}) {
-  const values = [];
-  let where = "WHERE tt.test_type = 'weekly'";
-  if (filters.term) {
-    values.push(filters.term);
-    where += ` AND tt.term = $${values.length}`;
-  }
-  if (filters.academic_year) {
-    values.push(Number(filters.academic_year));
-    where += ` AND tt.academic_year = $${values.length}`;
-  }
+  const period = await resolveAssessmentScope(user, filters);
+  if (!period) return [];
+  const values = [period.term, period.academicYear];
+  let where = "WHERE tt.test_type = 'weekly' AND tt.term = $1 AND tt.academic_year = $2";
   if (filters.week_number) {
     values.push(Number(filters.week_number));
     where += ` AND tt.week_number = $${values.length}`;

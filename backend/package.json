@@ -10,8 +10,8 @@
     "test:integration": "node --require ./test/setup-env.js --test test/integration/*.test.js",
     "email:verify": "node scripts/verify-email.js",
     "schema:ensure": "node scripts/ensure-startup-schema.js",
-    "db:migrate": "node src/database/migrationRunner.js",
-    "db:migrate:status": "node src/database/migrationRunner.js --status",
+    "db:migrate": "node scripts/mysql-migration/apply-schema.js",
+    "db:migrate:status": "node scripts/mysql-migration/apply-schema.js",
     "db:health": "node src/database/health.js",
     "lint": "eslint src test",
     "security:audit": "npm audit --omit=dev --audit-level=high",
@@ -20,7 +20,10 @@
     "seed": "node ../scripts/seed-admin.js",
     "seed:weekly-learning": "node scripts/seed-weekly-learning-content.js",
     "import:web-development-1": "node scripts/import-web-development-1.js",
-    "import:scratch-pathway": "node scripts/import-scratch-pathway.js"
+    "import:scratch-pathway": "node scripts/import-scratch-pathway.js",
+    "db:apply-schema": "node scripts/mysql-migration/apply-schema.js",
+    "db:translate-schema": "node scripts/mysql-migration/translate-schema.js",
+    "db:seed-admin": "node scripts/mysql-migration/seed-admin.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",
@@ -33,6 +36,7 @@
     "express-rate-limit": "^6.7.0",
     "helmet": "^7.0.0",
     "jsonwebtoken": "^9.0.0",
+    "mysql2": "^3.23.4",
     "nodemailer": "^9.0.3",
     "pdfkit": "^0.14.0",
     "pg": "^8.11.0",

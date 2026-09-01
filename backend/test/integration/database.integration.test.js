@@ -1,3 +1,16 @@
+// NOT RUN BY CI, AND NOT RUNNABLE ON THE PRODUCTION STACK.
+//
+// This suite predates the move off Supabase PostgreSQL. It asserts that
+// PostgreSQL row level security denies cross-school access, using CREATE ROLE,
+// NOBYPASSRLS, GRANT ... ON SCHEMA public and DROP OWNED BY - none of which
+// exist in MySQL, which is what production and CI now run.
+//
+// The tenant boundary it was written to protect did not disappear with RLS: the
+// application connected as a BYPASSRLS role even on PostgreSQL, so the checks
+// that actually held were always the ones in the request path. Those are
+// covered by test/crossSchoolIsolation.test.js, which runs on every push.
+//
+// Kept for reference until it is either ported or removed deliberately.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");

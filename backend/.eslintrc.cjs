@@ -6,6 +6,9 @@ module.exports = {
   rules: {
     "no-undef": "error",
     "no-unreachable": "error",
-    "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+    "no-unused-vars": [
+      "warn",
+      { argsIgnorePattern: "^_", ignoreRestSiblings: true },
+    ],
   },
 };

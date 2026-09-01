@@ -1,17 +1,17 @@
 const express = require("express");
 const router = express.Router();
 const leaderboardController = require("../controllers/leaderboard.controller");
-const {
-  authenticateToken,
-  isSchoolAdmin,
-  isSystemAdmin,
-} = require("../middleware");
+const { authenticateToken, requireRole } = require("../middleware");
+
+// Named for what it actually allows. The old isSchoolAdmin() helper admitted
+// teachers too, so every route here read as tighter than it was.
+const isSchoolStaff = requireRole("school_admin", "teacher");
 
 // Get weekly leaderboard for specific category
 router.get(
   "/weekly/:weekNumber/:term/:academicYear/:category",
   authenticateToken,
-  isSchoolAdmin,
+  isSchoolStaff,
   leaderboardController.getWeeklyLeaderboard
 );
 
@@ -19,7 +19,7 @@ router.get(
 router.get(
   "/weekly/:weekNumber/:term/:academicYear/all",
   authenticateToken,
-  isSchoolAdmin,
+  isSchoolStaff,
   leaderboardController.getAllWeeklyLeaderboards
 );
 
@@ -41,7 +41,7 @@ router.get(
 router.get(
   "/top/:term/:academicYear/:category",
   authenticateToken,
-  isSchoolAdmin,
+  isSchoolStaff,
   leaderboardController.getTopPerformers
 );
 
@@ -63,7 +63,7 @@ router.get(
 router.get(
   "/school-course-progress",
   authenticateToken,
-  isSchoolAdmin,
+  isSchoolStaff,
   leaderboardController.getSchoolCourseProgress
 );
 
@@ -71,7 +71,9 @@ router.get(
 router.get(
   "/school-weekly-matrix",
   authenticateToken,
-  isSchoolAdmin,
+  // The handler reads req.query.schoolId for a system administrator, so it is
+  // written to serve one; the guard was refusing the role the code supports.
+  requireRole("system_admin", "school_admin", "teacher"),
   leaderboardController.getSchoolWeeklyMatrix
 );
 
@@ -79,7 +81,7 @@ router.get(
 router.get(
   "/school-completion-summary",
   authenticateToken,
-  isSchoolAdmin,
+  isSchoolStaff,
   leaderboardController.getSchoolCompletionSummary
 );
 

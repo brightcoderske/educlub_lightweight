@@ -1,5 +1,8 @@
 process.env.NODE_ENV = "test";
-process.env.DATABASE_URL ||= "postgresql://educlub_test:educlub_test@127.0.0.1:5432/educlub_test";
+// src/config/db.js only honours DATABASE_URL when it names the mysql scheme,
+// and otherwise falls back to the discrete MYSQL_* settings. A postgresql://
+// default here was silently ignored rather than pointing anywhere real.
+process.env.DATABASE_URL ||= "mysql://educlub_test:educlub_test@127.0.0.1:3306/educlub_test";
 process.env.JWT_SECRET ||= "test-only-jwt-secret-that-is-longer-than-thirty-two-characters";
 process.env.EMAIL_HOST ||= "localhost";
 process.env.EMAIL_PORT ||= "1025";

@@ -1,7 +1,6 @@
 const { query } = require("../config");
 const reportsService = require("../services/reports.service");
 const academicService = require("../services/academic.service");
-const path = require("path");
 const teacherAssignmentsService = require("../services/teacherAssignments.service");
 
 async function ensureLearnerAccess(req, learnerId) {
@@ -20,7 +19,7 @@ async function ensureLearnerAccess(req, learnerId) {
   }
 
   if (req.user.role === "school_admin") {
-    return learner.school_id === req.user.schoolId;
+    return Number(learner.school_id) === Number(req.user.schoolId);
   }
   if (req.user.role === "teacher") {
     if (Number(learner.school_id) !== Number(req.user.schoolId)) return false;
@@ -35,7 +34,7 @@ async function ensureLearnerAccess(req, learnerId) {
     }
   }
 
-  return learner.user_id === req.user.userId;
+  return Number(learner.user_id) === Number(req.user.userId);
 }
 
 async function getAllReports(req, res) {
@@ -92,7 +91,7 @@ async function getSchoolReports(req, res) {
   try {
     if (
       req.user.role === "school_admin" &&
-      Number(req.params.schoolId) !== req.user.schoolId
+      Number(req.params.schoolId) !== Number(req.user.schoolId)
     ) {
       return res.status(403).json({ error: "School is outside your access" });
     }
@@ -116,6 +115,27 @@ async function getSchoolReports(req, res) {
 
 async function getCourseReports(req, res) {
   try {
+    // This route had no role guard and no school check, so any signed-in
+    // account - including a learner - could read every learner's report for
+    // any course id by walking the ids.
+    if (req.user.role === "learner") {
+      return res.status(403).json({ error: "Course reports are staff only" });
+    }
+
+    if (req.user.role !== "system_admin") {
+      const courseResult = await query(
+        "SELECT school_id FROM courses WHERE id = $1",
+        [req.params.courseId]
+      );
+      const course = courseResult.rows[0];
+      if (!course) {
+        return res.status(404).json({ error: "Course not found" });
+      }
+      if (Number(course.school_id) !== Number(req.user.schoolId)) {
+        return res.status(403).json({ error: "Course is outside your access" });
+      }
+    }
+
     if (req.user.role === "teacher") {
       await teacherAssignmentsService.assertTeacherCourseAccess(
         req.user,
@@ -128,8 +148,12 @@ async function getCourseReports(req, res) {
        JOIN learners l ON r.learner_id = l.id
        JOIN courses c ON r.course_id = c.id
        WHERE r.course_id = $1
+         AND ($2::integer IS NULL OR l.school_id = $2::integer)
        ORDER BY r.created_at DESC`,
-      [req.params.courseId]
+      [
+        req.params.courseId,
+        req.user.role === "system_admin" ? null : Number(req.user.schoolId),
+      ]
     );
     res.json(result.rows);
   } catch (error) {

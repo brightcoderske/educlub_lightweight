@@ -1,6 +1,8 @@
 const { error } = require("../utils/logger");
 
-function errorHandler(err, req, res, next) {
+// Express only treats a handler as error middleware when it declares four
+// parameters, so the unused one has to stay in the signature.
+function errorHandler(err, req, res, _next) {
   error("request_failed", { requestId: req.requestId, code: err.code, name: err.name, message: err.message, stack: process.env.NODE_ENV === "development" ? err.stack : undefined });
 
   if (err.name === 'ValidationError') {

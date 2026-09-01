@@ -1,4 +1,5 @@
 const { query } = require("../config");
+const { scoreTypingAttempt } = require("./typingScoring");
 
 function numberInRange(value, min, max, fallback = min) {
   const number = Number(value);
@@ -35,7 +36,7 @@ async function getProgress(user) {
             activity_key,
             activity_title,
             COUNT(*)::integer AS attempts,
-            BOOL_OR(passed) AS passed,
+            MAX(passed) AS passed,
             MAX(net_wpm)::numeric(8, 2) AS best_net_wpm,
             MAX(raw_wpm)::numeric(8, 2) AS best_raw_wpm,
             MAX(accuracy)::numeric(5, 2) AS best_accuracy,
@@ -65,12 +66,28 @@ async function submitAttempt(user, data = {}) {
   }
 
   const levelNumber = numberInRange(data.level_number, 1, 50, 1);
-  const durationSeconds = numberInRange(data.duration_seconds, 1, 3600, 60);
-  const rawWpm = numberInRange(data.raw_wpm, 0, 300, 0);
-  const netWpm = numberInRange(data.net_wpm, 0, 300, 0);
-  const accuracy = numberInRange(data.accuracy, 0, 100, 0);
-  const mistakes = Math.round(numberInRange(data.mistakes, 0, 10000, 0));
-  const passed = data.passed === true || data.passed === "true";
+
+  // Marks are recomputed here from the passage and the keystrokes. The browser
+  // used to be believed outright, so a learner could post a perfect score for an
+  // activity they never typed, and that score reached the teacher reports.
+  const targetText = String(data.target_text || "");
+  const score = scoreTypingAttempt(
+    targetText,
+    data.typed_text,
+    data.duration_seconds,
+    numberInRange(data.duration_seconds, 1, 3600, 60),
+  );
+  const durationSeconds = Math.round(score.duration_seconds);
+  const rawWpm = numberInRange(score.raw_wpm, 0, 300, 0);
+  const netWpm = numberInRange(score.final_score, 0, 300, 0);
+  const accuracy = numberInRange(score.accuracy, 0, 100, 0);
+  const mistakes = Math.round(numberInRange(score.mistakes, 0, 10000, 0));
+
+  // An activity passes on the marks just calculated, never on a client claim.
+  const goalWpm = numberInRange(data.goal_wpm, 0, 300, 0);
+  const accuracyGoal = numberInRange(data.accuracy_goal, 0, 100, 100);
+  const finished = score.expected_words > 0 && score.completed_words >= score.expected_words;
+  const passed = finished && accuracy >= accuracyGoal && netWpm >= goalWpm;
 
   const result = await query(
     `INSERT INTO typing_practice_attempts (
@@ -151,7 +168,7 @@ async function getReport(user, filters = {}) {
               track_key,
               level_number,
               activity_key,
-              BOOL_OR(passed) AS passed,
+              MAX(passed) AS passed,
               COUNT(*)::integer AS attempts,
               MAX(net_wpm)::numeric(8, 2) AS best_net_wpm,
               MAX(accuracy)::numeric(5, 2) AS best_accuracy,
@@ -172,10 +189,15 @@ async function getReport(user, filters = {}) {
        GROUP BY learner_id
      ),
      latest_activity AS (
-       SELECT DISTINCT ON (learner_id)
-              learner_id, track_key, level_number, activity_key
-       FROM activity_summary
-       ORDER BY learner_id, last_attempt_at DESC
+       SELECT learner_id, track_key, level_number, activity_key
+       FROM (
+         SELECT learner_id, track_key, level_number, activity_key,
+                ROW_NUMBER() OVER (
+                  PARTITION BY learner_id ORDER BY last_attempt_at DESC
+                ) AS recency
+         FROM activity_summary
+       ) ranked
+       WHERE recency = 1
      )
      SELECT l.id AS learner_id,
             l.full_name,

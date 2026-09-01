@@ -659,7 +659,9 @@ Return JSON only:
   ];
 }
 
-function buildLearnerAiActionPrompt(activity = {}, action = "") {
+// The activity is part of the call shape, but the prompt is chosen by action
+// alone; it stays in the signature so callers keep passing it positionally.
+function buildLearnerAiActionPrompt(_activity = {}, action = "") {
   const actionKey = String(action || "explain_simple").trim();
   return LEARNER_AI_ACTIONS[actionKey] || LEARNER_AI_ACTIONS.explain_simple;
 }

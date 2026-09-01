@@ -19,5 +19,20 @@ test("cPanel deployment copies and restores backend utility scripts", () => {
 });
 
 test("cPanel deployment migrates the database before restarting", () => {
-  assert.match(deploymentScript, /npm run db:migrate\s+mkdir -p "\$APP_ROOT\/tmp"/);
+  // Assert the ordering itself rather than the two commands being adjacent, so
+  // that adding progress output between them does not fail the deployment.
+  // Only the deployment body counts: the rollback function is defined earlier in
+  // the file but runs on failure, and it restarts without migrating on purpose.
+  const trapAt = deploymentScript.indexOf("trap rollback ERR");
+  assert.ok(trapAt > -1, "the deployment must install its rollback trap");
+  const deploymentBody = deploymentScript.slice(trapAt);
+
+  const migrateAt = deploymentBody.indexOf("npm run db:migrate");
+  const restartAt = deploymentBody.indexOf('touch "$APP_ROOT/tmp/restart.txt"');
+  assert.ok(migrateAt > -1, "the deployment must run database migrations");
+  assert.ok(restartAt > -1, "the deployment must request a Passenger restart");
+  assert.ok(
+    migrateAt < restartAt,
+    "migrations must finish before the application is restarted",
+  );
 });

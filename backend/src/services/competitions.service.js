@@ -100,7 +100,7 @@ async function listCompetitionsForLearner(userId) {
             rr.quiz_score,
             rr.typing_wpm,
             rr.typing_accuracy,
-            rr.calculated_rank AS rank,
+            rr.calculated_rank AS \`rank\`,
             rr.participant_count
      FROM competitions c
      LEFT JOIN competition_enrollments ce
@@ -436,12 +436,11 @@ function normalizeCompetitionReportFilters(filters = {}) {
 async function backfillCompetitionResultMetadata() {
   await query(
     `UPDATE competition_results cr
-     SET learner_grade = COALESCE(cr.learner_grade, l.grade),
-         competition_type = COALESCE(cr.competition_type, c.competition_type, 'quiz')
-     FROM learners l, competitions c
-     WHERE cr.learner_id = l.id
-       AND cr.competition_id = c.id
-       AND (cr.learner_grade IS NULL OR cr.competition_type IS NULL)`
+       JOIN learners l ON l.id = cr.learner_id
+       JOIN competitions c ON c.id = cr.competition_id
+     SET cr.learner_grade = COALESCE(cr.learner_grade, l.grade),
+         cr.competition_type = COALESCE(cr.competition_type, c.competition_type, 'quiz')
+     WHERE cr.learner_grade IS NULL OR cr.competition_type IS NULL`
   );
 }
 
@@ -483,7 +482,7 @@ async function getSchoolCompetitionReport(schoolId, filters = {}) {
             RANK() OVER (
               PARTITION BY ce.competition_id, COALESCE(cr.result_stage, $6), l.grade
               ORDER BY cr.total_score DESC NULLS LAST
-            ) AS rank,
+            ) AS \`rank\`,
             COUNT(cr.id) OVER (
               PARTITION BY ce.competition_id, COALESCE(cr.result_stage, $6), l.grade
             )::integer AS participant_count

@@ -9,25 +9,25 @@ router.get("/tests/:id", authenticateToken, quizTestsController.getTest);
 router.post(
   "/tests",
   authenticateToken,
-  requireRole("system_admin"),
+  requireRole("system_admin", "school_admin", "teacher"),
   quizTestsController.createTest,
 );
 router.put(
   "/tests/:id",
   authenticateToken,
-  requireRole("system_admin"),
+  requireRole("system_admin", "school_admin", "teacher"),
   quizTestsController.updateTest,
 );
 router.post(
   "/tests/:id/duplicate",
   authenticateToken,
-  requireRole("system_admin"),
+  requireRole("system_admin", "school_admin", "teacher"),
   quizTestsController.duplicateTest,
 );
 router.delete(
   "/tests/:id",
   authenticateToken,
-  requireRole("system_admin"),
+  requireRole("system_admin", "school_admin", "teacher"),
   quizTestsController.deleteTest,
 );
 router.post(

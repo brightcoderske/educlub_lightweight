@@ -1,6 +1,15 @@
 const { query } = require("../config");
 const { normalizeQuestionMarks } = require("./quizAttemptMarks");
 const { answersMatch } = require("./quizAnswerPolicy");
+const {
+  resolveAssessmentSchoolId,
+  resolveAssessmentType,
+  assertAssessmentManageAccess,
+} = require("./assessmentOwnership");
+const {
+  resolveAssessmentScope,
+  requireConfiguredAssessmentScope,
+} = require("./assessmentTermScope");
 
 const QUIZ_CATEGORIES = new Set(["quiz", "maths", "science", "stem"]);
 
@@ -133,17 +142,14 @@ async function listTests(user, filters = {}) {
   const values = [];
   let where = "WHERE 1=1";
 
+  const period = await resolveAssessmentScope(user, filters);
+  if (!period) return [];
+  values.push(period.term, period.academicYear);
+  where += " AND qt.term = $1 AND qt.academic_year = $2";
+
   if (filters.quiz_type) {
     values.push(filters.quiz_type);
     where += ` AND qt.quiz_type = $${values.length}`;
-  }
-  if (filters.term) {
-    values.push(filters.term);
-    where += ` AND qt.term = $${values.length}`;
-  }
-  if (filters.academic_year) {
-    values.push(Number(filters.academic_year));
-    where += ` AND qt.academic_year = $${values.length}`;
   }
   if (filters.week_number) {
     values.push(Number(filters.week_number));
@@ -240,34 +246,13 @@ async function saveQuestions(testId, questions = []) {
   }
 }
 
-async function getTest(testId, user) {
-  const tests = await listTests(
-    { ...user, role: user.role === "learner" ? "learner" : "system_admin" },
-    { id: testId },
-  );
-  const base =
-    tests.find((test) => Number(test.id) === Number(testId)) ||
-    (
-      await query(
-        `SELECT qt.*,
-                NULL::date AS term_start_date,
-                NULL::date AS term_end_date,
-                NULL::date AS week_start_date,
-                NULL::date AS week_end_date,
-                0::integer AS question_count
-         FROM quiz_tests qt
-         WHERE qt.id = $1::integer`,
-        [testId],
-      )
-    ).rows[0];
+// The caller's own role decides what comes back. This used to look the quiz up
+// as a system administrator for every non-learner, which handed a school admin
+// any other school's quiz - answer key included - from /tests/:id.
+async function getTest(testId, user, filters = {}) {
+  const tests = await listTests(user, { ...filters, id: testId });
+  const base = tests.find((test) => Number(test.id) === Number(testId));
   if (!base) return null;
-
-  if (user.role === "learner") {
-    const visible = (await listTests(user, {})).some(
-      (test) => Number(test.id) === Number(testId),
-    );
-    if (!visible) return null;
-  }
 
   const questions = await query(
     `SELECT *
@@ -289,9 +274,19 @@ async function getTest(testId, user) {
   };
 }
 
+async function getTestRow(testId) {
+  const result = await query(
+    "SELECT * FROM quiz_tests WHERE id = $1::integer",
+    [testId],
+  );
+  return result.rows[0] || null;
+}
+
 async function createTest(user, data) {
   validateQuestionAllocation(data);
-  const quizType = data.quiz_type === "competition" ? "competition" : "weekly";
+  const period = await requireConfiguredAssessmentScope(data);
+  const quizType = resolveAssessmentType(user, data.quiz_type);
+  const schoolId = resolveAssessmentSchoolId(user);
   const result = await query(
     `INSERT INTO quiz_tests (
        name, description, term, academic_year, week_number, quiz_type, competition_id,
@@ -309,12 +304,12 @@ async function createTest(user, data) {
     [
       data.name,
       data.description || "",
-      data.term || "",
-      data.academic_year || "",
+      period.term,
+      period.academicYear,
       data.week_number || "",
       quizType,
       quizType === "competition" ? data.competition_id || "" : "",
-      data.school_id || "",
+      schoolId === null ? "" : String(schoolId),
       normalizeCategory(data.quiz_category),
       JSON.stringify(normalizeList(data.eligible_grades)),
       JSON.stringify(normalizeList(data.eligible_streams)),
@@ -328,12 +323,21 @@ async function createTest(user, data) {
     ],
   );
   await saveQuestions(result.rows[0].id, data.questions || []);
-  return getTest(result.rows[0].id, user);
+  return getTest(result.rows[0].id, user, {
+    term: period.term,
+    academic_year: period.academicYear,
+  });
 }
 
 async function updateTest(user, testId, data) {
+  const existing = await getTestRow(testId);
+  if (!existing) return null;
+  assertAssessmentManageAccess(user, existing, "quiz");
+
   validateQuestionAllocation(data);
-  const quizType = data.quiz_type === "competition" ? "competition" : "weekly";
+  const period = await requireConfiguredAssessmentScope(data);
+  const quizType = resolveAssessmentType(user, data.quiz_type);
+  const schoolId = resolveAssessmentSchoolId(user);
   const result = await query(
     `UPDATE quiz_tests
      SET name = $1::varchar,
@@ -359,12 +363,12 @@ async function updateTest(user, testId, data) {
     [
       data.name,
       data.description || "",
-      data.term || "",
-      data.academic_year || "",
+      period.term,
+      period.academicYear,
       data.week_number || "",
       quizType,
       quizType === "competition" ? data.competition_id || "" : "",
-      data.school_id || "",
+      schoolId === null ? "" : String(schoolId),
       normalizeCategory(data.quiz_category),
       JSON.stringify(normalizeList(data.eligible_grades)),
       JSON.stringify(normalizeList(data.eligible_streams)),
@@ -379,11 +383,21 @@ async function updateTest(user, testId, data) {
   );
   if (!result.rows[0]) return null;
   await saveQuestions(testId, data.questions || []);
-  return getTest(testId, user);
+  return getTest(testId, user, {
+    term: period.term,
+    academic_year: period.academicYear,
+  });
 }
 
 async function duplicateTest(user, testId) {
-  const source = await getTest(testId, { ...user, role: "system_admin" });
+  const existing = await getTestRow(testId);
+  if (!existing) return null;
+  assertAssessmentManageAccess(user, existing, "quiz");
+
+  const source = await getTest(testId, user, {
+    term: existing.term,
+    academic_year: existing.academic_year,
+  });
   if (!source) return null;
   return createTest(user, {
     ...source,
@@ -394,7 +408,11 @@ async function duplicateTest(user, testId) {
   });
 }
 
-async function deleteTest(testId) {
+async function deleteTest(user, testId) {
+  const existing = await getTestRow(testId);
+  if (!existing) return null;
+  assertAssessmentManageAccess(user, existing, "quiz");
+
   const result = await query(
     "DELETE FROM quiz_tests WHERE id = $1::integer RETURNING *",
     [testId],
@@ -522,16 +540,10 @@ async function submitAttempt(user, testId, data = {}) {
 }
 
 async function getReport(user, filters = {}) {
-  const values = [];
-  let where = "WHERE qt.quiz_type = 'weekly'";
-  if (filters.term) {
-    values.push(filters.term);
-    where += ` AND qt.term = $${values.length}`;
-  }
-  if (filters.academic_year) {
-    values.push(Number(filters.academic_year));
-    where += ` AND qt.academic_year = $${values.length}`;
-  }
+  const period = await resolveAssessmentScope(user, filters);
+  if (!period) return [];
+  const values = [period.term, period.academicYear];
+  let where = "WHERE qt.quiz_type = 'weekly' AND qt.term = $1 AND qt.academic_year = $2";
   if (filters.week_number) {
     values.push(Number(filters.week_number));
     where += ` AND qt.week_number = $${values.length}`;
@@ -570,8 +582,10 @@ async function getReport(user, filters = {}) {
   }));
 }
 
-async function getAttemptReview(user, testId) {
-  const values = [Number(testId)];
+async function getAttemptReview(user, testId, filters = {}) {
+  const period = await resolveAssessmentScope(user, filters);
+  if (!period) return null;
+  const values = [Number(testId), period.term, period.academicYear];
   let testScope = "";
   let learnerScope = "";
 
@@ -585,6 +599,8 @@ async function getAttemptReview(user, testId) {
     `SELECT qt.*
      FROM quiz_tests qt
      WHERE qt.id = $1::integer
+       AND qt.term = $2::varchar
+       AND qt.academic_year = $3::integer
        ${testScope}
      LIMIT 1`,
     values,
@@ -637,8 +653,10 @@ async function getAttemptReview(user, testId) {
   };
 }
 
-async function updateAttemptMarks(user, attemptId, data = {}) {
-  const values = [Number(attemptId)];
+async function updateAttemptMarks(user, attemptId, data = {}, filters = {}) {
+  const period = await resolveAssessmentScope(user, filters);
+  if (!period) return null;
+  const values = [Number(attemptId), period.term, period.academicYear];
   let scope = "";
   if (user.role === "school_admin" || user.role === "teacher") {
     values.push(Number(user.schoolId));
@@ -653,6 +671,8 @@ async function updateAttemptMarks(user, attemptId, data = {}) {
      JOIN learners l ON l.id = qta.learner_id
      JOIN quiz_tests qt ON qt.id = qta.quiz_test_id
      WHERE qta.id = $1::integer
+       AND qt.term = $2::varchar
+       AND qt.academic_year = $3::integer
        ${scope}
      LIMIT 1`,
     values,

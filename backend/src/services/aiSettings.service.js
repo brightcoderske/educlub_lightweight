@@ -77,6 +77,8 @@ function decryptSecretFromStorage(ciphertext) {
 }
 
 function sanitizeProviderForClient(provider) {
+  // The two key fields are pulled out to drop them, never to read them: what
+  // goes to the browser is whatever is left over.
   const {
     api_key: apiKey,
     api_key_ciphertext: apiKeyCiphertext,

@@ -169,7 +169,7 @@ function normalizeMfaPolicy(value) {
 
 async function getMfaPolicy() {
   const result = await query(
-    "SELECT value FROM system_settings WHERE key = 'mfa_policy'",
+    "SELECT value FROM system_settings WHERE `key` = 'mfa_policy'",
   );
   return normalizeMfaPolicy(result.rows[0]?.value);
 }
@@ -177,7 +177,7 @@ async function getMfaPolicy() {
 async function updateMfaPolicy(policy, updatedByUserId) {
   const nextPolicy = normalizeMfaPolicy(policy);
   const result = await query(
-    `INSERT INTO system_settings (key, value, updated_by_user_id, updated_at)
+    `INSERT INTO system_settings (\`key\`, value, updated_by_user_id, updated_at)
      VALUES ('mfa_policy', $1::jsonb, $2, NOW())
      ON CONFLICT (key) DO UPDATE
      SET value = EXCLUDED.value,

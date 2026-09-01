@@ -793,13 +793,13 @@ async function getTermBadges(learnerId, term, academicYear) {
          SELECT *, ROW_NUMBER() OVER (
            PARTITION BY typing_test_id
            ORDER BY net_wpm DESC, accuracy DESC, attempt_number ASC
-         ) AS rank
+         ) AS \`rank\`
          FROM completed_trials
        )
        SELECT ranked.*, tt.name AS test_name
        FROM ranked
        JOIN typing_tests tt ON tt.id = ranked.typing_test_id
-       WHERE ranked.rank = 1
+       WHERE ranked.\`rank\` = 1
        ORDER BY ranked.awarded_at DESC`,
       [learnerId, startDate, endDate]
     ),
@@ -856,7 +856,7 @@ async function getLearnerCompetitionResults(learnerId, term, academicYear) {
               RANK() OVER (
                 PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
                 ORDER BY cr.total_score DESC NULLS LAST
-              ) AS rank,
+              ) AS \`rank\`,
               COUNT(*) OVER (
                 PARTITION BY cr.competition_id, cr.result_stage, cr.learner_grade
               )::integer AS participant_count
@@ -1336,7 +1336,7 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
       });
     moduleY += 34;
   } else if (reportSettings.show_active_courses) {
-    activeCourseProgress.forEach((course, courseIndex) => {
+    activeCourseProgress.forEach((course) => {
       const title = `ACTIVE COURSE: ${String(
         course.course_name || "Course"
       ).toUpperCase()}`;
@@ -1485,45 +1485,6 @@ async function generateMultipleReportsPDF(learnerIds, term, academicYear) {
   return new Promise((resolve, reject) => {
     output.on("close", () => resolve(zipPath));
     output.on("error", reject);
-  });
-}
-
-// Simple bar chart drawing function for PDF
-function drawBarChart(doc, data, x, y, width, height, title) {
-  if (data.length === 0) {
-    doc
-      .fontSize(10)
-      .fillColor("black")
-      .text(`No ${title} data available.`, x, y);
-    return;
-  }
-
-  const barWidth = width / data.length - 10;
-  const maxHeight = height - 30;
-
-  // Draw axes
-  doc
-    .moveTo(x, y)
-    .lineTo(x, y + height)
-    .lineTo(x + width, y + height)
-    .stroke();
-
-  data.forEach((item, index) => {
-    const barHeight = (item.score / 100) * maxHeight;
-    const barX = x + index * (barWidth + 10) + 5;
-    const barY = y + height - barHeight;
-
-    // Draw bar
-    doc.rect(barX, barY, barWidth, barHeight).fillAndStroke("#4CAF50");
-
-    // Draw score label
-    doc
-      .fontSize(10)
-      .fillColor("black")
-      .text(`${item.score}%`, barX + barWidth / 2 - 10, barY - 15);
-
-    // Draw week label
-    doc.text(`W${item.week}`, barX + barWidth / 2 - 5, y + height + 10);
   });
 }
 

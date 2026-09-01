@@ -172,7 +172,7 @@ function validateScratchIntermediate(definition) {
       throw new Error(`${module.title} activities must use the required Scratch activity types.`);
     }
 
-    const [overview, visual, algorithm, practice, project, challenge, quiz, reflection] = module.activities;
+    const [, visual, algorithm, practice, project, challenge, quiz, reflection] = module.activities;
     for (const item of [visual, algorithm]) {
       const media = item.content?.media || {};
       if (!media.image_url?.startsWith("/course-assets/scratch-intermediate/") || !media.image_alt?.trim()) {

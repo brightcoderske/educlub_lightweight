@@ -54,7 +54,7 @@ function submissionContent(module) {
   };
 }
 
-function teacherNotes(module, moduleNumber) {
+function teacherNotes(module, _moduleNumber) {
   return `Essential concept: learners use ${module.focus} to create ${module.outcome}. Before the session, open Scratch, check saving and .sb3 download access, and prepare a tiny demonstration rather than a finished answer. Ask learners to predict each algorithm step before coding. Common misconception: ${module.misconception} Support learners by reading one step at a time, pairing vocabulary with visible blocks, and testing one script in isolation. Extend confident learners with the optional challenge. Expected evidence includes ${module.projectChecks.join(", ")}. Project feedback rubric: Growing: the core idea is partly working and the learner needs help to explain or test it. Ready: the required behavior works, the learner used the algorithm, and the success checks have evidence. Excellent: the project is reliable, clearly explained, tested by another user, and thoughtfully improved. Give feedback on planning, working behavior, testing, clarity, and explanation. Remind learners to use safe names, keep private information out of projects, and seek teacher approval before sharing anything publicly.`;
 }
 

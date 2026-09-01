@@ -2,6 +2,7 @@ const { query } = require("../config");
 const leaderboardService = require("../services/leaderboard.service");
 const courseProgressService = require("../services/courseProgress.service");
 const academicService = require("../services/academic.service");
+const { resolveAssessmentScope } = require("../services/assessmentTermScope");
 
 async function ensureLearnerAccess(req, learnerId) {
   if (req.user.role === "system_admin") return true;
@@ -14,10 +15,10 @@ async function ensureLearnerAccess(req, learnerId) {
   if (!learner) return false;
 
   if (req.user.role === "school_admin" || req.user.role === "teacher") {
-    return learner.school_id === req.user.schoolId;
+    return Number(learner.school_id) === Number(req.user.schoolId);
   }
 
-  return learner.user_id === req.user.userId;
+  return Number(learner.user_id) === Number(req.user.userId);
 }
 
 async function getWeeklyLeaderboard(req, res) {
@@ -97,6 +98,10 @@ async function getLearnerPosition(req, res) {
   try {
     const { learnerId, weekNumber, term, academicYear, category } = req.params;
 
+    if (!(await ensureLearnerAccess(req, learnerId))) {
+      return res.status(403).json({ error: "Learner is outside your access" });
+    }
+
     const position = await leaderboardService.getLearnerPosition(
       parseInt(learnerId),
       parseInt(weekNumber),
@@ -116,6 +121,10 @@ async function getLearnerTrend(req, res) {
   try {
     let { learnerId, term, academicYear, category } = req.params;
     const { term_type } = req.query;
+
+    if (!(await ensureLearnerAccess(req, learnerId))) {
+      return res.status(403).json({ error: "Learner is outside your access" });
+    }
 
     // If term and academicYear are not provided, use the active term
     if (!term || !academicYear) {
@@ -189,6 +198,10 @@ async function getLearnerWeeklySummary(req, res) {
   try {
     let { learnerId, term, academicYear } = req.params;
     const { term_type } = req.query;
+
+    if (!(await ensureLearnerAccess(req, learnerId))) {
+      return res.status(403).json({ error: "Learner is outside your access" });
+    }
 
     // If term and academicYear are not provided, use the active term
     if (!term || !academicYear) {
@@ -331,16 +344,11 @@ async function getSchoolWeeklyMatrix(req, res) {
       return res.status(400).json({ error: "School is required" });
     }
 
-    let { term, academicYear } = req.query;
-    if (!term || !academicYear) {
-      const active = await academicService.getActiveTerm();
-      term = term || active?.name || null;
-      academicYear = academicYear || active?.academic_year || null;
-    }
-
-    if (!term || !academicYear) {
+    const period = await resolveAssessmentScope(req.user, req.query);
+    if (!period) {
       return res.json({ term: null, academicYear: null, weeks: [], learners: [] });
     }
+    const { term, academicYear } = period;
 
     const result = await query(
       `SELECT l.id AS learner_id, l.full_name, l.grade, l.stream,

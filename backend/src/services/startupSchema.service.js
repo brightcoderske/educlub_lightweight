@@ -353,10 +353,29 @@ async function runStartupSchemaMigration(client) {
   // AI defaults are data seeds and remain explicit; schema migrations never silently seed them.
 }
 
+// A handful of tables that nothing works without. Checking a few rather than
+// one catches a half-applied schema, which is the failure worth refusing to
+// start on.
+const REQUIRED_TABLES = ["users", "schools", "learners", "courses"];
+
 async function ensureStartupSchema() {
-  const result = await query("SELECT to_regclass('public.schema_migrations') AS migrations, to_regclass('public.users') AS users");
-  if (!result.rows[0]?.migrations || !result.rows[0]?.users) {
-    throw new Error("Database schema is not ready. Run `npm run db:migrate` before starting the server.");
+  // to_regclass() is PostgreSQL-only; information_schema is the portable
+  // equivalent and is what MySQL exposes.
+  const placeholders = REQUIRED_TABLES.map((_, i) => `$${i + 1}`).join(", ");
+  const result = await query(
+    `SELECT TABLE_NAME FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (${placeholders})`,
+    REQUIRED_TABLES,
+  );
+
+  const present = new Set(result.rows.map((row) => String(row.TABLE_NAME).toLowerCase()));
+  const missing = REQUIRED_TABLES.filter((table) => !present.has(table));
+
+  if (missing.length) {
+    throw new Error(
+      `Database schema is not ready - missing table(s): ${missing.join(", ")}. ` +
+        "Run `npm run db:apply-schema` before starting the server.",
+    );
   }
 }
 

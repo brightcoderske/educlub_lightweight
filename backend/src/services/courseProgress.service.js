@@ -31,32 +31,28 @@ async function cacheProgress(learnerId, courseId, term, academicYear, progressDa
 async function cacheProgressBatch(entries) {
   if (!entries.length) return;
 
+  const columns = 5;
+  const rows = entries
+    .map((entry, index) => {
+      const base = index * columns;
+      const slots = Array.from({ length: columns }, (_, offset) => `$${base + offset + 1}`);
+      return `(${slots.join(", ")}, NOW())`;
+    })
+    .join(", ");
+
   await query(
     `INSERT INTO progress_cache (learner_id, course_id, term, academic_year, progress_data, last_synced_at)
-     SELECT *, NOW()
-     FROM unnest($1::int[], $2::int[], $3::varchar[], $4::int[], $5::jsonb[])
-       AS batch(learner_id, course_id, term, academic_year, progress_data)
+     VALUES ${rows}
      ON CONFLICT (learner_id, course_id, term, academic_year)
      DO UPDATE SET progress_data = EXCLUDED.progress_data, last_synced_at = NOW()`,
-    [
-      entries.map((entry) => entry.learnerId),
-      entries.map((entry) => entry.courseId),
-      entries.map((entry) => entry.term),
-      entries.map((entry) => Number(entry.academicYear)),
-      entries.map((entry) => JSON.stringify(entry.progressData)),
-    ]
+    entries.flatMap((entry) => [
+      entry.learnerId,
+      entry.courseId,
+      entry.term,
+      Number(entry.academicYear),
+      JSON.stringify(entry.progressData),
+    ])
   );
-}
-
-async function getCachedProgressForCourse(learnerId, courseId, term, academicYear) {
-  const cached = await query(
-    `SELECT progress_data
-     FROM progress_cache
-     WHERE learner_id = $1 AND course_id = $2 AND term = $3 AND academic_year = $4
-     LIMIT 1`,
-    [learnerId, courseId, term, Number(academicYear)]
-  );
-  return cached.rows[0]?.progress_data || null;
 }
 
 async function getCachedCourseProgressForPeriod(learnerId, term, academicYear) {
@@ -150,7 +146,7 @@ async function buildNativeCourseProgressForLearners(learnerIds, course) {
        COALESCE(la.availability_mode, 'required') AS availability_mode,
        COALESCE(ap.status, 'not_started') AS progress_status,
        ap.score
-     FROM unnest($1::int[]) AS target(learner_id)
+     FROM (SELECT id AS learner_id FROM learners WHERE id = ANY($1)) AS target
      CROSS JOIN course_modules cm
      LEFT JOIN learning_activities la
        ON la.module_id = cm.id
@@ -387,22 +383,31 @@ async function getSchoolCourseProgress({
   params.push(term || null, academicYear ? Number(academicYear) : null);
 
   const learnersResult = await query(
-    `SELECT DISTINCT ON (l.id)
-            l.id, l.full_name, l.grade, l.stream, l.email,
-            a.term AS allocation_term,
-            a.academic_year AS allocation_academic_year,
-            c.name AS course_name
-     FROM learners l
-     JOIN course_allocations a ON a.learner_id = l.id
-     JOIN courses c ON c.id = a.course_id
-     WHERE l.school_id = $1
-       AND a.course_id = $2
-       AND a.status IN ('active', 'in_progress', 'completed')
-       AND COALESCE(c.course_category, 'general') = 'general'
-       AND (${termParam}::varchar IS NULL OR a.term = ${termParam}::varchar)
-       AND (${yearParam}::integer IS NULL OR a.academic_year = ${yearParam}::integer)
-       ${filters}
-     ORDER BY l.id, a.allocated_at DESC`,
+    // DISTINCT ON (l.id) ... ORDER BY l.id, a.allocated_at DESC keeps the most
+    // recent allocation per learner. MySQL has no DISTINCT ON, so the same rule
+    // is expressed as a numbered window filtered to the first row.
+    `SELECT id, full_name, grade, stream, email,
+            allocation_term, allocation_academic_year, course_name
+     FROM (
+       SELECT l.id, l.full_name, l.grade, l.stream, l.email,
+              a.term AS allocation_term,
+              a.academic_year AS allocation_academic_year,
+              c.name AS course_name,
+              ROW_NUMBER() OVER (
+                PARTITION BY l.id ORDER BY a.allocated_at DESC
+              ) AS recency
+       FROM learners l
+       JOIN course_allocations a ON a.learner_id = l.id
+       JOIN courses c ON c.id = a.course_id
+       WHERE l.school_id = $1
+         AND a.course_id = $2
+         AND a.status IN ('active', 'in_progress', 'completed')
+         AND COALESCE(c.course_category, 'general') = 'general'
+         AND (${termParam}::varchar IS NULL OR a.term = ${termParam}::varchar)
+         AND (${yearParam}::integer IS NULL OR a.academic_year = ${yearParam}::integer)
+         ${filters}
+     ) ranked
+     WHERE recency = 1`,
     params
   );
 

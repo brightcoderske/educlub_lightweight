@@ -1,99 +1,5 @@
 const { query } = require("../config");
 
-function parsePercent(value) {
-  const match = String(value || "").match(/-?\d+(\.\d+)?/);
-  if (!match) return null;
-  const score = Number(match[0]);
-  return Number.isFinite(score)
-    ? Math.max(0, Math.min(100, Math.round(score)))
-    : null;
-}
-
-function stripHtml(value) {
-  return String(value || "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&ndash;/g, "-")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeName(value) {
-  return stripHtml(value)
-    .toLowerCase()
-    .replace(/^(quiz|assignment|lesson|page|url|file|scorm package)\b[:\s-]*/i, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractWeekNumber(value) {
-  const text = normalizeName(value);
-  const weekMatch = text.match(/\bweek\s*(\d{1,2})\b/);
-  if (weekMatch) return Number(weekMatch[1]);
-
-  const trailingNumber = text.match(/\bquiz\s*(\d{1,2})\b/);
-  return trailingNumber ? Number(trailingNumber[1]) : null;
-}
-
-function extractGradeRows(gradesTable = {}) {
-  const rows = gradesTable.tables?.[0]?.tabledata || [];
-  return rows
-    .filter((row) => /\bitem\b/.test(row.itemname?.class || ""))
-    .map((row, index) => ({
-      id: row.itemname?.id || `grade-row-${index + 1}`,
-      name: stripHtml(row.itemname?.content) || `Grade item ${index + 1}`,
-      score: parsePercent(row?.percentage?.content || row?.grade?.content || row?.grade),
-    }))
-    .filter((row) => !/^aggregation\s+course\s+total$/i.test(row.name));
-}
-
-function extractSectionWeekMap(content = []) {
-  const mapping = new Map();
-
-  (content || []).forEach((section) => {
-    const weekNumber = extractWeekNumber(
-      section.name || section.summary || `Week ${section.section || ""}`
-    );
-    if (!weekNumber) return;
-
-    const modules = Array.isArray(section.modules) ? section.modules : [];
-    modules.forEach((module) => {
-      const isQuiz =
-        String(module.modname || "").toLowerCase() === "quiz" ||
-        normalizeName(module.name).includes("quiz");
-      if (!isQuiz) return;
-
-      mapping.set(normalizeName(module.name), Number(weekNumber));
-    });
-  });
-
-  return mapping;
-}
-
-function extractWeeklyQuizPerformance(gradesTable = {}, content = []) {
-  const weekly = new Map();
-  const sectionWeekMap = extractSectionWeekMap(content);
-
-  extractGradeRows(gradesTable).forEach((row) => {
-    if (row.score === null) return;
-    const weekNumber =
-      extractWeekNumber(row.name) || sectionWeekMap.get(normalizeName(row.name));
-    if (!weekNumber) return;
-    const bucket = weekly.get(weekNumber) || [];
-    bucket.push(row.score);
-    weekly.set(weekNumber, bucket);
-  });
-
-  return [...weekly.entries()]
-    .map(([weekNumber, scores]) => ({
-      week_number: Number(weekNumber),
-      quiz_score: Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length),
-    }))
-    .sort((left, right) => left.week_number - right.week_number);
-}
-
 async function getWeeklyCourses(req, res) {
   try {
     const category = req.query.category;
@@ -108,6 +14,7 @@ async function getWeeklyCourses(req, res) {
     }
 
     let learnerJoin = "";
+    let scopeSql = "";
     if (req.user.role === "learner") {
       params.push(req.user.userId);
       learnerJoin = `
@@ -117,6 +24,11 @@ async function getWeeklyCourses(req, res) {
          AND a.learner_id = l.id
          AND a.status IN ('active', 'in_progress', 'completed')
       `;
+    } else if (req.user.role !== "system_admin") {
+      // School staff see their own school's weekly courses, not the catalogue
+      // of every school on the platform.
+      params.push(Number(req.user.schoolId) || 0);
+      scopeSql = ` AND c.school_id = $${params.length}::integer`;
     }
 
     const result = await query(
@@ -125,6 +37,7 @@ async function getWeeklyCourses(req, res) {
        ${learnerJoin}
        WHERE c.is_active = true
          ${categorySql}
+         ${scopeSql}
        ORDER BY c.course_category, c.name`,
       params
     );
@@ -151,6 +64,20 @@ async function syncWeeklyResults(req, res) {
       weekSql = ` AND qt.week_number = $${params.length}`;
     }
 
+    // A school admin syncing their own week used to rewrite weekly_marks for
+    // every learner in every school. Staff sync only their own learners; the
+    // system administrator keeps the cross-school rebuild.
+    let schoolSql = "";
+    if (req.user.role !== "system_admin") {
+      if (!req.user.schoolId) {
+        return res
+          .status(403)
+          .json({ error: "Your account is not linked to a school." });
+      }
+      params.push(Number(req.user.schoolId));
+      schoolSql = ` AND l.school_id = $${params.length}::integer`;
+    }
+
     const result = await query(
       `WITH best_scores AS (
          SELECT qta.learner_id,
@@ -160,10 +87,12 @@ async function syncWeeklyResults(req, res) {
                 MAX(qta.score)::integer AS quiz_score
          FROM quiz_test_attempts qta
          JOIN quiz_tests qt ON qt.id = qta.quiz_test_id
+         JOIN learners l ON l.id = qta.learner_id
          WHERE qt.quiz_type = 'weekly'
            AND qt.term = $1::varchar
            AND qt.academic_year = $2::integer
            ${weekSql}
+           ${schoolSql}
          GROUP BY qta.learner_id, qt.week_number, qt.term, qt.academic_year
        )
        INSERT INTO weekly_marks (learner_id, week_number, term, academic_year, quiz_score)

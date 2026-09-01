@@ -10,6 +10,8 @@ function validateFeedback(data = {}) {
 }
 
 function anonymizeFeedbackRow(row = {}) {
+  // Named only so they can be discarded - the identifying columns must not
+  // survive into the returned row.
   const { learner_id, learner_name, email, ...anonymous } = row;
   return anonymous;
 }
@@ -366,7 +368,7 @@ async function upsertModuleFeedback(moduleId, learner, data = {}) {
   return result.rows[0];
 }
 
-async function getModuleFeedbackSummary(moduleId, user = {}, filters = {}) {
+async function getModuleFeedbackSummary(moduleId, user = {}) {
   const { query } = require("../config");
   const params = [moduleId];
   let scope = "";

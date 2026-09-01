@@ -2,18 +2,6 @@ const { query } = require("../config");
 const fs = require("fs/promises");
 const path = require("path");
 
-async function ensureSchoolConfigColumns() {
-  await query(
-    "ALTER TABLE schools ADD COLUMN IF NOT EXISTS grades_config JSONB DEFAULT '[]'::jsonb"
-  );
-  await query(
-    "ALTER TABLE schools ADD COLUMN IF NOT EXISTS streams_config JSONB DEFAULT '[]'::jsonb"
-  );
-  await query(
-    "ALTER TABLE schools ADD COLUMN IF NOT EXISTS allow_self_registration BOOLEAN DEFAULT FALSE"
-  );
-}
-
 function getPublicUploadUrl(req, relativePath) {
   return `${req.protocol}://${req.get("host")}${relativePath.replace(
     /\\/g,
@@ -53,16 +41,38 @@ function cleanSchoolRow(row) {
   };
 }
 
+// Only the system administrator has a reason to see the whole directory of
+// schools. Everyone else - school admin, teacher, learner - sees the one school
+// they belong to, so a school's contact details and roll size are not readable
+// by anybody who happens to hold a token.
+function ownSchoolId(user = {}) {
+  const id = Number(user.schoolId);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 async function getAllSchools(req, res) {
   try {
-    await ensureSchoolConfigColumns();
+    const params = [];
+    let scopeSql = "";
+
+    if (req.user.role !== "system_admin") {
+      const schoolId = ownSchoolId(req.user);
+      if (!schoolId) {
+        return res.json([]);
+      }
+      params.push(schoolId);
+      scopeSql = `WHERE s.id = $${params.length}::integer`;
+    }
+
     const result = await query(
       `SELECT s.*,
               COUNT(l.id)::integer AS learners_count
        FROM schools s
        LEFT JOIN learners l ON l.school_id = s.id
+       ${scopeSql}
        GROUP BY s.id
-       ORDER BY s.name`
+       ORDER BY s.name`,
+      params
     );
     res.json(result.rows.map(cleanSchoolRow));
   } catch (error) {
@@ -136,7 +146,6 @@ async function exportSchoolLearners(req, res) {
 
 async function createSchool(req, res) {
   try {
-    await ensureSchoolConfigColumns();
     const {
       name,
       code,
@@ -175,7 +184,13 @@ async function createSchool(req, res) {
 
 async function getSchoolById(req, res) {
   try {
-    await ensureSchoolConfigColumns();
+    if (
+      req.user.role !== "system_admin" &&
+      Number(req.params.id) !== ownSchoolId(req.user)
+    ) {
+      return res.status(403).json({ error: "School is outside your access" });
+    }
+
     const result = await query("SELECT * FROM schools WHERE id = $1", [
       req.params.id,
     ]);
@@ -194,7 +209,6 @@ async function getSchoolById(req, res) {
 
 async function updateSchool(req, res) {
   try {
-    await ensureSchoolConfigColumns();
     const {
       name,
       code,
@@ -209,7 +223,7 @@ async function updateSchool(req, res) {
 
     if (
       (req.user.role === "school_admin" || req.user.role === "teacher") &&
-      Number(req.params.id) !== req.user.schoolId
+      Number(req.params.id) !== ownSchoolId(req.user)
     ) {
       return res.status(403).json({ error: "School is outside your access" });
     }

@@ -82,6 +82,15 @@ CREATE TABLE IF NOT EXISTS learners (
 
 ALTER TABLE learners ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE learners ADD COLUMN IF NOT EXISTS graduation_status VARCHAR(20) NOT NULL DEFAULT 'active';
+-- audit_logs never had this column, so every security audit insert failed
+-- silently against PostgreSQL too.
+-- Previously created by a request-time ALTER in schools.controller.js, which
+-- meant every /api/schools call paid for DDL and MySQL rejected outright.
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS grades_config JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS streams_config JSONB DEFAULT '[]'::jsonb;
+
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;
+
 ALTER TABLE learners DROP CONSTRAINT IF EXISTS learners_graduation_status_check;
 ALTER TABLE learners ADD CONSTRAINT learners_graduation_status_check
   CHECK (graduation_status IN ('active', 'graduated'));
@@ -814,7 +823,8 @@ CREATE TABLE IF NOT EXISTS quiz_test_questions (
   quiz_test_id INTEGER REFERENCES quiz_tests(id) ON DELETE CASCADE,
   position INTEGER NOT NULL DEFAULT 1,
   question_type VARCHAR(50) DEFAULT 'single_choice'
-    CHECK (question_type IN ('single_choice', 'multiple_choice', 'short_answer', 'matching', 'ordering')),
+    CONSTRAINT quiz_test_questions_question_type_check
+    CHECK (question_type IN ('single_choice', 'multiple_choice', 'true_false', 'short_answer', 'matching', 'ordering')),
   prompt TEXT NOT NULL,
   image_url TEXT,
   options JSONB DEFAULT '[]'::jsonb,
@@ -831,6 +841,8 @@ ALTER TABLE quiz_tests
 ALTER TABLE quiz_test_questions
   ADD COLUMN IF NOT EXISTS image_url TEXT;
 
+ALTER TABLE quiz_test_questions
+  DROP CONSTRAINT IF EXISTS quiz_test_questions_chk_1;
 ALTER TABLE quiz_test_questions
   DROP CONSTRAINT IF EXISTS quiz_test_questions_question_type_check;
 ALTER TABLE quiz_test_questions
@@ -916,6 +928,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   old_values JSONB,
   new_values JSONB,
   ip_address INET,
+  user_agent TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -3424,6 +3437,18 @@ CREATE TABLE IF NOT EXISTS ai_role_limits (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS school_ai_settings (
+  school_id INTEGER PRIMARY KEY REFERENCES schools(id) ON DELETE CASCADE,
+  is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  school_admin_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  teacher_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  learner_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  notes TEXT,
+  updated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS ai_usage_logs (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -3446,10 +3471,12 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_user_created ON ai_usage_logs(user_
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_school_created ON ai_usage_logs(school_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_role_created ON ai_usage_logs(role, created_at);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_feature_created ON ai_usage_logs(feature, created_at);
+CREATE INDEX IF NOT EXISTS idx_school_ai_settings_updated ON school_ai_settings(updated_at);
 
 ALTER TABLE IF EXISTS ai_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS ai_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS ai_role_limits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS school_ai_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS ai_usage_logs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS ai_settings_system_admin ON ai_settings;
@@ -3480,6 +3507,48 @@ CREATE POLICY ai_role_limits_authenticated_read ON ai_role_limits
   FOR SELECT
   USING ((SELECT public.educlub_role()) <> '');
 
+DROP POLICY IF EXISTS school_ai_settings_school_read ON school_ai_settings;
+CREATE POLICY school_ai_settings_school_read ON school_ai_settings
+  FOR SELECT
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR school_id = (SELECT public.educlub_school_id())
+  );
+
+DROP POLICY IF EXISTS school_ai_settings_school_admin_insert ON school_ai_settings;
+CREATE POLICY school_ai_settings_school_admin_insert ON school_ai_settings
+  FOR INSERT
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) = 'school_admin'
+      AND school_id = (SELECT public.educlub_school_id())
+    )
+  );
+
+DROP POLICY IF EXISTS school_ai_settings_school_admin_update ON school_ai_settings;
+CREATE POLICY school_ai_settings_school_admin_update ON school_ai_settings
+  FOR UPDATE
+  USING (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) = 'school_admin'
+      AND school_id = (SELECT public.educlub_school_id())
+    )
+  )
+  WITH CHECK (
+    (SELECT public.educlub_role()) = 'system_admin'
+    OR (
+      (SELECT public.educlub_role()) = 'school_admin'
+      AND school_id = (SELECT public.educlub_school_id())
+    )
+  );
+
+DROP POLICY IF EXISTS school_ai_settings_system_admin_delete ON school_ai_settings;
+CREATE POLICY school_ai_settings_system_admin_delete ON school_ai_settings
+  FOR DELETE
+  USING ((SELECT public.educlub_role()) = 'system_admin');
+
 DROP POLICY IF EXISTS ai_usage_logs_scoped_read ON ai_usage_logs;
 CREATE POLICY ai_usage_logs_scoped_read ON ai_usage_logs
   FOR SELECT
@@ -3502,3 +3571,59 @@ CREATE POLICY ai_usage_logs_scoped_insert ON ai_usage_logs
 
 -- Create production admin accounts with scripts/seed-admin.js and environment
 -- variables; never keep default credentials in schema migrations.
+
+
+-- ---------------------------------------------------------------------------
+-- Folded in from migrations 002, 003 and 004. Those ran through the PostgreSQL
+-- migration runner, which has no part in the MySQL setup, so anything they
+-- created has to live here or it simply never exists.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  refresh_token_hash VARCHAR(64) NOT NULL UNIQUE,
+  token_family_id UUID NOT NULL,
+  device_name VARCHAR(255),
+  ip_address INET,
+  user_agent TEXT,
+  last_used_at TIMESTAMP,
+  expires_at TIMESTAMP NOT NULL,
+  revoked_at TIMESTAMP,
+  revoke_reason VARCHAR(255),
+  replaced_by_session_id BIGINT REFERENCES user_sessions(id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_active ON user_sessions(user_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_family ON user_sessions(token_family_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expiry ON user_sessions(expires_at);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_code_hash VARCHAR(64);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_code_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_code_created_at TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_school_admins_school ON school_admins(school_id);
+CREATE INDEX IF NOT EXISTS idx_courses_template ON courses(template_id);
+CREATE INDEX IF NOT EXISTS idx_course_modules_template_module ON course_modules(template_module_id);
+CREATE INDEX IF NOT EXISTS idx_learning_activities_template_activity ON learning_activities(template_activity_id);
+CREATE INDEX IF NOT EXISTS idx_activity_grades_submission ON activity_grades(submission_id);
+CREATE INDEX IF NOT EXISTS idx_availability_overrides_school_module ON learning_availability_overrides(school_id, module_id);
+CREATE INDEX IF NOT EXISTS idx_availability_overrides_activity ON learning_availability_overrides(activity_id);
+CREATE INDEX IF NOT EXISTS idx_learner_badges_course_module ON learner_module_badges(course_id, module_id);
+CREATE INDEX IF NOT EXISTS idx_module_feedback_course_module ON module_feedback(course_id, module_id);
+CREATE INDEX IF NOT EXISTS idx_discussions_created_by ON discussions(created_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_discussion_replies_learner ON discussion_replies(learner_id);
+CREATE INDEX IF NOT EXISTS idx_discussion_replies_parent ON discussion_replies(parent_reply_id);
+CREATE INDEX IF NOT EXISTS idx_grades_cache_course ON grades_cache(course_id);
+CREATE INDEX IF NOT EXISTS idx_progress_cache_course ON progress_cache(course_id);
+CREATE INDEX IF NOT EXISTS idx_typing_tests_school_competition ON typing_tests(school_id, competition_id);
+CREATE INDEX IF NOT EXISTS idx_typing_attempts_learner ON typing_attempts(learner_id);
+CREATE INDEX IF NOT EXISTS idx_course_payments_learner_course ON course_payments(learner_id, course_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_tests_school ON quiz_tests(school_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_test_attempts_learner ON quiz_test_attempts(learner_id);
+CREATE INDEX IF NOT EXISTS idx_reports_course ON reports(course_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_threads_learner ON feedback_threads(learner_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_school_created ON notifications(school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_competition_payments_learner_competition ON competition_payments(learner_id, competition_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_replacement ON user_sessions(replaced_by_session_id);

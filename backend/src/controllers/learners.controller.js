@@ -15,10 +15,10 @@ function canManageLearner(user, learner) {
   }
 
   if (user.role === "school_admin") {
-    return learner.school_id === user.schoolId;
+    return Number(learner.school_id) === Number(user.schoolId);
   }
 
-  return learner.user_id === user.userId;
+  return Number(learner.user_id) === Number(user.userId);
 }
 
 async function getAllLearners(req, res) {
@@ -533,7 +533,7 @@ async function resetLearnerPassword(req, res) {
 
     if (
       req.user.role === "school_admin" &&
-      learner.school_id !== req.user.schoolId
+      Number(learner.school_id) !== Number(req.user.schoolId)
     ) {
       return res.status(403).json({ error: "Learner is outside your school" });
     }

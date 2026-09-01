@@ -26,16 +26,21 @@ async function getUsers(req, res) {
       paramIndex++;
     }
 
-    const requestedSchoolId =
-      req.user.role === "school_admin" ? req.user.schoolId : req.query.school_id;
-    if (requestedSchoolId) {
-      queryText += ` AND u.school_id = $${paramIndex}`;
-      params.push(requestedSchoolId);
-      paramIndex++;
-    }
-
     if (req.user.role === "school_admin") {
+      // A school admin with no school on the token must see nobody rather than
+      // falling through to an unfiltered directory of every user.
+      const schoolId = Number(req.user.schoolId);
+      if (!Number.isInteger(schoolId) || schoolId <= 0) {
+        return res.json([]);
+      }
+      queryText += ` AND u.school_id = $${paramIndex}::integer`;
+      params.push(schoolId);
+      paramIndex++;
       queryText += " AND u.role = 'teacher'";
+    } else if (req.query.school_id) {
+      queryText += ` AND u.school_id = $${paramIndex}`;
+      params.push(req.query.school_id);
+      paramIndex++;
     }
 
     queryText += " ORDER BY u.full_name";
@@ -133,7 +138,8 @@ async function resetUserPasswordByEmail(req, res) {
 
     if (
       req.user.role === "school_admin" &&
-      (user.school_id !== req.user.schoolId || user.role === "system_admin")
+      (Number(user.school_id) !== Number(req.user.schoolId) ||
+        user.role === "system_admin")
     ) {
       return res.status(403).json({ error: "User is outside your school" });
     }
