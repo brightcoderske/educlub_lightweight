@@ -74,7 +74,7 @@ function SystemAdminSchools() {
   };
 
   useEffect(() => {
-    loadSchools(Boolean(getCachedPage(CACHE_KEY)));
+    loadSchools();
   }, []);
 
   const uploadLogo = async (file) => {
@@ -161,15 +161,11 @@ function SystemAdminSchools() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3}>
-          <MDTypography variant="h3">Schools</MDTypography>
-          <MDTypography variant="body2" color="text">
-            Register schools and upload their logo for reports and dashboards.
-          </MDTypography>
-        </MDBox>
-
+      <DashboardNavbar
+        title="Schools"
+        subtitle="Register schools and upload their logo for reports and dashboards."
+      />
+      <MDBox py={2}>
         <Card>
           <MDBox p={2}>
             <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>

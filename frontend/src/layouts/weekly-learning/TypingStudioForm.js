@@ -134,7 +134,9 @@ function LessonPreview({ lesson, index, total }) {
           </MDTypography>
         </MDBox>
         <MDBox mt={1.25} sx={{ height: 7, borderRadius: "999px", bgcolor: "#e9eef5" }}>
-          <MDBox sx={{ width: "18%", height: "100%", borderRadius: "inherit", bgcolor: "#1A73E8" }} />
+          <MDBox
+            sx={{ width: "18%", height: "100%", borderRadius: "inherit", bgcolor: "#1A73E8" }}
+          />
         </MDBox>
       </MDBox>
     </Card>
@@ -155,7 +157,7 @@ export default function TypingStudioForm({
   weekOptions,
   isSystemAdmin,
 }) {
-  const [activeStep, setActiveStep] = useState(1);
+  const [activeStep, setActiveStep] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const lessons = Array.isArray(typingForm.lessons) ? typingForm.lessons : [];
   const lesson = lessons[selectedIndex] || lessons[0];
@@ -179,10 +181,7 @@ export default function TypingStudioForm({
     const nextIndex = lessons.length;
     setTypingForm({
       ...typingForm,
-      lessons: [
-        ...lessons,
-        { title: `Lesson ${nextIndex + 1}`, passage: "", instructions: "" },
-      ],
+      lessons: [...lessons, { title: `Lesson ${nextIndex + 1}`, passage: "", instructions: "" }],
     });
     setSelectedIndex(nextIndex);
   };
@@ -319,6 +318,7 @@ export default function TypingStudioForm({
                       }}
                       SelectProps={{ native: true }}
                     >
+                      <option value="">Select year</option>
                       {[...new Set(termOptions.map((term) => term.academic_year))]
                         .filter(Boolean)
                         .map((year) => (
@@ -339,6 +339,7 @@ export default function TypingStudioForm({
                       }
                       SelectProps={{ native: true }}
                     >
+                      <option value="">Select term</option>
                       {typingTerms.map((term) => (
                         <option key={term.id} value={term.name}>
                           {term.name}
@@ -507,9 +508,9 @@ export default function TypingStudioForm({
                     >
                       <Icon>delete</Icon>&nbsp; Remove Lesson
                     </MDButton>
-                    <MDButton variant="gradient" color="info" onClick={() => setActiveStep(3)}>
-                      Save Lesson
-                    </MDButton>
+                    <MDTypography variant="caption" color="text" textAlign="right">
+                      Changes appear in Live Preview. Use Save as Draft to save the test.
+                    </MDTypography>
                   </Grid>
                 </Grid>
               </MDBox>
@@ -518,21 +519,45 @@ export default function TypingStudioForm({
             <Grid item xs={12} md={3}>
               <MDBox p={2} display="flex" flexDirection="column" gap={2}>
                 <MDBox>
-                  <MDTypography variant="button" color="dark" fontWeight="bold" display="block" mb={1}>
+                  <MDTypography
+                    variant="button"
+                    color="dark"
+                    fontWeight="bold"
+                    display="block"
+                    mb={1}
+                  >
                     Live Preview
                   </MDTypography>
                   <LessonPreview lesson={lesson} index={selectedIndex} total={lessons.length} />
                 </MDBox>
                 <Card sx={surfaceSx}>
                   <MDBox p={2}>
-                    <MDTypography variant="button" color="dark" fontWeight="bold" display="block" mb={0.6}>
+                    <MDTypography
+                      variant="button"
+                      color="dark"
+                      fontWeight="bold"
+                      display="block"
+                      mb={0.6}
+                    >
                       Typing Settings
                     </MDTypography>
                     <SettingLine icon="keyboard" label="Total Lessons" value={lessons.length} />
-                    <SettingLine icon="schedule" label="Time Limit" value={`${Math.round(Number(typingForm.duration_seconds || 0) / 60)} minutes`} />
+                    <SettingLine
+                      icon="schedule"
+                      label="Time Limit"
+                      value={`${Math.round(Number(typingForm.duration_seconds || 0) / 60)} minutes`}
+                    />
                     <SettingLine icon="speed" label="Pass WPM" value={typingForm.pass_threshold} />
                     <SettingLine icon="replay" label="Attempts" value={typingForm.max_attempts} />
-                    <SettingLine icon="visibility" label="Visibility" value={typingForm.eligible_grades.length ? `${typingForm.eligible_grades.length} grades` : "All learners"} />
+                    <SettingLine
+                      icon="visibility"
+                      label="Visibility"
+                      value={
+                        typingForm.eligible_grades.length
+                          ? `${typingForm.eligible_grades.length} grades`
+                          : "All learners"
+                      }
+                    />
                   </MDBox>
                 </Card>
                 <MDBox p={1.6} sx={{ bgcolor: "#eef5ff", borderRadius: "12px" }}>
@@ -604,7 +629,9 @@ export default function TypingStudioForm({
                   select
                   label="Status"
                   fullWidth
-                  value={`${typingForm.is_published ? "published" : "draft"}-${typingForm.is_open ? "open" : "closed"}`}
+                  value={`${typingForm.is_published ? "published" : "draft"}-${
+                    typingForm.is_open ? "open" : "closed"
+                  }`}
                   onChange={(event) => {
                     const [published, open] = event.target.value.split("-");
                     setTypingForm({
@@ -643,7 +670,13 @@ export default function TypingStudioForm({
                             {(item.passage || "").trim().split(/\s+/).filter(Boolean).length} words
                           </MDTypography>
                         </MDBox>
-                        <IconButton color="info" onClick={() => { setSelectedIndex(index); setActiveStep(1); }}>
+                        <IconButton
+                          color="info"
+                          onClick={() => {
+                            setSelectedIndex(index);
+                            setActiveStep(1);
+                          }}
+                        >
                           <Icon>edit</Icon>
                         </IconButton>
                       </MDBox>
@@ -654,8 +687,16 @@ export default function TypingStudioForm({
               <Grid item xs={12} md={4}>
                 <Card sx={surfaceSx}>
                   <MDBox p={2}>
-                    <SettingLine icon="calendar_month" label="Term" value={`${typingForm.term} · ${typingForm.academic_year}`} />
-                    <SettingLine icon="date_range" label="Week" value={`Week ${typingForm.week_number}`} />
+                    <SettingLine
+                      icon="calendar_month"
+                      label="Term"
+                      value={`${typingForm.term} · ${typingForm.academic_year}`}
+                    />
+                    <SettingLine
+                      icon="date_range"
+                      label="Week"
+                      value={`Week ${typingForm.week_number}`}
+                    />
                     <SettingLine icon="keyboard" label="Lessons" value={lessons.length} />
                     <SettingLine icon="speed" label="Pass WPM" value={typingForm.pass_threshold} />
                   </MDBox>
@@ -681,7 +722,13 @@ export default function TypingStudioForm({
             display="flex"
             alignItems="center"
             justifyContent="center"
-            sx={{ width: 42, height: 42, borderRadius: "50%", bgcolor: "#e1eeff", color: "#1A73E8" }}
+            sx={{
+              width: 42,
+              height: 42,
+              borderRadius: "50%",
+              bgcolor: "#e1eeff",
+              color: "#1A73E8",
+            }}
           >
             <Icon>check</Icon>
           </MDBox>

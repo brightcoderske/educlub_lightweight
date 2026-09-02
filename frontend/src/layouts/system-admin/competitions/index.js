@@ -17,7 +17,7 @@ import MDButton from "components/MDButton";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 
@@ -313,14 +313,11 @@ function SystemAdminCompetitions() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <DashboardIdentity
-          user={user}
-          title="Competition Manager"
-          subtitle="Create learning-platform-backed competitions and monitor enrolment."
-        />
-
+      <DashboardNavbar
+        title="Competition Manager"
+        subtitle="Create learning-platform-backed competitions and monitor enrolment."
+      />
+      <MDBox py={2}>
         <Grid container spacing={3} mt={1}>
           <Grid item xs={12}>
             <Card>

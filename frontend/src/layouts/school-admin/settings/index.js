@@ -4,7 +4,6 @@ import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Checkbox from "@mui/material/Checkbox";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
@@ -123,15 +122,11 @@ function SchoolSettings() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="School Settings"
-            subtitle="Configure grades and streams so learner forms and uploads stay consistent."
-          />
-        </MDBox>
+      <DashboardNavbar
+        title="School Settings"
+        subtitle="Configure grades and streams so learner forms and uploads stay consistent."
+      />
+      <MDBox py={2}>
         {message && (
           <MDBox mb={2} p={2} borderRadius="lg" bgColor="success">
             <MDTypography variant="button" color="white">

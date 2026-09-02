@@ -408,8 +408,8 @@ async function bulkAllocate(req, res) {
     const gradeMatchSql = `
       (
         LOWER(COALESCE(grade, '')) = LOWER($5)
-        OR regexp_replace(COALESCE(grade, ''), '[^0-9]', '', 'g') =
-           regexp_replace(COALESCE($5, ''), '[^0-9]', '', 'g')
+        OR regexp_replace(COALESCE(grade, ''), '[^0-9]', '') =
+           regexp_replace(COALESCE($5, ''), '[^0-9]', '')
       )
     `;
     let queryText = `
@@ -439,8 +439,8 @@ async function bulkAllocate(req, res) {
        WHERE school_id = $1
          AND (
            LOWER(COALESCE(grade, '')) = LOWER($2)
-           OR regexp_replace(COALESCE(grade, ''), '[^0-9]', '', 'g') =
-              regexp_replace(COALESCE($2, ''), '[^0-9]', '', 'g')
+           OR regexp_replace(COALESCE(grade, ''), '[^0-9]', '') =
+              regexp_replace(COALESCE($2, ''), '[^0-9]', '')
          )
          ${stream ? "AND stream = $3" : ""}`,
       stream ? [schoolId, grade, stream] : [schoolId, grade]

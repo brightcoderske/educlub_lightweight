@@ -8,7 +8,6 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import CertificatePreviewModal from "components/CertificatePreviewModal";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
@@ -22,11 +21,13 @@ import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 function SchoolAdminCertificates() {
   const { user, isSchoolAdmin } = useAuth();
-  const [certificates, setCertificates] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `school-admin:${user?.schoolId}:certificates`;
+  const cachedCertificates = getCachedPage(cacheKey)?.value;
+  const [certificates, setCertificates] = useState(cachedCertificates || []);
+  const [loading, setLoading] = useState(!cachedCertificates);
   const [error, setError] = useState("");
   const [previewCertificateId, setPreviewCertificateId] = useState(null);
-  const cacheKey = `school-admin:${user?.schoolId}:certificates`;
+  const [approvingId, setApprovingId] = useState(null);
 
   const loadCertificates = async (background = false) => {
     const cached = getCachedPage(cacheKey)?.value;
@@ -48,24 +49,26 @@ function SchoolAdminCertificates() {
 
   useEffect(() => {
     if (isSchoolAdmin() && user?.schoolId) {
-      loadCertificates(Boolean(getCachedPage(cacheKey)));
+      loadCertificates();
     }
   }, [user?.schoolId]);
 
   const approveCertificate = async (id) => {
+    setApprovingId(id);
     setError("");
     try {
-      await apiClient.put(`/certificates/${id}/approve`, {});
-      setCertificates((current) =>
-        current.map((certificate) =>
-          certificate.id === id
-            ? { ...certificate, status: "approved", approved_at: new Date().toISOString() }
-            : certificate
-        )
-      );
-      loadCertificates(true);
+      const approved = await apiClient.put(`/certificates/${id}/approve`, {});
+      setCertificates((current) => {
+        const next = current.map((certificate) =>
+          certificate.id === id ? { ...certificate, ...approved, status: "approved" } : certificate
+        );
+        setCachedPage(cacheKey, next);
+        return next;
+      });
     } catch (err) {
       setError(err.message);
+    } finally {
+      setApprovingId(null);
     }
   };
 
@@ -75,15 +78,11 @@ function SchoolAdminCertificates() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="Certificates"
-            subtitle="Review learner certificates after course completion or manual approval."
-          />
-        </MDBox>
+      <DashboardNavbar
+        title="Certificates"
+        subtitle="Course completion creates a certificate for school approval. Approved certificates stay available to learners across terms."
+      />
+      <MDBox py={2}>
         <Card>
           <MDBox p={2}>
             {error && (
@@ -134,10 +133,13 @@ function SchoolAdminCertificates() {
                               variant="text"
                               color="success"
                               size="small"
-                              disabled={certificate.status === "approved"}
+                              disabled={
+                                Boolean(approvingId) ||
+                                ["approved", "issued"].includes(certificate.status)
+                              }
                               onClick={() => approveCertificate(certificate.id)}
                             >
-                              Approve
+                              {approvingId === certificate.id ? "Approving..." : "Approve"}
                             </MDButton>
                           </MDBox>
                         </TableCell>

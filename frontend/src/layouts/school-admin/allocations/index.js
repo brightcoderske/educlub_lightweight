@@ -9,7 +9,6 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Chip from "@mui/material/Chip";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
@@ -53,8 +52,7 @@ function SchoolAdminAllocations() {
 
   const activeTermName = currentTerm?.name || "Term 1";
   const activeAcademicYear =
-    currentTerm?.academic_year ||
-    new Date(currentTerm?.start_date || Date.now()).getFullYear();
+    currentTerm?.academic_year || new Date(currentTerm?.start_date || Date.now()).getFullYear();
 
   const applyActiveTerm = (term) => {
     if (!term?.name) return;
@@ -77,13 +75,15 @@ function SchoolAdminAllocations() {
     setError("");
     try {
       const [learnersRes, coursesRes, allocationsRes, currentTermRes] = await Promise.all([
-        apiClient.get(
-          `/learners?school_id=${user?.schoolId}${
-            user?.role === "teacher" ? "&scope=allocation_picker" : ""
-          }`
-        ).catch((err) => {
-          throw new Error(`Learners: ${err.message}`);
-        }),
+        apiClient
+          .get(
+            `/learners?school_id=${user?.schoolId}${
+              user?.role === "teacher" ? "&scope=allocation_picker" : ""
+            }`
+          )
+          .catch((err) => {
+            throw new Error(`Learners: ${err.message}`);
+          }),
         apiClient.get("/courses?category=general").catch((err) => {
           throw new Error(`Courses: ${err.message}`);
         }),
@@ -117,7 +117,7 @@ function SchoolAdminAllocations() {
 
   useEffect(() => {
     if (isSchoolAdmin() && user?.schoolId) {
-      loadData(Boolean(getCachedPage(cacheKey)));
+      loadData();
     }
   }, [user?.schoolId]);
 
@@ -190,17 +190,16 @@ function SchoolAdminAllocations() {
         allocation.academic_year || "",
         allocation.term || "",
       ].join("|");
-      const current =
-        groups.get(key) || {
-          key,
-          course_id: allocation.course_id,
-          course_name: allocation.course_name,
-          term: allocation.term,
-          academic_year: allocation.academic_year,
-          learners: [],
-          active: 0,
-          completed: 0,
-        };
+      const current = groups.get(key) || {
+        key,
+        course_id: allocation.course_id,
+        course_name: allocation.course_name,
+        term: allocation.term,
+        academic_year: allocation.academic_year,
+        learners: [],
+        active: 0,
+        completed: 0,
+      };
       current.learners.push(allocation);
       if (allocation.status === "completed") current.completed += 1;
       if (allocation.status !== "completed") current.active += 1;
@@ -233,16 +232,11 @@ function SchoolAdminAllocations() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="Course Allocation"
-            subtitle="Allocate connected courses to individual learners, grades, or classes."
-          />
-        </MDBox>
-
+      <DashboardNavbar
+        title="Course Allocation"
+        subtitle="Allocate connected courses to individual learners, grades, or classes."
+      />
+      <MDBox py={2}>
         <Grid container spacing={3}>
           <Grid item xs={12} lg={6}>
             <Card>

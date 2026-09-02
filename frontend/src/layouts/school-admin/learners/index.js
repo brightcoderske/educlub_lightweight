@@ -7,6 +7,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import TablePagination from "@mui/material/TablePagination";
 import Icon from "@mui/material/Icon";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
@@ -16,7 +17,6 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import readXlsxFile from "read-excel-file";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
@@ -43,8 +43,10 @@ const emptyForm = {
 
 function SchoolAdminLearners() {
   const { user, isSchoolAdmin } = useAuth();
-  const [learners, setLearners] = useState([]);
-  const [school, setSchool] = useState(null);
+  const cacheKey = `school-admin:${user?.schoolId}:learners`;
+  const cachedData = getCachedPage(cacheKey)?.value;
+  const [learners, setLearners] = useState(() => cachedData?.learners || []);
+  const [school, setSchool] = useState(() => cachedData?.school || null);
   const [form, setForm] = useState(emptyForm);
   const [promotion, setPromotion] = useState({
     learner_id: "",
@@ -57,18 +59,18 @@ function SchoolAdminLearners() {
   // Which of the roster forms is open as a dialog: "add", "upload",
   // "graduate", or null for none. The table owns the full width otherwise.
   const [openForm, setOpenForm] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedData);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
   const [streamFilter, setStreamFilter] = useState("");
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [selectedLearnerId, setSelectedLearnerId] = useState(null);
   const [graduationCandidate, setGraduationCandidate] = useState(null);
   const [academicTerms, setAcademicTerms] = useState([]);
-
-  const cacheKey = `school-admin:${user?.schoolId}:learners`;
 
   const loadLearners = async (background = false) => {
     const cached = getCachedPage(cacheKey)?.value;
@@ -112,7 +114,7 @@ function SchoolAdminLearners() {
 
   useEffect(() => {
     if (isSchoolAdmin() && user?.schoolId) {
-      loadLearners(Boolean(getCachedPage(cacheKey)));
+      loadLearners();
     }
   }, [user?.schoolId]);
 
@@ -244,7 +246,12 @@ function SchoolAdminLearners() {
     const matchesStream = !streamFilter || learner.stream === streamFilter;
     return matchesSearch && matchesGrade && matchesStream;
   });
-  const visibleLearners = filteredLearners.slice(0, 20);
+  const currentPage = Math.min(
+    page,
+    Math.max(0, Math.ceil(filteredLearners.length / rowsPerPage) - 1)
+  );
+  const firstRow = currentPage * rowsPerPage;
+  const visibleLearners = filteredLearners.slice(firstRow, firstRow + rowsPerPage);
 
   const downloadCredentialCards = async () => {
     try {
@@ -274,34 +281,27 @@ function SchoolAdminLearners() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox
-          mb={2}
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          flexWrap="wrap"
-          gap={1}
-        >
-          <DashboardIdentity
-            user={user}
-            title="Learners"
-            subtitle="Add learners and keep your school roster ready for course allocation."
-          />
-          <MDBox display="flex" gap={1} flexWrap="wrap">
-            <MDButton variant="gradient" color="info" onClick={() => setOpenForm("add")}>
-              <Icon>person_add</Icon>&nbsp;Add Learner
-            </MDButton>
-            <MDButton variant="outlined" color="info" onClick={() => setOpenForm("upload")}>
-              <Icon>upload_file</Icon>&nbsp;Bulk Upload
-            </MDButton>
-            <MDButton variant="outlined" color="success" onClick={() => setOpenForm("graduate")}>
-              <Icon>school</Icon>&nbsp;Bulk Graduate
-            </MDButton>
-          </MDBox>
-        </MDBox>
-
+      <DashboardNavbar
+        title="Learners"
+        subtitle="Add learners and keep your school roster ready for course allocation."
+        actions={
+          <>
+            {" "}
+            <MDBox display="flex" gap={1} flexWrap="wrap">
+              <MDButton variant="gradient" color="info" onClick={() => setOpenForm("add")}>
+                <Icon>person_add</Icon>&nbsp;Add Learner
+              </MDButton>
+              <MDButton variant="outlined" color="info" onClick={() => setOpenForm("upload")}>
+                <Icon>upload_file</Icon>&nbsp;Bulk Upload
+              </MDButton>
+              <MDButton variant="outlined" color="success" onClick={() => setOpenForm("graduate")}>
+                <Icon>school</Icon>&nbsp;Bulk Graduate
+              </MDButton>
+            </MDBox>{" "}
+          </>
+        }
+      />
+      <MDBox py={2}>
         <Grid container spacing={3}>
           {/* Dialogs portal out of the grid, so they take no layout space here. */}
           <>
@@ -593,14 +593,18 @@ function SchoolAdminLearners() {
                     School Learners
                   </MDTypography>
                   <MDTypography variant="caption" color="text">
-                    {visibleLearners.length}/{filteredLearners.length}
+                    {filteredLearners.length === 0 ? 0 : firstRow + 1}–
+                    {firstRow + visibleLearners.length} of {filteredLearners.length}
                   </MDTypography>
                   <MDBox flexGrow={1} />
                   <MDInput
                     size="small"
                     label="Search"
                     value={search}
-                    onChange={(event) => setSearch(event.target.value)}
+                    onChange={(event) => {
+                      setSearch(event.target.value);
+                      setPage(0);
+                    }}
                     sx={{ width: { xs: "100%", sm: 190 } }}
                   />
                   <MDInput
@@ -608,7 +612,10 @@ function SchoolAdminLearners() {
                     select
                     label="Grade"
                     value={gradeFilter}
-                    onChange={(event) => setGradeFilter(event.target.value)}
+                    onChange={(event) => {
+                      setGradeFilter(event.target.value);
+                      setPage(0);
+                    }}
                     InputLabelProps={{ shrink: true }}
                     SelectProps={{ native: true }}
                     sx={{ width: { xs: "100%", sm: 120 } }}
@@ -625,7 +632,10 @@ function SchoolAdminLearners() {
                     select
                     label="Class"
                     value={streamFilter}
-                    onChange={(event) => setStreamFilter(event.target.value)}
+                    onChange={(event) => {
+                      setStreamFilter(event.target.value);
+                      setPage(0);
+                    }}
                     InputLabelProps={{ shrink: true }}
                     SelectProps={{ native: true }}
                     sx={{ width: { xs: "100%", sm: 120 } }}
@@ -638,16 +648,18 @@ function SchoolAdminLearners() {
                     ))}
                   </MDInput>
                   <Tooltip title="Refresh">
-                    <IconButton size="small" color="info" onClick={loadLearners}>
+                    <IconButton size="small" color="info" onClick={() => loadLearners(true)}>
                       <Icon fontSize="small">refresh</Icon>
                     </IconButton>
                   </Tooltip>
                 </MDBox>
                 {loading ? (
                   <MDTypography variant="body2">Loading learners...</MDTypography>
-                ) : learners.length === 0 ? (
+                ) : filteredLearners.length === 0 ? (
                   <MDTypography variant="body2" color="text">
-                    No learners registered yet.
+                    {learners.length
+                      ? "No learners match these filters."
+                      : "No learners registered yet."}
                   </MDTypography>
                 ) : (
                   <TableContainer sx={{ maxHeight: 560 }}>
@@ -725,6 +737,21 @@ function SchoolAdminLearners() {
                     </Table>
                   </TableContainer>
                 )}
+                <TablePagination
+                  component="div"
+                  count={filteredLearners.length}
+                  page={currentPage}
+                  rowsPerPage={rowsPerPage}
+                  rowsPerPageOptions={[20, 50, 100]}
+                  onPageChange={(_, nextPage) => setPage(nextPage)}
+                  onRowsPerPageChange={(event) => {
+                    setRowsPerPage(Number(event.target.value));
+                    setPage(0);
+                  }}
+                  showFirstButton
+                  showLastButton
+                  sx={{ "& .MuiTablePagination-toolbar": { flexWrap: "wrap", px: 0 } }}
+                />
               </MDBox>
             </Card>
           </Grid>

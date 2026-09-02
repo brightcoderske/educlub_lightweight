@@ -14,7 +14,6 @@ import TableRow from "@mui/material/TableRow";
 import TableSortLabel from "@mui/material/TableSortLabel";
 import Tooltip from "@mui/material/Tooltip";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import MDBox from "components/MDBox";
 import MDInput from "components/MDInput";
 import MDProgress from "components/MDProgress";
@@ -124,7 +123,10 @@ function SchoolAdminProgress() {
     const needle = search.trim().toLowerCase();
     const filtered = rows.filter(
       (row) =>
-        (!needle || String(row.full_name || "").toLowerCase().includes(needle)) &&
+        (!needle ||
+          String(row.full_name || "")
+            .toLowerCase()
+            .includes(needle)) &&
         matchesPerformanceBand(row.score_percent, performance)
     );
 
@@ -133,9 +135,7 @@ function SchoolAdminProgress() {
       if (orderBy === "score_percent" || orderBy === "completion_percent") {
         return (Number(left[orderBy]) - Number(right[orderBy])) * direction;
       }
-      return (
-        String(left[orderBy] || "").localeCompare(String(right[orderBy] || "")) * direction
-      );
+      return String(left[orderBy] || "").localeCompare(String(right[orderBy] || "")) * direction;
     });
   }, [rows, search, performance, order, orderBy]);
 
@@ -273,16 +273,11 @@ function SchoolAdminProgress() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="Learner Progress"
-            subtitle="Every learner against every module, with per-module performance bands."
-          />
-        </MDBox>
-
+      <DashboardNavbar
+        title="Learner Progress"
+        subtitle="Every learner against every module, with per-module performance bands."
+      />
+      <MDBox py={2}>
         <Card>
           <MDBox p={2}>
             {/* Every control on one wrapping toolbar row: small fields, icon
@@ -511,11 +506,17 @@ function SchoolAdminProgress() {
                             <MDBox mt={0.5}>
                               <MDProgress
                                 value={Number(module?.score_percent || 0)}
-                                color={module ? performanceColor(module.score_percent) : "secondary"}
+                                color={
+                                  module ? performanceColor(module.score_percent) : "secondary"
+                                }
                                 variant="gradient"
                                 sx={{ height: 4 }}
                               />
-                              <MDTypography variant="caption" color="text" sx={{ fontSize: "0.65rem" }}>
+                              <MDTypography
+                                variant="caption"
+                                color="text"
+                                sx={{ fontSize: "0.65rem" }}
+                              >
                                 {module ? `${module.score_percent}%` : "-"}
                               </MDTypography>
                             </MDBox>
@@ -545,7 +546,9 @@ function SchoolAdminProgress() {
                     <TableCell colSpan={modules.length + 4} align="center">
                       <MDBox py={3}>
                         <MDTypography variant="button" color="text">
-                          {loading ? "Loading learner progress..." : "No learners match these filters."}
+                          {loading
+                            ? "Loading learner progress..."
+                            : "No learners match these filters."}
                         </MDTypography>
                       </MDBox>
                     </TableCell>

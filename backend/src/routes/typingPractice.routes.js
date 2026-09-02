@@ -25,4 +25,11 @@ router.get(
   typingPracticeController.report,
 );
 
+router.get(
+  "/report/:learnerId/attempts",
+  authenticateToken,
+  requireRole("system_admin", "school_admin", "teacher"),
+  typingPracticeController.attempts,
+);
+
 module.exports = router;

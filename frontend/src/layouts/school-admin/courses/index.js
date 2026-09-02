@@ -24,7 +24,7 @@ import Select from "@mui/material/Select";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
@@ -43,7 +43,7 @@ function Courses() {
   const cacheKey = `school-admin:${user?.schoolId || user?.userId}:courses`;
 
   useEffect(() => {
-    fetchCourses(Boolean(getCachedPage(cacheKey)));
+    fetchCourses();
   }, [cacheKey]);
 
   const fetchCourses = async (background = false) => {
@@ -157,19 +157,19 @@ function Courses() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center">
-          <DashboardIdentity
-            user={user}
-            title="Courses"
-            subtitle="Adopt templates into your school, then customize your own course version."
-          />
-          <MDButton variant="gradient" color="info" onClick={fetchCourses}>
-            Refresh
-          </MDButton>
-        </MDBox>
-
+      <DashboardNavbar
+        title="Courses"
+        subtitle="Adopt templates into your school, then customize your own course version."
+        actions={
+          <>
+            {" "}
+            <MDButton variant="gradient" color="info" onClick={fetchCourses}>
+              Refresh
+            </MDButton>{" "}
+          </>
+        }
+      />
+      <MDBox py={2}>
         <Grid container spacing={3} mb={3}>
           <Grid item xs={12} md={4}>
             <Card>

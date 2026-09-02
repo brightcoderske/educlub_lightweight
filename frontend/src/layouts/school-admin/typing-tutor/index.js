@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Card from "@mui/material/Card";
+import { Tabs, Tab } from "@mui/material";
+import PracticeReport from "./PracticeReport";
 import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid";
 import Icon from "@mui/material/Icon";
@@ -13,7 +15,6 @@ import TableRow from "@mui/material/TableRow";
 import TableSortLabel from "@mui/material/TableSortLabel";
 import Tooltip from "@mui/material/Tooltip";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import MDBox from "components/MDBox";
 import MDInput from "components/MDInput";
 import MDTypography from "components/MDTypography";
@@ -85,6 +86,7 @@ function csvEscape(value) {
 
 function TypingTutorReport() {
   const { user, isSchoolAdmin } = useAuth();
+  const [reportView, setReportView] = useState("tutor");
   const [weeks, setWeeks] = useState([]);
   const [learners, setLearners] = useState([]);
   const [period, setPeriod] = useState({ term: null, academicYear: null });
@@ -124,7 +126,13 @@ function TypingTutorReport() {
     const filtered = learners.filter((row) => {
       if (grade && row.grade !== grade) return false;
       if (stream && row.stream !== stream) return false;
-      if (needle && !String(row.full_name || "").toLowerCase().includes(needle)) return false;
+      if (
+        needle &&
+        !String(row.full_name || "")
+          .toLowerCase()
+          .includes(needle)
+      )
+        return false;
       return true;
     });
 
@@ -144,9 +152,7 @@ function TypingTutorReport() {
     const direction = order === "asc" ? 1 : -1;
     return withAverages.sort((left, right) => {
       if (orderBy === "average") {
-        return (
-          ((left.averages[sortMetric] ?? -1) - (right.averages[sortMetric] ?? -1)) * direction
-        );
+        return ((left.averages[sortMetric] ?? -1) - (right.averages[sortMetric] ?? -1)) * direction;
       }
       return String(left[orderBy] || "").localeCompare(String(right[orderBy] || "")) * direction;
     });
@@ -159,9 +165,8 @@ function TypingTutorReport() {
     };
     return {
       learners: rows.length,
-      withRecords: rows.filter((row) =>
-        METRIC_KEYS.some((key) => row.averages[key] !== null)
-      ).length,
+      withRecords: rows.filter((row) => METRIC_KEYS.some((key) => row.averages[key] !== null))
+        .length,
       byMetric: Object.fromEntries(METRIC_KEYS.map((key) => [key, averageFor(key)])),
     };
   }, [rows]);
@@ -182,8 +187,8 @@ function TypingTutorReport() {
   };
 
   useEffect(() => {
-    if (canView) loadMatrix();
-  }, [canView]);
+    if (canView && reportView === "weekly") loadMatrix();
+  }, [canView, reportView]);
 
   const sortHandler = (field) => () => {
     if (orderBy === field) {
@@ -199,9 +204,7 @@ function TypingTutorReport() {
       "Learner",
       "Class",
       "Stream",
-      ...weeks.flatMap((week) =>
-        visibleMetrics.map((key) => `Week ${week} ${METRICS[key].label}`)
-      ),
+      ...weeks.flatMap((week) => visibleMetrics.map((key) => `Week ${week} ${METRICS[key].label}`)),
       ...visibleMetrics.map((key) => `Average ${METRICS[key].label}`),
     ];
     const body = rows.map((row) => [
@@ -234,240 +237,270 @@ function TypingTutorReport() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="Weekly Practice"
-            subtitle={
-              period.term
-                ? `Typing and quiz marks by week - ${period.term} ${period.academicYear}`
-                : "Typing and quiz marks by week."
-            }
+      <DashboardNavbar
+        title="Typing Tutor Reports"
+        subtitle="Tutor activity logs, learner progress, and weekly assessment marks."
+      />
+      <MDBox py={2}>
+        <Tabs
+          value={reportView}
+          onChange={(_, value) => setReportView(value)}
+          aria-label="Practice report views"
+          sx={{ mb: 2 }}
+        >
+          <Tab
+            value="tutor"
+            label="Tutor practice"
+            id="tutor-report-tab"
+            aria-controls="tutor-report-panel"
           />
-        </MDBox>
-
-        {error && (
-          <MDTypography variant="caption" color="error" display="block" mb={2}>
-            {error}
-          </MDTypography>
-        )}
-
-        <Grid container spacing={1.5} mb={1.5}>
-          {[
-            ["Learners", summary.learners],
-            ["With records", summary.withRecords],
-            ...METRIC_KEYS.filter((key) => visibleMetrics.includes(key)).map((key) => [
-              `Avg ${METRICS[key].label}`,
-              summary.byMetric[key] === null
-                ? "-"
-                : `${METRICS[key].format(summary.byMetric[key])}${METRICS[key].unit}`,
-            ]),
-          ].map(([label, value]) => (
-            <Grid item xs={6} md={3} key={label}>
-              <Card>
-                <MDBox px={2} py={1}>
-                  <MDTypography variant="caption" color="text">
-                    {label}
-                  </MDTypography>
-                  <MDTypography variant="h5">{value}</MDTypography>
-                </MDBox>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-
-        <Card>
-          <MDBox p={2}>
-            <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
-              <MDInput
-                size="small"
-                label="Search students"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                sx={{ width: { xs: "100%", sm: 180 } }}
-              />
-              <MDInput
-                size="small"
-                select
-                label="Metric"
-                value={metricKey}
-                onChange={(event) => setMetricKey(event.target.value)}
-                InputLabelProps={{ shrink: true }}
-                SelectProps={{ native: true }}
-                sx={{ width: { xs: "100%", sm: 150 } }}
-              >
-                <option value="all">All combined</option>
-                {Object.entries(METRICS).map(([key, item]) => (
-                  <option key={key} value={key}>
-                    {item.label}
-                  </option>
-                ))}
-              </MDInput>
-              <MDInput
-                size="small"
-                select
-                label="Class"
-                value={grade}
-                onChange={(event) => setGrade(event.target.value)}
-                InputLabelProps={{ shrink: true }}
-                SelectProps={{ native: true }}
-                sx={{ width: { xs: "100%", sm: 120 } }}
-              >
-                <option value="">All</option>
-                {grades.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </MDInput>
-              <MDInput
-                size="small"
-                select
-                label="Stream"
-                value={stream}
-                onChange={(event) => setStream(event.target.value)}
-                InputLabelProps={{ shrink: true }}
-                SelectProps={{ native: true }}
-                sx={{ width: { xs: "100%", sm: 120 } }}
-              >
-                <option value="">All</option>
-                {streams.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </MDInput>
-              <MDBox flexGrow={1} />
-              <Tooltip title="Refresh">
-                <IconButton size="small" color="info" onClick={loadMatrix}>
-                  <Icon fontSize="small">refresh</Icon>
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Export CSV">
-                <IconButton size="small" color="info" onClick={exportCsv}>
-                  <Icon fontSize="small">download</Icon>
-                </IconButton>
-              </Tooltip>
-            </MDBox>
+          <Tab
+            value="weekly"
+            label="Weekly marks"
+            id="weekly-report-tab"
+            aria-controls="weekly-report-panel"
+          />
+        </Tabs>
+        {reportView === "tutor" ? (
+          <MDBox role="tabpanel" id="tutor-report-panel" aria-labelledby="tutor-report-tab">
+            <PracticeReport />
           </MDBox>
+        ) : (
+          <MDBox role="tabpanel" id="weekly-report-panel" aria-labelledby="weekly-report-tab">
+            {error && (
+              <MDTypography variant="caption" color="error" display="block" mb={2}>
+                {error}
+              </MDTypography>
+            )}
 
-          <TableContainer sx={{ boxShadow: "none" }}>
-            <Table size="small" sx={{ "& .MuiTableCell-root": { whiteSpace: "nowrap" } }}>
-              <TableHead sx={{ display: "table-header-group" }}>
-                <TableRow>
-                  <TableCell sortDirection={orderBy === "full_name" ? order : false}>
-                    <TableSortLabel
-                      active={orderBy === "full_name"}
-                      direction={orderBy === "full_name" ? order : "asc"}
-                      onClick={sortHandler("full_name")}
-                    >
-                      Name
-                    </TableSortLabel>
-                  </TableCell>
-                  <TableCell>Class</TableCell>
-                  <TableCell>Stream</TableCell>
-                  {weeks.map((week) => (
-                    <TableCell key={week} align="center">
-                      W{week}
-                    </TableCell>
-                  ))}
-                  <TableCell align="center" sortDirection={orderBy === "average" ? order : false}>
-                    <TableSortLabel
-                      active={orderBy === "average"}
-                      direction={orderBy === "average" ? order : "asc"}
-                      onClick={sortHandler("average")}
-                    >
-                      Avg
-                    </TableSortLabel>
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.learner_id} hover>
-                    <TableCell>
-                      <MDTypography variant="button" fontWeight="medium" sx={{ fontSize: "0.75rem" }}>
-                        {row.full_name}
+            <Grid container spacing={1.5} mb={1.5}>
+              {[
+                ["Learners", summary.learners],
+                ["With records", summary.withRecords],
+                ...METRIC_KEYS.filter((key) => visibleMetrics.includes(key)).map((key) => [
+                  `Avg ${METRICS[key].label}`,
+                  summary.byMetric[key] === null
+                    ? "-"
+                    : `${METRICS[key].format(summary.byMetric[key])}${METRICS[key].unit}`,
+                ]),
+              ].map(([label, value]) => (
+                <Grid item xs={6} md={3} key={label}>
+                  <Card>
+                    <MDBox px={2} py={1}>
+                      <MDTypography variant="caption" color="text">
+                        {label}
                       </MDTypography>
-                    </TableCell>
-                    <TableCell>{row.grade || "-"}</TableCell>
-                    <TableCell>{row.stream || "-"}</TableCell>
-                    {weeks.map((week) => (
-                      <TableCell key={week} align="center">
-                        <MDBox
-                          display="flex"
-                          flexDirection="column"
-                          alignItems="center"
-                          gap={0.25}
-                        >
-                          {visibleMetrics.map((key) => {
-                            const value = row.weeks[week]?.[key];
-                            if (value === null || value === undefined) {
-                              return (
-                                <MDTypography
-                                  key={key}
-                                  variant="caption"
-                                  color="text"
-                                  sx={{ fontSize: "0.65rem" }}
-                                >
-                                  {showTags ? `${METRIC_TAGS[key]} -` : "-"}
-                                </MDTypography>
-                              );
-                            }
-                            return (
-                              <Tooltip key={key} title={METRICS[key].label}>
-                                <Chip
-                                  size="small"
-                                  label={`${showTags ? `${METRIC_TAGS[key]} ` : ""}${METRICS[
-                                    key
-                                  ].format(value)}${METRICS[key].unit}`}
-                                  color={bandColor(key, value)}
-                                  sx={{ height: 18, "& .MuiChip-label": { fontSize: "0.65rem" } }}
-                                />
-                              </Tooltip>
-                            );
-                          })}
-                        </MDBox>
-                      </TableCell>
+                      <MDTypography variant="h5">{value}</MDTypography>
+                    </MDBox>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+
+            <Card>
+              <MDBox p={2}>
+                <MDBox display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                  <MDInput
+                    size="small"
+                    label="Search students"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    sx={{ width: { xs: "100%", sm: 180 } }}
+                  />
+                  <MDInput
+                    size="small"
+                    select
+                    label="Metric"
+                    value={metricKey}
+                    onChange={(event) => setMetricKey(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    SelectProps={{ native: true }}
+                    sx={{ width: { xs: "100%", sm: 150 } }}
+                  >
+                    <option value="all">All combined</option>
+                    {Object.entries(METRICS).map(([key, item]) => (
+                      <option key={key} value={key}>
+                        {item.label}
+                      </option>
                     ))}
-                    <TableCell align="center">
-                      <MDBox display="flex" flexDirection="column" alignItems="center">
-                        {visibleMetrics.map((key) => (
+                  </MDInput>
+                  <MDInput
+                    size="small"
+                    select
+                    label="Class"
+                    value={grade}
+                    onChange={(event) => setGrade(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    SelectProps={{ native: true }}
+                    sx={{ width: { xs: "100%", sm: 120 } }}
+                  >
+                    <option value="">All</option>
+                    {grades.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </MDInput>
+                  <MDInput
+                    size="small"
+                    select
+                    label="Stream"
+                    value={stream}
+                    onChange={(event) => setStream(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    SelectProps={{ native: true }}
+                    sx={{ width: { xs: "100%", sm: 120 } }}
+                  >
+                    <option value="">All</option>
+                    {streams.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </MDInput>
+                  <MDBox flexGrow={1} />
+                  <Tooltip title="Refresh">
+                    <IconButton size="small" color="info" onClick={loadMatrix}>
+                      <Icon fontSize="small">refresh</Icon>
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Export CSV">
+                    <IconButton size="small" color="info" onClick={exportCsv}>
+                      <Icon fontSize="small">download</Icon>
+                    </IconButton>
+                  </Tooltip>
+                </MDBox>
+              </MDBox>
+
+              <TableContainer sx={{ boxShadow: "none" }}>
+                <Table size="small" sx={{ "& .MuiTableCell-root": { whiteSpace: "nowrap" } }}>
+                  <TableHead sx={{ display: "table-header-group" }}>
+                    <TableRow>
+                      <TableCell sortDirection={orderBy === "full_name" ? order : false}>
+                        <TableSortLabel
+                          active={orderBy === "full_name"}
+                          direction={orderBy === "full_name" ? order : "asc"}
+                          onClick={sortHandler("full_name")}
+                        >
+                          Name
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell>Class</TableCell>
+                      <TableCell>Stream</TableCell>
+                      {weeks.map((week) => (
+                        <TableCell key={week} align="center">
+                          W{week}
+                        </TableCell>
+                      ))}
+                      <TableCell
+                        align="center"
+                        sortDirection={orderBy === "average" ? order : false}
+                      >
+                        <TableSortLabel
+                          active={orderBy === "average"}
+                          direction={orderBy === "average" ? order : "asc"}
+                          onClick={sortHandler("average")}
+                        >
+                          Avg
+                        </TableSortLabel>
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={row.learner_id} hover>
+                        <TableCell>
                           <MDTypography
-                            key={key}
                             variant="button"
                             fontWeight="medium"
-                            sx={{ fontSize: "0.7rem" }}
+                            sx={{ fontSize: "0.75rem" }}
                           >
-                            {row.averages[key] === null
-                              ? `${showTags ? `${METRIC_TAGS[key]} ` : ""}-`
-                              : `${showTags ? `${METRIC_TAGS[key]} ` : ""}${METRICS[key].format(
-                                  row.averages[key]
-                                )}${METRICS[key].unit}`}
+                            {row.full_name}
                           </MDTypography>
+                        </TableCell>
+                        <TableCell>{row.grade || "-"}</TableCell>
+                        <TableCell>{row.stream || "-"}</TableCell>
+                        {weeks.map((week) => (
+                          <TableCell key={week} align="center">
+                            <MDBox
+                              display="flex"
+                              flexDirection="column"
+                              alignItems="center"
+                              gap={0.25}
+                            >
+                              {visibleMetrics.map((key) => {
+                                const value = row.weeks[week]?.[key];
+                                if (value === null || value === undefined) {
+                                  return (
+                                    <MDTypography
+                                      key={key}
+                                      variant="caption"
+                                      color="text"
+                                      sx={{ fontSize: "0.65rem" }}
+                                    >
+                                      {showTags ? `${METRIC_TAGS[key]} -` : "-"}
+                                    </MDTypography>
+                                  );
+                                }
+                                return (
+                                  <Tooltip key={key} title={METRICS[key].label}>
+                                    <Chip
+                                      size="small"
+                                      label={`${showTags ? `${METRIC_TAGS[key]} ` : ""}${METRICS[
+                                        key
+                                      ].format(value)}${METRICS[key].unit}`}
+                                      color={bandColor(key, value)}
+                                      sx={{
+                                        height: 18,
+                                        "& .MuiChip-label": { fontSize: "0.65rem" },
+                                      }}
+                                    />
+                                  </Tooltip>
+                                );
+                              })}
+                            </MDBox>
+                          </TableCell>
                         ))}
-                      </MDBox>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        <TableCell align="center">
+                          <MDBox display="flex" flexDirection="column" alignItems="center">
+                            {visibleMetrics.map((key) => (
+                              <MDTypography
+                                key={key}
+                                variant="button"
+                                fontWeight="medium"
+                                sx={{ fontSize: "0.7rem" }}
+                              >
+                                {row.averages[key] === null
+                                  ? `${showTags ? `${METRIC_TAGS[key]} ` : ""}-`
+                                  : `${showTags ? `${METRIC_TAGS[key]} ` : ""}${METRICS[key].format(
+                                      row.averages[key]
+                                    )}${METRICS[key].unit}`}
+                              </MDTypography>
+                            ))}
+                          </MDBox>
+                        </TableCell>
+                      </TableRow>
+                    ))}
 
-                {rows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={weeks.length + 4} align="center">
-                      <MDBox py={3}>
-                        <MDTypography variant="button" color="text">
-                          {loading ? "Loading weekly marks..." : "No learners match these filters."}
-                        </MDTypography>
-                      </MDBox>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Card>
+                    {rows.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={weeks.length + 4} align="center">
+                          <MDBox py={3}>
+                            <MDTypography variant="button" color="text">
+                              {loading
+                                ? "Loading weekly marks..."
+                                : "No learners match these filters."}
+                            </MDTypography>
+                          </MDBox>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Card>
+          </MDBox>
+        )}
       </MDBox>
       <Footer />
     </DashboardLayout>

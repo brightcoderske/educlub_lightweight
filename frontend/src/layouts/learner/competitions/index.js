@@ -20,7 +20,7 @@ import MDButton from "components/MDButton";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
@@ -382,19 +382,19 @@ function LearnerCompetitions() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center">
-          <DashboardIdentity
-            user={user}
-            title="Competitions"
-            subtitle="Monthly and seasonal quiz and typing challenges."
-          />
-          <MDButton variant="gradient" color="info" onClick={loadCompetitions}>
-            Refresh
-          </MDButton>
-        </MDBox>
-
+      <DashboardNavbar
+        title="Competitions"
+        subtitle="Monthly and seasonal quiz and typing challenges."
+        actions={
+          <>
+            {" "}
+            <MDButton variant="gradient" color="info" onClick={loadCompetitions}>
+              Refresh
+            </MDButton>{" "}
+          </>
+        }
+      />
+      <MDBox py={2}>
         {message && (
           <MDTypography variant="caption" color="success" display="block" mb={2}>
             {message}

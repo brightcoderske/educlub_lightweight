@@ -58,7 +58,7 @@ function WeeklyLearning() {
   // The assessment list is a working tool, not a report: learners start tests
   // from it and staff edit/review/duplicate/delete there.
   const showAssessmentList = isLearner() || canAuthorAssessments;
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const competitionQueryId = searchParams.get("competition_id") || searchParams.get("competition");
   const quizQueryId = searchParams.get("quiz");
   const [courses, setCourses] = useState([]);
@@ -69,10 +69,21 @@ function WeeklyLearning() {
   const [academicTerms, setAcademicTerms] = useState([]);
   const [activeAcademicTerm, setActiveAcademicTerm] = useState(null);
   const [competitions, setCompetitions] = useState([]);
-  const [authoringPanel, setAuthoringPanel] = useState(
-    canAuthorAssessments ? "weekly_quiz" : null
-  );
+  const [authoringPanel, setAuthoringPanel] = useState(canAuthorAssessments ? "weekly_quiz" : null);
   const [performancePanel, setPerformancePanel] = useState(null);
+  const [authoringScrollRequest, setAuthoringScrollRequest] = useState(0);
+  const authoringRef = useRef(null);
+
+  useEffect(() => {
+    if (!authoringScrollRequest || !authoringPanel) return;
+    const frame = requestAnimationFrame(() => {
+      authoringRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [authoringScrollRequest, authoringPanel]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -168,6 +179,14 @@ function WeeklyLearning() {
       if (competitionQueryId && requestedCategory === "weekly_quiz") {
         quizParams.set("competition_id", competitionQueryId);
       }
+      const requestedTerm = !isLearner() && searchParams.get("term");
+      const requestedYear = !isLearner() && searchParams.get("academic_year");
+      if (requestedTerm && requestedYear) {
+        for (const params of [typingParams, quizParams]) {
+          params.set("term", requestedTerm);
+          params.set("academic_year", requestedYear);
+        }
+      }
 
       const assessmentRequest = Promise.all([
         apiClient.get(`/typing/tests?${typingParams.toString()}`),
@@ -207,7 +226,7 @@ function WeeklyLearning() {
           : null;
       setActiveAcademicTerm(currentPeriod);
 
-      if (!currentPeriod) {
+      if (!currentPeriod && isLearner()) {
         setTypingTests([]);
         setQuizTests([]);
       } else {
@@ -231,13 +250,20 @@ function WeeklyLearning() {
         if (isSystemAdmin()) {
           setCompetitions(Array.isArray(competitionRows) ? competitionRows : []);
         }
-        if (currentPeriod) {
+        const authoringPeriod =
+          requestedTerm && requestedYear
+            ? termRows.find(
+                (item) =>
+                  item.name === requestedTerm && String(item.academic_year) === requestedYear
+              )
+            : currentPeriod;
+        if (authoringPeriod) {
           setTypingForm((current) =>
             !current.term || !current.academic_year
               ? {
                   ...current,
-                  term: currentPeriod.name,
-                  academic_year: currentPeriod.academic_year,
+                  term: authoringPeriod.name,
+                  academic_year: authoringPeriod.academic_year,
                   week_number: 1,
                 }
               : current
@@ -246,12 +272,14 @@ function WeeklyLearning() {
             !current.term || !current.academic_year
               ? {
                   ...current,
-                  term: currentPeriod.name,
-                  academic_year: currentPeriod.academic_year,
+                  term: authoringPeriod.name,
+                  academic_year: authoringPeriod.academic_year,
                   week_number: 1,
                 }
               : current
           );
+        }
+        if (currentPeriod) {
           setBulkForm((current) => ({
             ...current,
             term: currentPeriod.name,
@@ -278,12 +306,7 @@ function WeeklyLearning() {
 
   useEffect(() => {
     loadData();
-  }, [
-    user?.schoolId,
-    searchParams,
-    competitionQueryId,
-    quizQueryId,
-  ]);
+  }, [user?.schoolId, searchParams, competitionQueryId, quizQueryId]);
 
   useEffect(() => {
     if (searchParams.get("category") === "weekly_quiz") setAuthoringPanel("weekly_quiz");
@@ -340,6 +363,32 @@ function WeeklyLearning() {
   const grades = school?.grades_config?.length ? school.grades_config : gradeOptions;
   const streams = school?.streams_config?.length ? school.streams_config : learnerStreams;
   const termOptions = academicTerms.length ? academicTerms : [];
+  const viewedTerm =
+    !isLearner() && searchParams.get("term")
+      ? termOptions.find(
+          (item) =>
+            item.name === searchParams.get("term") &&
+            String(item.academic_year) === searchParams.get("academic_year")
+        )
+      : activeAcademicTerm;
+  const assessmentPeriodQuery = (test) =>
+    !isLearner() && test?.term && test?.academic_year
+      ? new URLSearchParams({ term: test.term, academic_year: test.academic_year }).toString()
+      : "";
+  const viewAssessmentPeriod = (period) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("quiz");
+    params.delete("test");
+    if (period) {
+      params.set("term", period.term || period.name);
+      params.set("academic_year", period.academic_year);
+    } else {
+      params.delete("term");
+      params.delete("academic_year");
+    }
+    if (params.toString() === searchParams.toString()) loadData(true);
+    else setSearchParams(params);
+  };
   const typingTerms = termOptions.filter(
     (term) => String(term.academic_year || "") === String(typingForm.academic_year || "")
   );
@@ -413,7 +462,7 @@ function WeeklyLearning() {
       setEditingTypingId(null);
       setTypingForm(emptyTypingForm());
       setAuthoringPanel(null);
-      await loadData();
+      viewAssessmentPeriod(response);
     } catch (err) {
       setError(err.message || "Could not save typing test.");
     }
@@ -425,7 +474,9 @@ function WeeklyLearning() {
     setAuthoringPanel("weekly_typing");
     setPerformancePanel(null);
     try {
-      const response = await apiClient.get(`/typing/tests/${test.id}`);
+      const response = await apiClient.get(
+        `/typing/tests/${test.id}?${assessmentPeriodQuery(test)}`
+      );
       setEditingTypingId(response.id);
       setTypingForm({
         ...emptyTypingForm(),
@@ -659,7 +710,7 @@ function WeeklyLearning() {
       setEditingQuizId(null);
       setQuizForm(emptyQuizForm());
       setAuthoringPanel(null);
-      await loadData();
+      viewAssessmentPeriod(response);
     } catch (err) {
       setError(err.message || "Could not save quiz.");
     }
@@ -671,7 +722,9 @@ function WeeklyLearning() {
     setAuthoringPanel("weekly_quiz");
     setPerformancePanel(null);
     try {
-      const response = await apiClient.get(`/quiz-tests/tests/${test.id}`);
+      const response = await apiClient.get(
+        `/quiz-tests/tests/${test.id}?${assessmentPeriodQuery(test)}`
+      );
       setEditingQuizId(response.id);
       setQuizForm({
         ...emptyQuizForm(),
@@ -743,7 +796,9 @@ function WeeklyLearning() {
     setQuizReviewFilters({ grade: "", stream: "", learnerName });
     setQuizAttemptReview({ test, attempts: [] });
     try {
-      const review = await apiClient.get(`/quiz-tests/tests/${test.id}/attempts`);
+      const review = await apiClient.get(
+        `/quiz-tests/tests/${test.id}/attempts?${assessmentPeriodQuery(test)}`
+      );
       setQuizAttemptReview(review);
       setQuizMarkDrafts(
         Object.fromEntries(
@@ -775,8 +830,7 @@ function WeeklyLearning() {
   // which is also where per-question marking happens.
   const openWeekQuizReview = (learner, weekNumber) => {
     const test = quizTests.find(
-      (item) =>
-        Number(item.week_number) === Number(weekNumber) && item.quiz_type !== "competition"
+      (item) => Number(item.week_number) === Number(weekNumber) && item.quiz_type !== "competition"
     );
 
     if (!test) {
@@ -792,9 +846,14 @@ function WeeklyLearning() {
     setMessage("");
     setSavingQuizAttemptId(attempt.id);
     try {
-      const updated = await apiClient.put(`/quiz-tests/attempts/${attempt.id}/marks`, {
-        question_marks: quizMarkDrafts[attempt.id],
-      });
+      const updated = await apiClient.put(
+        `/quiz-tests/attempts/${attempt.id}/marks?${assessmentPeriodQuery(
+          quizAttemptReview?.test
+        )}`,
+        {
+          question_marks: quizMarkDrafts[attempt.id],
+        }
+      );
       setQuizAttemptReview((current) => ({
         ...current,
         attempts: current.attempts.map((item) =>
@@ -936,7 +995,6 @@ function WeeklyLearning() {
     setQuizRemaining(0);
     quizStartedAtRef.current = null;
   };
-
 
   const openTypingTest = async (test) => {
     setError("");
@@ -1143,6 +1201,7 @@ function WeeklyLearning() {
   const openAuthoring = (panel) => {
     setPerformancePanel(null);
     setAuthoringPanel(panel);
+    setAuthoringScrollRequest((request) => request + 1);
   };
 
   const showPerformance = (panel) => {
@@ -1164,8 +1223,28 @@ function WeeklyLearning() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
+      <DashboardNavbar title="Typing & Quizzes" />
       <MDBox py={2} display="flex" flexDirection="column" gap={2}>
+        {!isLearner() && termOptions.length > 0 && (
+          <MDInput
+            select
+            label="Assessment term"
+            value={viewedTerm && searchParams.get("term") ? String(viewedTerm.id) : "current"}
+            SelectProps={{ native: true }}
+            onChange={(event) =>
+              viewAssessmentPeriod(
+                termOptions.find((item) => String(item.id) === event.target.value)
+              )
+            }
+          >
+            <option value="current">Current term · {activeTermLabel}</option>
+            {termOptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.academic_year} · {item.name}
+              </option>
+            ))}
+          </MDInput>
+        )}
 
         {(error || message) && (
           <Card
@@ -1204,17 +1283,17 @@ function WeeklyLearning() {
                   No current academic term
                 </MDTypography>
                 <MDTypography variant="body2" color="text">
-                  Quizzes and typing tests are strictly term-scoped. Create the current term with
-                  valid dates to enable authoring; expired Term 2 content will not be used as a
-                  fallback.
+                  {isLearner()
+                    ? "Weekly quizzes and typing tests open during their scheduled term."
+                    : "Choose a configured term to create or review assessments. Past-term assessments remain closed to new learner attempts."}
                 </MDTypography>
               </MDBox>
             </MDBox>
           </Card>
         )}
 
-        {authoringPanel && canAuthorAssessments && activeAcademicTerm && (
-          <MDBox id="assessment-authoring-studio">
+        {authoringPanel && canAuthorAssessments && termOptions.length > 0 && (
+          <MDBox id="assessment-authoring-studio" ref={authoringRef} sx={{ scrollMarginTop: 96 }}>
             <MDBox
               mb={0.75}
               display="flex"
@@ -1238,67 +1317,68 @@ function WeeklyLearning() {
                 </MDTypography>
               }
             >
-                {authoringPanel === "weekly_typing" ? (
-                  <TypingStudioForm
-                    typingForm={typingForm}
-                    setTypingForm={setTypingForm}
-                    editingTypingId={editingTypingId}
-                    saveTypingTest={saveTypingTest}
-                    cancelTypingEdit={cancelTypingEdit}
-                    toggleTypingGrade={toggleTypingGrade}
-                    typingTerms={typingTerms}
-                    typingCompetitions={typingCompetitions}
-                    termOptions={termOptions}
-                    selectedTerm={selectedTerm}
-                    weekOptions={weekOptions}
-                    isSystemAdmin={isSystemAdmin}
-                  />
-                ) : (
-                  <QuizStudioForm
-                    quizForm={quizForm}
-                    setQuizForm={setQuizForm}
-                    editingQuizId={editingQuizId}
-                    saveQuizTest={saveQuizTest}
-                    toggleQuizGrade={toggleQuizGrade}
-                    toggleQuizCorrectOption={toggleQuizCorrectOption}
-                    addQuizQuestion={addQuizQuestion}
-                    removeQuizQuestion={removeQuizQuestion}
-                    updateQuizQuestion={updateQuizQuestion}
-                    addQuizOption={addQuizOption}
-                    removeQuizOption={removeQuizOption}
-                    uploadQuizQuestionImage={uploadQuizQuestionImage}
-                    quizTerms={quizTerms}
-                    quizCompetitions={quizCompetitions}
-                    termOptions={termOptions}
-                    selectedQuizTerm={selectedQuizTerm}
-                    quizWeekOptions={quizWeekOptions}
-                    isSystemAdmin={isSystemAdmin}
-                    termTools={
-                      isSchoolAdmin() ? (
-                        <AssessmentTermTools
-                          grades={grades}
-                          streams={streams}
-                          courses={courses}
-                          terms={terms}
-                          academicYears={academicYears}
-                          bulkForm={bulkForm}
-                          setBulkForm={setBulkForm}
-                          syncForm={syncForm}
-                          setSyncForm={setSyncForm}
-                          bulkAllocate={bulkAllocate}
-                          syncResults={syncResults}
-                        />
-                      ) : null
-                    }
-                  />
-                )}
+              {authoringPanel === "weekly_typing" ? (
+                <TypingStudioForm
+                  typingForm={typingForm}
+                  setTypingForm={setTypingForm}
+                  editingTypingId={editingTypingId}
+                  saveTypingTest={saveTypingTest}
+                  cancelTypingEdit={cancelTypingEdit}
+                  toggleTypingGrade={toggleTypingGrade}
+                  typingTerms={typingTerms}
+                  typingCompetitions={typingCompetitions}
+                  termOptions={termOptions}
+                  selectedTerm={selectedTerm}
+                  weekOptions={weekOptions}
+                  isSystemAdmin={isSystemAdmin}
+                />
+              ) : (
+                <QuizStudioForm
+                  quizForm={quizForm}
+                  setQuizForm={setQuizForm}
+                  editingQuizId={editingQuizId}
+                  saveQuizTest={saveQuizTest}
+                  toggleQuizGrade={toggleQuizGrade}
+                  toggleQuizCorrectOption={toggleQuizCorrectOption}
+                  addQuizQuestion={addQuizQuestion}
+                  removeQuizQuestion={removeQuizQuestion}
+                  updateQuizQuestion={updateQuizQuestion}
+                  addQuizOption={addQuizOption}
+                  removeQuizOption={removeQuizOption}
+                  uploadQuizQuestionImage={uploadQuizQuestionImage}
+                  quizTerms={quizTerms}
+                  quizCompetitions={quizCompetitions}
+                  termOptions={termOptions}
+                  selectedQuizTerm={selectedQuizTerm}
+                  quizWeekOptions={quizWeekOptions}
+                  isSystemAdmin={isSystemAdmin}
+                  termTools={
+                    isSchoolAdmin() ? (
+                      <AssessmentTermTools
+                        grades={grades}
+                        streams={streams}
+                        courses={courses}
+                        terms={terms}
+                        academicYears={academicYears}
+                        bulkForm={bulkForm}
+                        setBulkForm={setBulkForm}
+                        syncForm={syncForm}
+                        setSyncForm={setSyncForm}
+                        bulkAllocate={bulkAllocate}
+                        syncResults={syncResults}
+                      />
+                    ) : null
+                  }
+                />
+              )}
             </Suspense>
           </MDBox>
         )}
 
         {showAssessmentList && (
           <AssessmentLibrary
-            activeAcademicTerm={activeAcademicTerm}
+            activeAcademicTerm={viewedTerm}
+            canCreate={canAuthorAssessments && termOptions.length > 0}
             loading={loading}
             quizTests={quizTests}
             typingTests={typingTests}
@@ -1365,9 +1445,10 @@ function WeeklyLearning() {
                 }
               >
                 <WeeklyMatrix
-                  defaultMetric={
-                    performancePanel === "weekly_quiz" ? "quiz_score" : "typing_score"
-                  }
+                  key={`${viewedTerm?.id || "current"}:${performancePanel}`}
+                  assessmentTerm={viewedTerm?.name}
+                  assessmentYear={viewedTerm?.academic_year}
+                  defaultMetric={performancePanel === "weekly_quiz" ? "quiz_score" : "typing_score"}
                   title={
                     performancePanel === "weekly_quiz"
                       ? "Weekly quiz matrix"

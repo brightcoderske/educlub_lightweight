@@ -1,3 +1,4 @@
+const { assessmentScheduleJoins, assessmentScheduleColumns } = require("./assessmentSchedule");
 const { query } = require("../config");
 const { scoreTypingAttempt } = require("./typingScoring");
 const {
@@ -238,28 +239,11 @@ async function listTests(user, filters = {}) {
 
   const result = await query(
     `SELECT tt.*,
-            schedule.term_start_date,
-            schedule.term_end_date,
-            schedule.week_start_date,
-            schedule.week_end_date,
-            COUNT(tl.id)::int AS lesson_count
+            ${assessmentScheduleColumns},
+            (SELECT COUNT(*) FROM typing_lessons detail WHERE detail.typing_test_id = tt.id) AS lesson_count
      FROM typing_tests tt
-     LEFT JOIN LATERAL (
-       SELECT t.start_date AS term_start_date,
-              t.end_date AS term_end_date,
-              tw.start_date AS week_start_date,
-              tw.end_date AS week_end_date
-       FROM terms t
-       JOIN academic_years ay ON ay.id = t.academic_year_id
-       LEFT JOIN term_weeks tw ON tw.term_id = t.id AND tw.week_number = tt.week_number
-       WHERE t.name = tt.term
-         AND ay.year = tt.academic_year
-       ORDER BY t.is_active DESC, t.id DESC
-       LIMIT 1
-     ) schedule ON true
-     LEFT JOIN typing_lessons tl ON tl.typing_test_id = tt.id
-     ${where}
-     GROUP BY tt.id, schedule.term_start_date, schedule.term_end_date, schedule.week_start_date, schedule.week_end_date`,
+     ${assessmentScheduleJoins("tt")}
+     ${where}`,
     values
   );
 
@@ -287,30 +271,13 @@ async function getTest(testId, user, filters = {}) {
   if (!period) return null;
   const result = await query(
     `SELECT tt.*,
-            schedule.term_start_date,
-            schedule.term_end_date,
-            schedule.week_start_date,
-            schedule.week_end_date,
-            COUNT(tl.id)::int AS lesson_count
+            ${assessmentScheduleColumns},
+            (SELECT COUNT(*) FROM typing_lessons detail WHERE detail.typing_test_id = tt.id) AS lesson_count
      FROM typing_tests tt
-     LEFT JOIN LATERAL (
-       SELECT t.start_date AS term_start_date,
-              t.end_date AS term_end_date,
-              tw.start_date AS week_start_date,
-              tw.end_date AS week_end_date
-       FROM terms t
-       JOIN academic_years ay ON ay.id = t.academic_year_id
-       LEFT JOIN term_weeks tw ON tw.term_id = t.id AND tw.week_number = tt.week_number
-       WHERE t.name = tt.term
-         AND ay.year = tt.academic_year
-       ORDER BY t.is_active DESC, t.id DESC
-       LIMIT 1
-     ) schedule ON true
-     LEFT JOIN typing_lessons tl ON tl.typing_test_id = tt.id
+     ${assessmentScheduleJoins("tt")}
      WHERE tt.id = $1
        AND tt.term = $2
-       AND tt.academic_year = $3
-     GROUP BY tt.id, schedule.term_start_date, schedule.term_end_date, schedule.week_start_date, schedule.week_end_date`,
+       AND tt.academic_year = $3`,
     [testId, period.term, period.academicYear]
   );
   const rawTest = result.rows[0];

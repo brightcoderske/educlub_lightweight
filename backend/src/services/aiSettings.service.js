@@ -222,7 +222,7 @@ async function getAiSettings() {
         `SELECT role, is_enabled, requests_per_hour, tokens_per_hour,
         requests_per_day, tokens_per_day, updated_at
        FROM ai_role_limits
-       ORDER BY array_position($1::text[], role)`,
+       ORDER BY FIELD(role, $1)`,
         [VALID_ROLES],
       ),
     ],

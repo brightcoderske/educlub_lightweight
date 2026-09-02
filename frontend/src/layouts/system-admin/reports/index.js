@@ -112,15 +112,11 @@ function SystemAdminReports() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3}>
-          <MDTypography variant="h3">Reports</MDTypography>
-          <MDTypography variant="body2" color="text">
-            Generate report cards for a single learner or a full school.
-          </MDTypography>
-        </MDBox>
-
+      <DashboardNavbar
+        title="Reports"
+        subtitle="Generate report cards for a single learner or a full school."
+      />
+      <MDBox py={2}>
         <Card>
           <MDBox p={3}>
             <Grid container spacing={2}>

@@ -7,7 +7,6 @@ import Grid from "@mui/material/Grid";
 import Icon from "@mui/material/Icon";
 import IconButton from "@mui/material/IconButton";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDProgress from "components/MDProgress";
@@ -70,9 +69,9 @@ function paymentSupportDetails({ user, course, txRef, transactionId, amount, cur
 }
 
 function supportMailto(details) {
-  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(details.subject)}&body=${encodeURIComponent(
-    details.body
-  )}`;
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
+    details.subject
+  )}&body=${encodeURIComponent(details.body)}`;
 }
 
 function CourseOverview() {
@@ -223,31 +222,31 @@ function CourseOverview() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center" gap={2}>
-          <DashboardIdentity
-            user={user}
-            title={overview?.course?.name || "Course"}
-            subtitle={overview?.course?.description || "Your modules and activities"}
-          />
-          <MDButton
-            variant="outlined"
-            color="dark"
-            onClick={() =>
-              navigate(
-                templatePreviewMode
-                  ? `/system-admin/courses/${entityId}/builder`
-                  : previewMode
-                  ? `/school-admin/courses/${entityId}/builder`
-                  : "/learner"
-              )
-            }
-          >
-            {previewMode ? "Back to Builder" : "Back"}
-          </MDButton>
-        </MDBox>
-
+      <DashboardNavbar
+        title={overview?.course?.name || "Course"}
+        subtitle={overview?.course?.description || "Your modules and activities"}
+        actions={
+          <>
+            {" "}
+            <MDButton
+              variant="outlined"
+              color="dark"
+              onClick={() =>
+                navigate(
+                  templatePreviewMode
+                    ? `/system-admin/courses/${entityId}/builder`
+                    : previewMode
+                    ? `/school-admin/courses/${entityId}/builder`
+                    : "/learner"
+                )
+              }
+            >
+              {previewMode ? "Back to Builder" : "Back"}
+            </MDButton>{" "}
+          </>
+        }
+      />
+      <MDBox py={2}>
         {previewMode && (
           <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#fff7ed" }}>
             <MDTypography variant="body2" color="warning" fontWeight="medium">
@@ -280,8 +279,7 @@ function CourseOverview() {
                 </MDTypography>
                 {independentPrice > 0 && (
                   <MDTypography variant="caption" color="text" display="block">
-                    Course access: {independentCurrency}{" "}
-                    {independentPrice.toLocaleString()}
+                    Course access: {independentCurrency} {independentPrice.toLocaleString()}
                   </MDTypography>
                 )}
                 {paymentMessage && (

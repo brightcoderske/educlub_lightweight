@@ -49,7 +49,7 @@ async function recalculateModuleBadge(learnerId, moduleId) {
        ON ap.activity_id = la.id
       AND ap.learner_id = $1::integer
      WHERE cm.id = $2::integer
-     GROUP BY cm.id, cm.course_id`,
+     GROUP BY cm.id, cm.course_id, cm.title`,
     [learnerId, moduleId],
   );
   const row = progress.rows[0];

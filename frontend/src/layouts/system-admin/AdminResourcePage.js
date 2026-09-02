@@ -115,7 +115,7 @@ function AdminResourcePage({
     if (authLoading) return;
 
     if (isSystemAdmin()) {
-      loadItems(Boolean(getCachedPage(cacheKey)));
+      loadItems();
     } else {
       setLoading(false);
     }
@@ -179,15 +179,8 @@ function AdminResourcePage({
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3}>
-          <MDTypography variant="h3">{title}</MDTypography>
-          <MDTypography variant="body2" color="text">
-            {subtitle}
-          </MDTypography>
-        </MDBox>
-
+      <DashboardNavbar title={title} subtitle={subtitle} />
+      <MDBox py={2}>
         {formFields.length > 0 && (
           <Card>
             <MDBox p={2}>

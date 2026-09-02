@@ -13,7 +13,7 @@ import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { buildTypingPracticePath, fingerForKey, progressKey } from "./practicePath";
-import { buildProgressMap, calculateStats } from "./typingTutorUtils";
+import { buildProgressMap, calculateStats, mergePracticeAttempt } from "./typingTutorUtils";
 import {
   isMuted,
   playAttemptSaved,
@@ -57,8 +57,13 @@ function firstAvailableActivity(track, progressMap) {
 }
 
 function MyTypingTutor() {
-  const { isLearner } = useAuth();
+  const { user, isLearner } = useAuth();
   const inputRef = useRef(null);
+  const submitting = useRef(false);
+  const pendingAttempt = useRef(null);
+  const [finishedSeconds, setFinishedSeconds] = useState(null);
+  const [attemptSaved, setAttemptSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [selectedTrackKey, setSelectedTrackKey] = useState("beginner");
   const [selectedLevelNumber, setSelectedLevelNumber] = useState(1);
   const [selectedActivityKey, setSelectedActivityKey] = useState("finger-map");
@@ -81,9 +86,11 @@ function MyTypingTutor() {
   const selectedActivity =
     selectedLevel.activities.find((activity) => activity.key === selectedActivityKey) ||
     selectedLevel.activities[0];
-  const elapsedSeconds = startedAt
-    ? Math.min(selectedActivity.seconds, Math.round((Date.now() - startedAt) / 1000))
-    : 0;
+  const elapsedSeconds =
+    finishedSeconds ??
+    (startedAt
+      ? Math.min(selectedActivity.seconds, Math.round((Date.now() - startedAt) / 1000))
+      : 0);
   const stats = calculateStats(selectedActivity.text, typedText, elapsedSeconds || 1);
   const currentChar = selectedActivity.text[typedText.length] || "";
   const currentKey = currentChar.toUpperCase();
@@ -99,12 +106,12 @@ function MyTypingTutor() {
     stats.netWpm >= selectedActivity.goalWpm;
 
   useEffect(() => {
-    if (!isLearner()) return;
+    if (user?.role !== "learner") return;
     apiClient
       .get("/typing-practice/progress")
       .then((response) => setProgressRows(response.activities || []))
       .catch((err) => setError(err.message || "Could not load typing tutor progress."));
-  }, [isLearner]);
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
     if (!startedAt || isComplete) return undefined;
@@ -116,6 +123,10 @@ function MyTypingTutor() {
   }, [startedAt, selectedActivity.seconds, isComplete]);
 
   const resetActivity = ({ ready = false } = {}) => {
+    pendingAttempt.current = null;
+    setFinishedSeconds(null);
+    setAttemptSaved(false);
+    setSaveFailed(false);
     setTypedText("");
     setPracticeReady(ready);
     setStartedAt(null);
@@ -175,87 +186,55 @@ function MyTypingTutor() {
   };
 
   const saveAttempt = async () => {
-    if (saving) return;
-    const localResult = {
-      track_key: selectedTrack.key,
-      level_number: selectedLevel.number,
-      activity_key: selectedActivity.key,
-      activity_title: selectedActivity.title,
-      attempts: 1,
-      passed,
-      best_net_wpm: stats.netWpm,
-      best_raw_wpm: stats.rawWpm,
-      best_accuracy: stats.accuracy,
-      fewest_mistakes: stats.mistakes,
-      local_only: true,
-    };
-    if (passed) {
-      setProgressRows((current) => [
-        ...current.filter(
-          (row) =>
-            progressKey(row.track_key, row.level_number, row.activity_key) !==
-            progressKey(localResult.track_key, localResult.level_number, localResult.activity_key)
-        ),
-        localResult,
-      ]);
-    }
+    if (submitting.current || !pendingAttempt.current) return;
+    submitting.current = true;
     setSaving(true);
+    setSaveFailed(false);
     setError("");
     try {
-      // The marks and the pass decision are recalculated on the server from the
-      // passage and the keystrokes below, so nothing here is sent as a claim.
-      const response = await apiClient.post("/typing-practice/attempts", {
-        track_key: selectedTrack.key,
-        level_number: selectedLevel.number,
-        activity_key: selectedActivity.key,
-        activity_title: selectedActivity.title,
-        target_text: selectedActivity.text,
-        typed_text: typedText,
-        goal_wpm: selectedActivity.goalWpm,
-        accuracy_goal: selectedActivity.accuracyGoal,
-        duration_seconds: Math.max(1, elapsedSeconds),
-      });
-      setProgressRows((current) => [
-        ...current.filter(
-          (row) =>
-            progressKey(row.track_key, row.level_number, row.activity_key) !==
-            progressKey(response.track_key, response.level_number, response.activity_key)
-        ),
-        {
-          ...response,
-          attempts: 1,
-          best_net_wpm: response.net_wpm,
-          best_raw_wpm: response.raw_wpm,
-          best_accuracy: response.accuracy,
-          fewest_mistakes: response.mistakes,
-        },
-      ]);
+      const response = await apiClient.post("/typing-practice/attempts", pendingAttempt.current);
+      setProgressRows((current) => mergePracticeAttempt(current, response));
+      pendingAttempt.current = null;
+      setAttemptSaved(true);
       if (response.passed) playSuccess();
       else playAttemptSaved();
       setMessage(
         response.passed
-          ? "Great work. Activity passed and saved."
-          : "Attempt saved. Try again to pass."
+          ? "Activity passed and saved for your teacher."
+          : "Attempt saved for your teacher. Try again to pass."
       );
     } catch (err) {
-      setError(
-        passed
-          ? "Passed locally. Run the typing practice migration so progress can save permanently."
-          : err.message || "Could not save typing practice."
-      );
+      setSaveFailed(true);
+      setError("Your attempt has not saved yet. Check your connection and use Save again.");
     } finally {
+      submitting.current = false;
       setSaving(false);
     }
   };
 
   useEffect(() => {
-    if (isComplete && startedAt) {
-      saveAttempt();
-      setStartedAt(null);
-    }
+    if (!isComplete || !startedAt) return;
+    const duration = Math.max(
+      1,
+      Math.min(selectedActivity.seconds, Math.round((Date.now() - startedAt) / 1000))
+    );
+    setFinishedSeconds(duration);
+    pendingAttempt.current = {
+      track_key: selectedTrack.key,
+      level_number: selectedLevel.number,
+      activity_key: selectedActivity.key,
+      activity_title: selectedActivity.title,
+      target_text: selectedActivity.text,
+      typed_text: typedText,
+      goal_wpm: selectedActivity.goalWpm,
+      accuracy_goal: selectedActivity.accuracyGoal,
+      duration_seconds: duration,
+    };
+    saveAttempt();
   }, [isComplete]);
 
   const selectTrack = (track) => {
+    if (saving || saveFailed) return;
     const next = firstAvailableActivity(track, progressMap);
     setSelectedTrackKey(track.key);
     setSelectedLevelNumber(next.level.number);
@@ -313,10 +292,11 @@ function MyTypingTutor() {
   );
   const nextPractice = flatActivities[flatSelectedIndex + 1] || null;
   const canGoNext =
-    passed ||
+    !saving &&
+    !saveFailed &&
     progressMap[progressKey(selectedTrack.key, selectedLevel.number, selectedActivity.key)]?.passed;
   const goToNextActivity = () => {
-    if (!nextPractice || !canGoNext) return;
+    if (saving || !nextPractice || !canGoNext) return;
     setSelectedLevelNumber(nextPractice.level.number);
     setSelectedActivityKey(nextPractice.activity.key);
   };
@@ -327,19 +307,21 @@ function MyTypingTutor() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar autoHideOnScroll />
+      <DashboardNavbar
+        autoHideOnScroll
+        title="My Typing Tutor"
+        subtitle="Self-paced keyboard practice. It is separate from report-card typing assessments."
+      />
       <MDBox py={{ xs: 1.25, sm: 1.5 }} sx={{ bgcolor: "#f7fbf7", minHeight: "100vh" }}>
-        <MDBox mb={1.25}>
-          <MDTypography variant="h3">My Typing Tutor</MDTypography>
-          <MDTypography variant="body2" color="text">
-            Self-paced keyboard practice. It is separate from report-card typing assessments.
-          </MDTypography>
-        </MDBox>
-
         {error && (
           <MDTypography variant="caption" color="error" display="block" mb={1}>
             {error}
           </MDTypography>
+        )}
+        {saveFailed && (
+          <MDButton size="small" color="info" onClick={saveAttempt} disabled={saving}>
+            Save again
+          </MDButton>
         )}
         {message && (
           <MDTypography variant="caption" color="success" display="block" mb={1}>
@@ -430,6 +412,7 @@ function MyTypingTutor() {
                               activityUnlocked(level.number - 1, index)
                             );
                             if (!firstUnlocked) return;
+                            if (saving || saveFailed) return;
                             setSelectedLevelNumber(level.number);
                             setSelectedActivityKey(firstUnlocked.key);
                           }}
@@ -457,6 +440,7 @@ function MyTypingTutor() {
                           borderRadius="md"
                           onClick={() => {
                             if (!unlocked) return;
+                            if (saving || saveFailed) return;
                             setSelectedActivityKey(activity.key);
                           }}
                           sx={{
@@ -560,6 +544,7 @@ function MyTypingTutor() {
                       <MDButton
                         variant="outlined"
                         color="dark"
+                        disabled={saving || saveFailed}
                         onClick={() => resetActivity({ ready: true })}
                       >
                         Retry
@@ -719,8 +704,12 @@ function MyTypingTutor() {
                             color={passed ? "success" : "warning"}
                             fontWeight="medium"
                           >
-                            {passed
-                              ? "Passed. Nice progress."
+                            {saving
+                              ? "Saving attempt…"
+                              : !attemptSaved
+                              ? "Attempt not saved yet."
+                              : passed
+                              ? "Passed and saved."
                               : "Saved. Retry to pass this activity."}
                           </MDTypography>
                         )}

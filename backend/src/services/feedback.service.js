@@ -203,13 +203,13 @@ async function listThreads(user) {
      FROM feedback_threads ft
      LEFT JOIN learners l ON l.id = ft.learner_id
      LEFT JOIN schools s ON s.id = ft.school_id
-     LEFT JOIN LATERAL (
-       SELECT message, created_at
+     LEFT JOIN feedback_messages last_message ON last_message.id = (
+       SELECT fm.id
        FROM feedback_messages fm
        WHERE fm.thread_id = ft.id
-       ORDER BY fm.created_at DESC
+       ORDER BY fm.created_at DESC, fm.id DESC
        LIMIT 1
-     ) last_message ON true
+     )
      ${where}
      ORDER BY ft.updated_at DESC`,
     params,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
+import Alert from "@mui/material/Alert";
 import Checkbox from "@mui/material/Checkbox";
 import MDBox from "components/MDBox";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
@@ -16,6 +17,7 @@ import { getCachedPage, setCachedPage } from "lib/pageCache";
 const CACHE_KEY = "system-admin:dashboard";
 
 function SystemAdminDashboard() {
+  const [loadErrors, setLoadErrors] = useState([]);
   const { user, isSystemAdmin } = useAuth();
   const [stats, setStats] = useState({
     schools: 0,
@@ -38,6 +40,12 @@ function SystemAdminDashboard() {
 
     // Fetch statistics
     const fetchStats = async () => {
+      setLoadErrors([]);
+      const load = (endpoint) =>
+        apiClient.get(endpoint).catch((error) => {
+          setLoadErrors((current) => [...current, error.message]);
+          return null;
+        });
       const cached = getCachedPage(CACHE_KEY)?.value;
       if (cached) {
         setStats(cached.stats || stats);
@@ -54,11 +62,11 @@ function SystemAdminDashboard() {
           currentTermRes,
           mfaPolicyRes,
         ] = await Promise.all([
-          apiClient.get("/schools"),
-          apiClient.get("/learners"),
-          apiClient.get("/courses"),
-          apiClient.get("/users?role=school_admin"),
-          apiClient.get("/academic/terms"),
+          load("/schools"),
+          load("/learners"),
+          load("/courses"),
+          load("/users?role=school_admin"),
+          load("/academic/terms"),
           apiClient.get("/academic/terms/current").catch(() => null),
           apiClient.get("/auth/mfa-policy").catch(() => ({
             system_admin: true,
@@ -67,12 +75,12 @@ function SystemAdminDashboard() {
         ]);
 
         const nextStats = {
-          schools: schoolsRes.length || 0,
-          learners: learnersRes.length || 0,
-          courses: coursesRes.length || 0,
-          schoolAdmins: schoolAdminsRes.length || 0,
+          schools: schoolsRes?.length ?? "—",
+          learners: learnersRes?.length ?? "—",
+          courses: coursesRes?.length ?? "—",
+          schoolAdmins: schoolAdminsRes?.length ?? "—",
           pastTerms:
-            termsRes.filter((termItem) => new Date(termItem.end_date) < new Date()).length || 0,
+            termsRes?.filter((termItem) => new Date(termItem.end_date) < new Date()).length ?? "—",
         };
         setStats(nextStats);
         setCurrentTerm(currentTermRes);
@@ -88,7 +96,7 @@ function SystemAdminDashboard() {
     };
 
     fetchStats();
-  }, [isSystemAdmin]);
+  }, [user?.role]);
 
   const updateMfaPolicy = async (role, checked) => {
     const nextPolicy = { ...mfaPolicy, [role]: checked };
@@ -111,69 +119,54 @@ function SystemAdminDashboard() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3}>
-          <h2>System Admin Dashboard</h2>
-          <p>Welcome, {user?.fullName}</p>
-        </MDBox>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6} lg={3}>
-            <MDBox mb={1.5}>
+      <DashboardNavbar title="System Admin Dashboard" subtitle={<>Welcome, {user?.fullName}</>} />
+      <MDBox py={2}>
+        {loadErrors.length > 0 && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            Some data could not refresh: {[...new Set(loadErrors)].join("; ")}
+          </Alert>
+        )}
+        <Grid container spacing={2}>
+          <Grid item xs={6} md={3}>
+            <MDBox mb={0}>
               <ComplexStatisticsCard
                 color="dark"
                 icon="school"
                 title="Schools"
+                to="/system-admin/schools"
                 count={stats.schools}
-                percentage={{
-                  color: "success",
-                  amount: "+5%",
-                  label: "than last month",
-                }}
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={3}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} md={3}>
+            <MDBox mb={0}>
               <ComplexStatisticsCard
                 icon="people"
                 title="Learners"
+                to="/system-admin/learners"
                 count={stats.learners}
-                percentage={{
-                  color: "success",
-                  amount: "+12%",
-                  label: "than last month",
-                }}
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={3}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} md={3}>
+            <MDBox mb={0}>
               <ComplexStatisticsCard
                 color="success"
                 icon="menu_book"
                 title="Courses"
+                to="/system-admin/courses"
                 count={stats.courses}
-                percentage={{
-                  color: "success",
-                  amount: "+3%",
-                  label: "than last month",
-                }}
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={3}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} md={3}>
+            <MDBox mb={0}>
               <ComplexStatisticsCard
                 color="primary"
                 icon="admin_panel_settings"
                 title="School Admins"
+                to="/system-admin/school-admins"
                 count={stats.schoolAdmins}
-                percentage={{
-                  color: "success",
-                  amount: "+2",
-                  label: "Just added",
-                }}
               />
             </MDBox>
           </Grid>
@@ -185,7 +178,7 @@ function SystemAdminDashboard() {
           </Grid>
           <Grid item xs={12}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={2}>
                 <MDTypography variant="h5" fontWeight="bold" mb={1}>
                   Administrator MFA
                 </MDTypography>

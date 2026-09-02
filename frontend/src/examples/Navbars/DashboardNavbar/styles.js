@@ -12,132 +12,46 @@ Coded by www.creative-tim.com
 
 * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 */
-function navbar(theme, ownerState) {
-  const { palette, boxShadows, functions, transitions, breakpoints, borders } = theme;
-  const { transparentNavbar, absolute, light, darkMode } = ownerState;
-
-  const { dark, white, text, transparent, background } = palette;
-  const { navbarBoxShadow } = boxShadows;
-  const { rgba, pxToRem } = functions;
-  const { borderRadius } = borders;
-
+function navbar(theme, { absolute }) {
   return {
-    boxShadow: transparentNavbar || absolute ? "none" : navbarBoxShadow,
-    backdropFilter: transparentNavbar || absolute ? "none" : `saturate(200%) blur(${pxToRem(30)})`,
-    backgroundColor:
-      transparentNavbar || absolute
-        ? `${transparent.main} !important`
-        : rgba(darkMode ? background.default : white.main, 0.8),
-
-    color: () => {
-      let color;
-
-      if (light) {
-        color = white.main;
-      } else if (transparentNavbar) {
-        color = text.main;
-      } else {
-        color = dark.main;
-      }
-
-      return color;
-    },
-    top: absolute ? 0 : pxToRem(12),
-    minHeight: pxToRem(75),
-    display: "grid",
-    alignItems: "center",
-    borderRadius: borderRadius.xl,
-    paddingTop: pxToRem(8),
-    paddingBottom: pxToRem(8),
-    paddingRight: absolute ? pxToRem(8) : 0,
-    paddingLeft: absolute ? pxToRem(16) : 0,
-
-    [breakpoints.down("sm")]: {
-      top: pxToRem(6),
-      minHeight: "auto",
-      borderRadius: pxToRem(8),
-      padding: `${pxToRem(6)} ${pxToRem(8)}`,
-    },
-
-    "& > *": {
-      transition: transitions.create("all", {
-        easing: transitions.easing.easeInOut,
-        duration: transitions.duration.standard,
-      }),
-    },
-
-    "& .MuiToolbar-root": {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-
-      [breakpoints.up("sm")]: {
-        minHeight: "auto",
-        padding: `${pxToRem(4)} ${pxToRem(16)}`,
-      },
-    },
+    top: absolute ? 0 : 12,
+    display: "block",
+    padding: 0,
+    color: "#334155",
+    backdropFilter: "none",
+    [theme.breakpoints.down("sm")]: { top: 6 },
   };
 }
 
-const navbarContainer = ({ breakpoints }) => ({
-  flexDirection: "column",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  pt: 0.5,
-  pb: 0.5,
-  gap: 0.5,
-
-  [breakpoints.up("md")]: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: "0",
-    paddingBottom: "0",
+const navbarContainer = (theme, { hasActions }) => ({
+  display: "grid !important",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gridTemplateAreas: hasActions ? '"title account" "actions actions"' : '"title account"',
+  alignItems: "center",
+  columnGap: 1.25,
+  rowGap: 1,
+  minHeight: "60px !important",
+  p: "10px 12px !important",
+  [theme.breakpoints.up("md")]: {
+    gridTemplateColumns: hasActions ? "minmax(180px, 1fr) auto auto" : "minmax(0, 1fr) auto",
+    gridTemplateAreas: hasActions ? '"title actions account"' : '"title account"',
   },
 });
 
-const navbarRow = ({ breakpoints }, { isMini }) => ({
+const navbarRow = () => ({
+  gridArea: "account",
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
-  width: "100%",
+  justifyContent: "flex-end",
   minWidth: 0,
-
-  [breakpoints.up("md")]: {
-    justifyContent: isMini ? "space-between" : "stretch",
-    width: isMini ? "100%" : "max-content",
-  },
-
-  [breakpoints.up("xl")]: {
-    justifyContent: "stretch !important",
-    width: "max-content !important",
-  },
 });
 
-const navbarIconButton = ({ typography: { size }, breakpoints }) => ({
-  px: 1,
-
-  "& .material-icons, .material-icons-round": {
-    fontSize: `${size.xl} !important`,
-  },
-
-  "& .MuiTypography-root": {
-    display: "none",
-
-    [breakpoints.up("sm")]: {
-      display: "inline-block",
-      lineHeight: 1.2,
-      ml: 0.5,
-    },
-  },
+const navbarIconButton = () => ({
+  width: 34,
+  height: 34,
+  p: 0.75,
+  color: "#64748b",
+  "& .material-icons, .material-icons-round": { fontSize: "20px !important" },
 });
 
-const navbarMobileMenu = ({ breakpoints }) => ({
-  display: "inline-block",
-  lineHeight: 0,
-
-  [breakpoints.up("xl")]: {
-    display: "none",
-  },
-});
-
-export { navbar, navbarContainer, navbarRow, navbarIconButton, navbarMobileMenu };
+export { navbar, navbarContainer, navbarRow, navbarIconButton };

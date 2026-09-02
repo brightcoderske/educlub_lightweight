@@ -85,3 +85,27 @@ export function buildProgressMap(rows = []) {
     return map;
   }, {});
 }
+
+export function mergePracticeAttempt(rows, attempt) {
+  const key = progressKey(attempt.track_key, attempt.level_number, attempt.activity_key);
+  const previous = rows.find(
+    (row) => progressKey(row.track_key, row.level_number, row.activity_key) === key
+  );
+  const merged = {
+    ...attempt,
+    passed: Boolean(previous?.passed || attempt.passed),
+    attempts: Number(previous?.attempts || 0) + 1,
+    best_net_wpm: Math.max(Number(previous?.best_net_wpm || 0), Number(attempt.net_wpm)),
+    best_raw_wpm: Math.max(Number(previous?.best_raw_wpm || 0), Number(attempt.raw_wpm)),
+    best_accuracy: Math.max(Number(previous?.best_accuracy || 0), Number(attempt.accuracy)),
+    fewest_mistakes: Math.min(
+      Number(previous?.fewest_mistakes ?? Infinity),
+      Number(attempt.mistakes)
+    ),
+    last_attempt_at: attempt.submitted_at,
+  };
+  return [
+    ...rows.filter((row) => progressKey(row.track_key, row.level_number, row.activity_key) !== key),
+    merged,
+  ];
+}

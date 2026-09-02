@@ -243,7 +243,9 @@ function courseStructureForPrompt(modules = []) {
       const activities = (courseModule.activities || [])
         .map(
           (activity, activityIndex) =>
-            `${activityIndex + 1}. ${activity.title || "Untitled"} (${activity.activity_type || "lesson"})`
+            `${activityIndex + 1}. ${activity.title || "Untitled"} (${
+              activity.activity_type || "lesson"
+            })`
         )
         .join("; ");
       return `Module ${moduleIndex + 1}: ${courseModule.title || "Untitled"}${
@@ -256,7 +258,9 @@ function courseStructureForPrompt(modules = []) {
 function defaultCourseAiPrompt(course = {}, modules = [], form = {}) {
   return [
     `Build rich eduClub course content for "${course?.name || "this course"}".`,
-    `Course description: ${course?.description || form.objective || "Use the saved course description and objective."}`,
+    `Course description: ${
+      course?.description || form.objective || "Use the saved course description and objective."
+    }`,
     `Target learners: ${course?.target_level || form.learner_age || "8-year-old beginners"}.`,
     `Generation mode: ${form.mode || "full_course"}.`,
     "Create specific measurable course objectives, module objectives, and activity-level objectives.",
@@ -1573,18 +1577,18 @@ function ActivityManagerDialog({
                                 questionType === "true_false"
                                   ? ["True", "False"]
                                   : questionType === "matching"
-                                    ? [{ left: "", right: "" }]
-                                    : question.options.some((option) => typeof option === "object")
-                                      ? ["Option 1", "Option 2"]
-                                      : question.options,
+                                  ? [{ left: "", right: "" }]
+                                  : question.options.some((option) => typeof option === "object")
+                                  ? ["Option 1", "Option 2"]
+                                  : question.options,
                               correct_answer:
                                 questionType === "true_false"
                                   ? "True"
                                   : questionType === "multi_select"
-                                    ? []
-                                    : questionType === "ordering"
-                                      ? question.options
-                                      : "",
+                                  ? []
+                                  : questionType === "ordering"
+                                  ? question.options
+                                  : "",
                             });
                           }}
                           SelectProps={{ native: true }}
@@ -1883,8 +1887,8 @@ function ActivityManagerDialog({
                   form.activity_type === "reflection"
                     ? "Reflection prompt"
                     : form.activity_type === "project"
-                      ? "Project brief"
-                      : "Submission instructions"
+                    ? "Project brief"
+                    : "Submission instructions"
                 }
                 multiline
                 rows={4}
@@ -1893,8 +1897,8 @@ function ActivityManagerDialog({
                   form.activity_type === "reflection"
                     ? form.reflection_prompt
                     : form.activity_type === "project"
-                      ? form.project_brief
-                      : form.submission_instructions
+                    ? form.project_brief
+                    : form.submission_instructions
                 }
                 onChange={(event) =>
                   setForm({
@@ -1902,8 +1906,8 @@ function ActivityManagerDialog({
                     [form.activity_type === "reflection"
                       ? "reflection_prompt"
                       : form.activity_type === "project"
-                        ? "project_brief"
-                        : "submission_instructions"]: event.target.value,
+                      ? "project_brief"
+                      : "submission_instructions"]: event.target.value,
                   })
                 }
               />
@@ -3393,113 +3397,114 @@ function CourseBuilder() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3} display="flex" justifyContent="space-between" alignItems="center" gap={2}>
-          <MDBox minWidth={0}>
-            <MDTypography variant="h3">
-              {isTemplate ? "Template Builder" : "School Course Builder"}
-            </MDTypography>
-            <MDTypography variant="body2" color="text">
-              {course?.name || "Course"} | {versionLabel}
-            </MDTypography>
+      <DashboardNavbar
+        title={isTemplate ? "Template Builder" : "School Course Builder"}
+        subtitle={
+          <>
+            {course?.name || "Course"} | {versionLabel}
+          </>
+        }
+        actions={
+          <>
+            {" "}
             {!isTemplate && course?.update_available && (
               <Chip label="Template update available" color="warning" size="small" sx={{ mt: 1 }} />
             )}
-          </MDBox>
-          <MDBox display="flex" gap={1} flexWrap="wrap">
-            {isTemplate && (
-              <>
-                <MDButton
-                  variant="gradient"
-                  color="warning"
-                  startIcon={<Icon>auto_awesome</Icon>}
-                  onClick={() => setAiDialogOpen(true)}
-                >
-                  AI Builder
-                </MDButton>
-                <MDButton
-                  variant="outlined"
-                  color="info"
-                  startIcon={<Icon>visibility</Icon>}
-                  onClick={() => navigate(`/system-admin/courses/${entityId}/preview`)}
-                >
-                  View as Learner
-                </MDButton>
-              </>
-            )}
-            {!isTemplate && (
-              <>
-                <MDButton
-                  variant="outlined"
-                  color="info"
-                  startIcon={<Icon>visibility</Icon>}
-                  onClick={() => navigate(`/school-admin/courses/${entityId}/preview`)}
-                >
-                  Preview as Learner
-                </MDButton>
-                <MDButton
-                  variant={reviewMode ? "gradient" : "outlined"}
-                  color="success"
-                  onClick={() =>
-                    setSearchParams((current) => {
-                      const next = new URLSearchParams(current);
-                      if (reviewMode) {
-                        next.delete("review");
-                      } else {
-                        next.set("review", "1");
-                      }
-                      return next;
-                    })
-                  }
-                >
-                  {reviewMode ? "Exit Review" : "Review Learner Work"}
-                </MDButton>
-                {user?.role === "school_admin" ? (
-                  <>
-                    <MDButton
-                      variant="outlined"
-                      color="info"
-                      disabled={saving}
-                      onClick={() => syncCourse("sync")}
-                    >
-                      Sync Template
-                    </MDButton>
-                    <MDButton
-                      variant="outlined"
-                      color="warning"
-                      disabled={saving}
-                      onClick={() => syncCourse("rollback")}
-                    >
-                      Roll Back
-                    </MDButton>
-                  </>
-                ) : (
-                  course?.update_available && (
-                    <MDButton
-                      variant="outlined"
-                      color="warning"
-                      disabled={saving}
-                      onClick={requestTemplateUpdate}
-                    >
-                      Ask Admin to Update
-                    </MDButton>
-                  )
-                )}
-              </>
-            )}
-            <MDButton
-              variant="outlined"
-              color="dark"
-              onClick={() =>
-                navigate(isTemplate ? "/system-admin/courses" : "/school-admin/courses")
-              }
-            >
-              Close
-            </MDButton>
-          </MDBox>
-        </MDBox>
-
+            <MDBox display="flex" gap={1} flexWrap="wrap">
+              {isTemplate && (
+                <>
+                  <MDButton
+                    variant="gradient"
+                    color="warning"
+                    startIcon={<Icon>auto_awesome</Icon>}
+                    onClick={() => setAiDialogOpen(true)}
+                  >
+                    AI Builder
+                  </MDButton>
+                  <MDButton
+                    variant="outlined"
+                    color="info"
+                    startIcon={<Icon>visibility</Icon>}
+                    onClick={() => navigate(`/system-admin/courses/${entityId}/preview`)}
+                  >
+                    View as Learner
+                  </MDButton>
+                </>
+              )}
+              {!isTemplate && (
+                <>
+                  <MDButton
+                    variant="outlined"
+                    color="info"
+                    startIcon={<Icon>visibility</Icon>}
+                    onClick={() => navigate(`/school-admin/courses/${entityId}/preview`)}
+                  >
+                    Preview as Learner
+                  </MDButton>
+                  <MDButton
+                    variant={reviewMode ? "gradient" : "outlined"}
+                    color="success"
+                    onClick={() =>
+                      setSearchParams((current) => {
+                        const next = new URLSearchParams(current);
+                        if (reviewMode) {
+                          next.delete("review");
+                        } else {
+                          next.set("review", "1");
+                        }
+                        return next;
+                      })
+                    }
+                  >
+                    {reviewMode ? "Exit Review" : "Review Learner Work"}
+                  </MDButton>
+                  {user?.role === "school_admin" ? (
+                    <>
+                      <MDButton
+                        variant="outlined"
+                        color="info"
+                        disabled={saving}
+                        onClick={() => syncCourse("sync")}
+                      >
+                        Sync Template
+                      </MDButton>
+                      <MDButton
+                        variant="outlined"
+                        color="warning"
+                        disabled={saving}
+                        onClick={() => syncCourse("rollback")}
+                      >
+                        Roll Back
+                      </MDButton>
+                    </>
+                  ) : (
+                    course?.update_available && (
+                      <MDButton
+                        variant="outlined"
+                        color="warning"
+                        disabled={saving}
+                        onClick={requestTemplateUpdate}
+                      >
+                        Ask Admin to Update
+                      </MDButton>
+                    )
+                  )}
+                </>
+              )}
+              <MDButton
+                variant="outlined"
+                color="dark"
+                onClick={() =>
+                  navigate(isTemplate ? "/system-admin/courses" : "/school-admin/courses")
+                }
+              >
+                Close
+              </MDButton>
+            </MDBox>{" "}
+          </>
+        }
+      />
+      <MDBox py={2}>
         {error && (
           <MDTypography variant="caption" color="error" display="block" mb={2}>
             {error}

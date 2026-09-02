@@ -1,3 +1,4 @@
+const { assessmentScheduleJoins, assessmentScheduleColumns } = require("./assessmentSchedule");
 const { query } = require("../config");
 const { normalizeQuestionMarks } = require("./quizAttemptMarks");
 const { answersMatch } = require("./quizAnswerPolicy");
@@ -177,28 +178,11 @@ async function listTests(user, filters = {}) {
 
   const result = await query(
     `SELECT qt.*,
-            schedule.term_start_date,
-            schedule.term_end_date,
-            schedule.week_start_date,
-            schedule.week_end_date,
-            COUNT(qq.id)::integer AS question_count
+            ${assessmentScheduleColumns},
+            (SELECT COUNT(*) FROM quiz_test_questions detail WHERE detail.quiz_test_id = qt.id) AS question_count
      FROM quiz_tests qt
-     LEFT JOIN LATERAL (
-       SELECT t.start_date AS term_start_date,
-              t.end_date AS term_end_date,
-              tw.start_date AS week_start_date,
-              tw.end_date AS week_end_date
-       FROM terms t
-       JOIN academic_years ay ON ay.id = t.academic_year_id
-       LEFT JOIN term_weeks tw ON tw.term_id = t.id AND tw.week_number = qt.week_number
-       WHERE t.name = qt.term
-         AND ay.year = qt.academic_year
-       ORDER BY t.is_active DESC, t.id DESC
-       LIMIT 1
-     ) schedule ON true
-     LEFT JOIN quiz_test_questions qq ON qq.quiz_test_id = qt.id
+     ${assessmentScheduleJoins("qt")}
      ${where}
-     GROUP BY qt.id, schedule.term_start_date, schedule.term_end_date, schedule.week_start_date, schedule.week_end_date
      ORDER BY qt.academic_year DESC NULLS LAST, qt.week_number DESC NULLS LAST, qt.created_at DESC`,
     values,
   );

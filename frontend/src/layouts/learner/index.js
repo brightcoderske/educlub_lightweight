@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Grid from "@mui/material/Grid";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
+import MDInput from "components/MDInput";
 import Card from "@mui/material/Card";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
@@ -15,7 +16,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Chip from "@mui/material/Chip";
 import Icon from "@mui/material/Icon";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -26,6 +27,11 @@ import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
 import { activityLearningPath, findContinueLearning } from "./learningNavigation";
 import { buildDueThisWeekItems, findActiveWeekLearning } from "./dashboardDueItems";
+import {
+  academicPeriodOptions,
+  filterAcademicPeriod,
+  currentLearningAllocations,
+} from "lib/academicHistory";
 
 const apiOrigin = new URL(API_BASE_URL).origin;
 
@@ -78,23 +84,29 @@ const LEARNER_DASHBOARD_CACHE_MS = 2 * 60 * 1000;
 function LearnerDashboard() {
   const { user, isLearner } = useAuth();
   const navigate = useNavigate();
-  const [allocations, setAllocations] = useState([]);
-  const [learner, setLearner] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const requestVersion = useRef(0);
+  const cached = learnerDashboardCache?.userId === user?.id ? learnerDashboardCache.data : null;
+  const [allocations, setAllocations] = useState(cached?.allocations || []);
+  const [learner, setLearner] = useState(cached?.learner || null);
+  const [loading, setLoading] = useState(!cached);
+  const [selectedPeriod, setSelectedPeriod] = useState("all");
   const [error, setError] = useState("");
-  const [stats, setStats] = useState({
-    total: 0,
-    active: 0,
-    completed: 0,
-    inProgress: 0,
-  });
-  const [currentTerm, setCurrentTerm] = useState(null);
-  const [pastTerms, setPastTerms] = useState(0);
+  const [stats, setStats] = useState(
+    cached?.stats || {
+      total: 0,
+      active: 0,
+      completed: 0,
+      inProgress: 0,
+    }
+  );
+  const [currentTerm, setCurrentTerm] = useState(cached?.currentTerm || null);
+  const [pastTerms, setPastTerms] = useState(cached?.pastTerms || 0);
   const [featuredCompetition, setFeaturedCompetition] = useState(null);
   const [showFeaturedCompetition, setShowFeaturedCompetition] = useState(false);
-  const [badges, setBadges] = useState([]);
-  const [dueItems, setDueItems] = useState([]);
-  const [continueLearning, setContinueLearning] = useState(null);
+  const [badges, setBadges] = useState(cached?.badges || []);
+  const [dueItems, setDueItems] = useState(cached?.dueItems || []);
+  const [continueLearning, setContinueLearning] = useState(cached?.continueLearning || null);
+  const visibleAllocations = filterAcademicPeriod(allocations, selectedPeriod);
 
   useEffect(() => {
     if (!isLearner()) {
@@ -109,11 +121,13 @@ function LearnerDashboard() {
     if (hasFreshCache) {
       applyDashboardData(learnerDashboardCache.data, { showFeatured: false });
       fetchLearnerData({ quiet: true });
-      return;
+    } else {
+      fetchLearnerData();
     }
-
-    fetchLearnerData();
-  }, [isLearner, user?.id]);
+    return () => {
+      requestVersion.current += 1;
+    };
+  }, [user?.role, user?.id]);
 
   const applyDashboardData = (data, { showFeatured = true } = {}) => {
     setLearner(data.learner);
@@ -131,22 +145,32 @@ function LearnerDashboard() {
   };
 
   const fetchLearnerData = async ({ quiet = false } = {}) => {
+    const version = ++requestVersion.current;
     if (!quiet) {
       setLoading(true);
     }
     setError("");
     try {
-      const [learners, termsRes, currentTermRes] = await Promise.all([
+      const [
+        learners,
+        termsRes,
+        currentTermRes,
+        competitionsRes,
+        badgesRes,
+        typingTestsRes,
+        quizTestsRes,
+        response,
+      ] = await Promise.all([
         apiClient.get("/learners"),
         apiClient.get("/academic/terms").catch(() => []),
         apiClient.get("/academic/terms/current").catch(() => null),
-      ]);
-      const [competitionsRes, badgesRes, typingTestsRes, quizTestsRes] = await Promise.all([
         apiClient.get("/competitions").catch(() => []),
         apiClient.get("/courses/learner/badges").catch(() => []),
         apiClient.get("/typing/tests?test_type=weekly").catch(() => []),
         apiClient.get("/quiz-tests/tests?quiz_type=weekly").catch(() => []),
+        apiClient.get("/allocations"),
       ]);
+      if (version !== requestVersion.current) return;
       const featured =
         competitionsRes.find(
           (competition) => competition.is_featured && competition.enrollment_status !== "enrolled"
@@ -177,24 +201,10 @@ function LearnerDashboard() {
         return;
       }
 
-      const response = await apiClient.get("/allocations");
-      const overviews = await Promise.all(
-        response
-          .filter((allocation) => ["active", "in_progress"].includes(allocation.status))
-          .map((allocation) =>
-            apiClient
-              .get(`/courses/${allocation.course_id}/learning-overview`)
-              .then((overview) => ({ allocation, overview }))
-              .catch(() => null)
-          )
-      );
-      const nextContinueLearning = findContinueLearning(overviews.filter(Boolean));
-      const activeWeekLearning =
-        findActiveWeekLearning(overviews.filter(Boolean)) || nextContinueLearning;
       const nextDueItems = buildDueThisWeekItems({
         typingTests: typingTestsRes,
         quizTests: quizTestsRes,
-        continueLearning: activeWeekLearning,
+        continueLearning: null,
       });
       const nextStats = {
         total: response.length || 0,
@@ -211,7 +221,7 @@ function LearnerDashboard() {
         featuredCompetition: featured,
         badges: badgesRes,
         dueItems: nextDueItems,
-        continueLearning: nextContinueLearning,
+        continueLearning: null,
       };
 
       learnerDashboardCache = {
@@ -220,11 +230,40 @@ function LearnerDashboard() {
         data: nextData,
       };
       applyDashboardData(nextData, { showFeatured: !quiet });
+      setLoading(false);
+
+      const queue = currentLearningAllocations(response, currentTermRes);
+      const overviews = [];
+      await Promise.all(
+        Array.from({ length: Math.min(queue.length, 3) }, async () => {
+          while (queue.length && version === requestVersion.current) {
+            const allocation = queue.shift();
+            try {
+              const overview = await apiClient.get(
+                `/courses/${allocation.course_id}/learning-overview`
+              );
+              overviews.push({ allocation, overview });
+            } catch {
+              /* A course can be opened directly even when its summary fails. */
+            }
+          }
+        })
+      );
+      if (version !== requestVersion.current) return;
+      const nextContinueLearning = findContinueLearning(overviews);
+      nextData.continueLearning = nextContinueLearning;
+      nextData.dueItems = buildDueThisWeekItems({
+        typingTests: typingTestsRes,
+        quizTests: quizTestsRes,
+        continueLearning: findActiveWeekLearning(overviews) || nextContinueLearning,
+      });
+      applyDashboardData(nextData, { showFeatured: false });
     } catch (err) {
+      if (version !== requestVersion.current) return;
       setError("Failed to fetch courses");
       console.error(err);
     } finally {
-      if (!quiet) {
+      if (version === requestVersion.current) {
         setLoading(false);
       }
     }
@@ -266,95 +305,80 @@ function LearnerDashboard() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={{ xs: 2, sm: 3 }}>
-        <MDBox
-          mb={{ xs: 2, sm: 3 }}
-          display="flex"
-          flexDirection={{ xs: "column", md: "row" }}
-          justifyContent="space-between"
-          alignItems={{ xs: "stretch", md: "center" }}
-          gap={{ xs: 1.5, md: 2 }}
-        >
-          <DashboardIdentity
-            user={user}
-            title="My Dashboard"
-            subtitle={
-              learner
-                ? `${learner.grade || "Learner"} ${learner.stream || ""} | ${learner.term || ""} ${
-                    learner.academic_year || ""
-                  }`
-                : "Your courses and progress will appear after your learner profile is linked."
-            }
-          />
-          <MDBox
-            display="flex"
-            flexDirection={{ xs: "column", sm: "row" }}
-            alignItems={{ xs: "stretch", sm: "center" }}
-            gap={1}
-            width={{ xs: "100%", md: "auto" }}
-          >
-            <MDTypography variant="caption" color="text" sx={{ flexGrow: 1, lineHeight: 1.4 }}>
-              Current term: {currentTerm?.name || "None"} | Past terms: {pastTerms}
-            </MDTypography>
+      <DashboardNavbar
+        title="My Dashboard"
+        subtitle={
+          learner
+            ? `${learner.grade || "Learner"} ${learner.stream || ""} | ${learner.term || ""} ${
+                learner.academic_year || ""
+              }`
+            : "Your courses and progress will appear after your learner profile is linked."
+        }
+        actions={
+          <>
+            {" "}
             <MDBox
-              display="grid"
-              gridTemplateColumns={{
-                xs: "minmax(0, 1fr)",
-                sm: continueLearning ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))",
-              }}
+              display="flex"
+              flexDirection={{ xs: "column", sm: "row" }}
+              alignItems={{ xs: "stretch", sm: "center" }}
               gap={1}
-              width={{ xs: "100%", sm: "auto" }}
+              width={{ xs: "100%", md: "auto" }}
             >
-              {continueLearning && (
+              <MDTypography variant="caption" color="text" sx={{ flexGrow: 1, lineHeight: 1.4 }}>
+                Current term: {currentTerm?.name || "None"} | Past terms: {pastTerms}
+              </MDTypography>
+              <MDBox display="flex" flexWrap="wrap" gap={1} width={{ xs: "100%", sm: "auto" }}>
+                {continueLearning && (
+                  <MDButton
+                    variant="gradient"
+                    color="success"
+                    startIcon={<Icon fontSize="small">play_arrow</Icon>}
+                    onClick={() =>
+                      navigate(
+                        activityLearningPath(
+                          continueLearning.courseId,
+                          continueLearning.moduleId,
+                          continueLearning.activityId
+                        )
+                      )
+                    }
+                    sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
+                  >
+                    Continue Learning
+                  </MDButton>
+                )}
                 <MDButton
                   variant="gradient"
-                  color="success"
-                  startIcon={<Icon fontSize="small">play_arrow</Icon>}
-                  onClick={() =>
-                    navigate(
-                      activityLearningPath(
-                        continueLearning.courseId,
-                        continueLearning.moduleId,
-                        continueLearning.activityId
-                      )
-                    )
-                  }
+                  color="info"
+                  startIcon={<Icon fontSize="small">keyboard</Icon>}
+                  onClick={() => navigate("/learner/my-typing-tutor")}
                   sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
                 >
-                  Continue Learning
+                  Typing Tutor
                 </MDButton>
-              )}
-              <MDButton
-                variant="gradient"
-                color="info"
-                startIcon={<Icon fontSize="small">keyboard</Icon>}
-                onClick={() => navigate("/learner/my-typing-tutor")}
-                sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
-              >
-                Typing Tutor
-              </MDButton>
-              <MDButton
-                variant="gradient"
-                color="info"
-                onClick={() => navigate("/learner/profile")}
-                sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
-              >
-                My Profile
-              </MDButton>
-              <MDButton
-                variant="gradient"
-                color="warning"
-                startIcon={<Icon fontSize="small">emoji_events</Icon>}
-                onClick={() => navigate("/learner/competitions")}
-                sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
-              >
-                Competitions
-              </MDButton>
-            </MDBox>
-          </MDBox>
-        </MDBox>
-
+                <MDButton
+                  variant="gradient"
+                  color="info"
+                  onClick={() => navigate("/learner/profile")}
+                  sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
+                >
+                  My Profile
+                </MDButton>
+                <MDButton
+                  variant="gradient"
+                  color="warning"
+                  startIcon={<Icon fontSize="small">emoji_events</Icon>}
+                  onClick={() => navigate("/learner/competitions")}
+                  sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
+                >
+                  Competitions
+                </MDButton>
+              </MDBox>
+            </MDBox>{" "}
+          </>
+        }
+      />
+      <MDBox py={{ xs: 2, sm: 3 }}>
         <Grid container spacing={{ xs: 1.5, sm: 3 }}>
           <Grid item xs={6} md={6} lg={3}>
             <MDBox mb={{ xs: 0, sm: 1.5 }} height="100%">
@@ -534,10 +558,34 @@ function LearnerDashboard() {
                   <MDTypography variant="h6" fontWeight="bold">
                     My Courses
                   </MDTypography>
-                  <MDButton variant="text" color="info" onClick={fetchLearnerData}>
+                  <MDButton
+                    variant="text"
+                    color="info"
+                    onClick={() => fetchLearnerData({ quiet: true })}
+                  >
                     Refresh
                   </MDButton>
                 </MDBox>
+                <MDTypography variant="body2" color="text" mb={1.5}>
+                  Courses from past terms remain available for revision. Your earlier reports and
+                  certificates stay with their original term.
+                </MDTypography>
+                <MDInput
+                  select
+                  label="Course term"
+                  value={selectedPeriod}
+                  onChange={(event) => setSelectedPeriod(event.target.value)}
+                  SelectProps={{ native: true }}
+                  fullWidth
+                  sx={{ mb: 2 }}
+                >
+                  <option value="all">All terms</option>
+                  {academicPeriodOptions(allocations).map((period) => (
+                    <option key={period.key} value={period.key}>
+                      {period.label}
+                    </option>
+                  ))}
+                </MDInput>
 
                 {error && (
                   <MDBox mb={2} p={2} bgcolor="error.main" borderRadius={1}>
@@ -568,7 +616,7 @@ function LearnerDashboard() {
                 ) : (
                   <>
                     <MDBox display={{ xs: "flex", sm: "none" }} flexDirection="column" gap={1}>
-                      {allocations.map((allocation) => (
+                      {visibleAllocations.map((allocation) => (
                         <MDBox
                           key={`mobile-${allocation.id}`}
                           p={1.5}
@@ -622,7 +670,7 @@ function LearnerDashboard() {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {allocations.map((allocation) => (
+                          {visibleAllocations.map((allocation) => (
                             <TableRow key={allocation.id} hover>
                               <TableCell>
                                 <MDTypography variant="body2" fontWeight="medium">

@@ -44,17 +44,15 @@ import {
   navbarContainer,
   navbarRow,
   navbarIconButton,
-  navbarMobileMenu,
 } from "examples/Navbars/DashboardNavbar/styles";
 
 // Material Dashboard 2 React context
-import { useMaterialUIController, setTransparentNavbar, setMiniSidenav } from "context";
+import { useMaterialUIController, setMiniSidenav } from "context";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getRoleLabel, getUserDisplayName, getUserInitials } from "lib/userDisplay";
 
-function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
-  const [navbarType, setNavbarType] = useState();
+function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, subtitle, actions }) {
   const [hiddenOnScroll, setHiddenOnScroll] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [feedbackUnread, setFeedbackUnread] = useState(0);
@@ -64,32 +62,7 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
   const { user, logout } = useAuth();
   const route = useLocation().pathname.split("/").slice(1);
   const unreadCount = notifications.filter((item) => !item.is_read).length;
-
-  useEffect(() => {
-    // Setting the navbar type
-    if (fixedNavbar) {
-      setNavbarType("sticky");
-    } else {
-      setNavbarType("static");
-    }
-
-    // A function that sets the transparent state of the navbar.
-    function handleTransparentNavbar() {
-      setTransparentNavbar(dispatch, (fixedNavbar && window.scrollY === 0) || !fixedNavbar);
-    }
-
-    /** 
-     The event listener that's calling the handleTransparentNavbar function when 
-     scrolling the window.
-    */
-    window.addEventListener("scroll", handleTransparentNavbar);
-
-    // Call the handleTransparentNavbar function to set the state with the initial value.
-    handleTransparentNavbar();
-
-    // Remove event listener on cleanup
-    return () => window.removeEventListener("scroll", handleTransparentNavbar);
-  }, [dispatch, fixedNavbar]);
+  const pageTitle = title || route[route.length - 1]?.replaceAll("-", " ") || "Dashboard";
 
   useEffect(() => {
     if (!autoHideOnScroll) {
@@ -194,10 +167,18 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
 
   return (
     <AppBar
-      position={absolute ? "absolute" : navbarType}
+      component="header"
+      aria-label="Page header"
+      position={absolute ? "absolute" : fixedNavbar ? "sticky" : "static"}
       color="inherit"
       sx={(theme) => ({
         ...navbar(theme, { transparentNavbar, absolute, light, darkMode }),
+        backgroundColor: "#ffffff !important",
+        border: "1px solid #e2e8f0",
+        borderRadius: "10px",
+        boxShadow: "none",
+        minHeight: 60,
+        zIndex: theme.zIndex.appBar,
         ...(autoHideOnScroll && {
           transition: theme.transitions.create(["transform", "opacity"], {
             easing: theme.transitions.easing.easeInOut,
@@ -209,10 +190,66 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
         }),
       })}
     >
-      <Toolbar sx={(theme) => navbarContainer(theme)}>
-        <MDBox color="inherit" mb={{ xs: 1, md: 0 }} sx={(theme) => navbarRow(theme, { isMini })}>
-          <Breadcrumbs icon="home" title={route[route.length - 1]} route={route} light={light} />
+      <Toolbar sx={(theme) => navbarContainer(theme, { hasActions: Boolean(actions) })}>
+        <MDBox
+          color="inherit"
+          sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, gridArea: "title" }}
+        >
+          <IconButton
+            aria-label={miniSidenav ? "Open navigation" : "Collapse navigation"}
+            aria-expanded={!miniSidenav}
+            aria-controls="dashboard-navigation"
+            onClick={handleMiniSidenav}
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: "8px",
+              color: "#334155",
+              bgcolor: "#f1f5f9",
+              flexShrink: 0,
+            }}
+          >
+            <Icon>{miniSidenav ? "menu" : "menu_open"}</Icon>
+          </IconButton>
+          <MDBox minWidth={0}>
+            <Breadcrumbs icon="home" title={pageTitle} route={route} light={light} />
+            {subtitle && (
+              <MDTypography
+                component="p"
+                variant="caption"
+                color="text"
+                noWrap
+                title={typeof subtitle === "string" ? subtitle : undefined}
+                sx={{ display: "block", fontSize: "0.72rem", lineHeight: 1.5 }}
+              >
+                {subtitle}
+              </MDTypography>
+            )}
+          </MDBox>
         </MDBox>
+        {actions && (
+          <MDBox
+            role="group"
+            aria-label="Page actions"
+            sx={{
+              gridArea: "actions",
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 0.75,
+              minWidth: 0,
+              "& .MuiButton-root": {
+                minHeight: 34,
+                px: 1.25,
+                py: 0.75,
+                fontSize: "0.7rem",
+                boxShadow: "none",
+              },
+            }}
+          >
+            {actions}
+          </MDBox>
+        )}
         {isMini ? null : (
           <MDBox sx={(theme) => navbarRow(theme, { isMini })}>
             <MDBox
@@ -231,14 +268,14 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
               >
                 {getUserInitials(user)}
               </MDAvatar>
-              <MDBox lineHeight={1} minWidth={0}>
+              <MDBox lineHeight={1} minWidth={0} display={{ xs: "none", xl: "block" }}>
                 <MDTypography
                   variant="button"
                   fontWeight="medium"
                   color={light ? "white" : "text"}
                   sx={{
                     display: "block",
-                    maxWidth: { xs: 115, sm: "none" },
+                    maxWidth: 180,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -264,6 +301,7 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
               {user?.role === "learner" && (
                 <IconButton
                   size="small"
+                  aria-label="Feedback chat"
                   disableRipple
                   color="inherit"
                   sx={navbarIconButton}
@@ -279,6 +317,7 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
                 disableRipple
                 color="inherit"
                 sx={navbarIconButton}
+                aria-label="Notifications"
                 onClick={openNotifications}
               >
                 <Badge badgeContent={unreadCount} color="error">
@@ -323,18 +362,8 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll }) {
                 size="small"
                 disableRipple
                 color="inherit"
-                sx={navbarMobileMenu}
-                onClick={handleMiniSidenav}
-              >
-                <Icon sx={iconsStyle} fontSize="medium">
-                  {miniSidenav ? "menu_open" : "menu"}
-                </Icon>
-              </IconButton>
-              <IconButton
-                size="small"
-                disableRipple
-                color="inherit"
                 sx={navbarIconButton}
+                aria-label="Sign out"
                 onClick={logout}
               >
                 <Icon sx={iconsStyle}>logout</Icon>
@@ -353,6 +382,9 @@ DashboardNavbar.defaultProps = {
   light: false,
   isMini: false,
   autoHideOnScroll: false,
+  title: null,
+  subtitle: null,
+  actions: null,
 };
 
 // Typechecking props for the DashboardNavbar
@@ -361,6 +393,9 @@ DashboardNavbar.propTypes = {
   light: PropTypes.bool,
   isMini: PropTypes.bool,
   autoHideOnScroll: PropTypes.bool,
+  title: PropTypes.node,
+  subtitle: PropTypes.node,
+  actions: PropTypes.node,
 };
 
 export default DashboardNavbar;

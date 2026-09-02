@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
 import Grid from "@mui/material/Grid";
@@ -41,6 +41,8 @@ function StepBar({ activeStep, setActiveStep }) {
       gap={{ xs: 0.25, md: 1 }}
       px={{ xs: 1, md: 1.5 }}
       sx={{ overflowX: "auto", borderBottom: "1px solid #e6ebf2" }}
+      role="tablist"
+      aria-label="Quiz creation steps"
     >
       {steps.map((label, index) => (
         <MDButton
@@ -48,6 +50,8 @@ function StepBar({ activeStep, setActiveStep }) {
           variant="text"
           color={activeStep === index ? "info" : "secondary"}
           onClick={() => setActiveStep(index)}
+          role="tab"
+          aria-selected={activeStep === index}
           sx={{
             position: "relative",
             minWidth: "max-content",
@@ -138,7 +142,9 @@ function LivePreview({ question, index, total }) {
           />
         )}
         {question.question_type === "short_answer" ? (
-          <MDBox sx={{ height: 42, border: "1px solid #dfe5ed", borderRadius: "9px", bgcolor: "#fff" }} />
+          <MDBox
+            sx={{ height: 42, border: "1px solid #dfe5ed", borderRadius: "9px", bgcolor: "#fff" }}
+          />
         ) : question.question_type === "matching" ? (
           <MDBox display="flex" flexDirection="column" gap={0.7}>
             {options.map((pair, pairIndex) => (
@@ -167,7 +173,9 @@ function LivePreview({ question, index, total }) {
                   />
                   <MDTypography variant="caption" color={correct ? "dark" : "text"}>
                     {question.question_type === "ordering" ? `${optionIndex + 1}. ` : ""}
-                    {typeof option === "string" && option ? option : `Option ${optionLabel(optionIndex)}`}
+                    {typeof option === "string" && option
+                      ? option
+                      : `Option ${optionLabel(optionIndex)}`}
                   </MDTypography>
                 </MDBox>
               );
@@ -179,6 +187,8 @@ function LivePreview({ question, index, total }) {
   );
 }
 
+const QuestionPreview = memo(LivePreview);
+
 function QuestionEditor({
   question,
   questionIndex,
@@ -189,7 +199,6 @@ function QuestionEditor({
   removeQuizOption,
   uploadQuizQuestionImage,
   removeQuestion,
-  onReview,
 }) {
   if (!question) return null;
 
@@ -303,7 +312,10 @@ function QuestionEditor({
                     updateQuizQuestion(questionIndex, { options });
                   }}
                 />
-                <IconButton color="error" onClick={() => removeQuizOption(questionIndex, pairIndex)}>
+                <IconButton
+                  color="error"
+                  onClick={() => removeQuizOption(questionIndex, pairIndex)}
+                >
                   <Icon>delete_outline</Icon>
                 </IconButton>
               </MDBox>
@@ -431,7 +443,10 @@ function QuestionEditor({
                       });
                     }}
                   />
-                  <IconButton color="error" onClick={() => removeQuizOption(questionIndex, optionIndex)}>
+                  <IconButton
+                    color="error"
+                    onClick={() => removeQuizOption(questionIndex, optionIndex)}
+                  >
                     <Icon>delete_outline</Icon>
                   </IconButton>
                 </MDBox>
@@ -459,9 +474,9 @@ function QuestionEditor({
         >
           <Icon>delete</Icon>&nbsp; Remove Question
         </MDButton>
-        <MDButton variant="gradient" color="info" onClick={onReview}>
-          Save Question
-        </MDButton>
+        <MDTypography variant="caption" color="text" textAlign="right">
+          Changes appear in Live Preview. Use Save as Draft to save the quiz.
+        </MDTypography>
       </Grid>
     </Grid>
   );
@@ -488,7 +503,7 @@ export default function QuizStudioForm({
   isSystemAdmin,
   termTools,
 }) {
-  const [activeStep, setActiveStep] = useState(1);
+  const [activeStep, setActiveStep] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const question = quizForm.questions[selectedIndex] || quizForm.questions[0];
   const allocatedMarks = useMemo(
@@ -642,6 +657,7 @@ export default function QuizStudioForm({
                       }}
                       SelectProps={{ native: true }}
                     >
+                      <option value="">Select year</option>
                       {[...new Set(termOptions.map((term) => term.academic_year))]
                         .filter(Boolean)
                         .map((year) => (
@@ -662,6 +678,7 @@ export default function QuizStudioForm({
                       }
                       SelectProps={{ native: true }}
                     >
+                      <option value="">Select term</option>
                       {quizTerms.map((term) => (
                         <option key={term.id} value={term.name}>
                           {term.name}
@@ -802,28 +819,79 @@ export default function QuizStudioForm({
                   removeQuizOption={removeQuizOption}
                   uploadQuizQuestionImage={uploadQuizQuestionImage}
                   removeQuestion={removeQuestion}
-                  onReview={() => setActiveStep(3)}
                 />
               </MDBox>
             </Grid>
             <Grid item xs={12} md={3}>
               <MDBox p={2} display="flex" flexDirection="column" gap={2}>
                 <MDBox>
-                  <MDTypography variant="button" color="dark" fontWeight="bold" display="block" mb={1}>
+                  <MDTypography
+                    variant="button"
+                    color="dark"
+                    fontWeight="bold"
+                    display="block"
+                    mb={1}
+                  >
                     Live Preview
                   </MDTypography>
-                  <LivePreview question={question} index={selectedIndex} total={quizForm.questions.length} />
+                  <MDBox
+                    role="region"
+                    aria-label="All quiz questions preview"
+                    display="flex"
+                    flexDirection="column"
+                    gap={1.5}
+                    sx={{ maxHeight: "70vh", overflowY: "auto", pr: 0.5 }}
+                  >
+                    {quizForm.questions.map((item, index) => (
+                      <QuestionPreview
+                        key={index}
+                        question={item}
+                        index={index}
+                        total={quizForm.questions.length}
+                      />
+                    ))}
+                  </MDBox>
                 </MDBox>
                 <Card sx={surfaceSx}>
                   <MDBox p={2}>
-                    <MDTypography variant="button" color="dark" fontWeight="bold" display="block" mb={0.6}>
+                    <MDTypography
+                      variant="button"
+                      color="dark"
+                      fontWeight="bold"
+                      display="block"
+                      mb={0.6}
+                    >
                       Quiz Settings
                     </MDTypography>
-                    <SettingLine icon="quiz" label="Total Questions" value={quizForm.questions.length} />
-                    <SettingLine icon="settings" label="Total Points" value={quizForm.total_points} />
-                    <SettingLine icon="schedule" label="Time Limit" value={`${Math.round(Number(quizForm.duration_seconds || 0) / 60)} minutes`} />
-                    <SettingLine icon="task_alt" label="Passing Score" value={`${quizForm.pass_score}%`} />
-                    <SettingLine icon="visibility" label="Visibility" value={quizForm.eligible_grades.length ? `${quizForm.eligible_grades.length} grades` : "All learners"} />
+                    <SettingLine
+                      icon="quiz"
+                      label="Total Questions"
+                      value={quizForm.questions.length}
+                    />
+                    <SettingLine
+                      icon="settings"
+                      label="Total Points"
+                      value={quizForm.total_points}
+                    />
+                    <SettingLine
+                      icon="schedule"
+                      label="Time Limit"
+                      value={`${Math.round(Number(quizForm.duration_seconds || 0) / 60)} minutes`}
+                    />
+                    <SettingLine
+                      icon="task_alt"
+                      label="Passing Score"
+                      value={`${quizForm.pass_score}%`}
+                    />
+                    <SettingLine
+                      icon="visibility"
+                      label="Visibility"
+                      value={
+                        quizForm.eligible_grades.length
+                          ? `${quizForm.eligible_grades.length} grades`
+                          : "All learners"
+                      }
+                    />
                   </MDBox>
                 </Card>
                 <MDBox p={1.6} sx={{ bgcolor: "#eef5ff", borderRadius: "12px" }}>
@@ -843,26 +911,62 @@ export default function QuizStudioForm({
           <MDBox p={{ xs: 2, md: 2.5 }}>
             <Grid container spacing={2}>
               <Grid item xs={12} md={3}>
-                <MDInput label="Pass Score" type="number" fullWidth value={quizForm.pass_score} onChange={(event) => setQuizForm({ ...quizForm, pass_score: event.target.value })} />
+                <MDInput
+                  label="Pass Score"
+                  type="number"
+                  fullWidth
+                  value={quizForm.pass_score}
+                  onChange={(event) => setQuizForm({ ...quizForm, pass_score: event.target.value })}
+                />
               </Grid>
               <Grid item xs={12} md={3}>
-                <MDInput label="Max Attempts" type="number" fullWidth value={quizForm.max_attempts} onChange={(event) => setQuizForm({ ...quizForm, max_attempts: event.target.value })} />
+                <MDInput
+                  label="Max Attempts"
+                  type="number"
+                  fullWidth
+                  value={quizForm.max_attempts}
+                  onChange={(event) =>
+                    setQuizForm({ ...quizForm, max_attempts: event.target.value })
+                  }
+                />
               </Grid>
               <Grid item xs={12} md={3}>
-                <MDInput label="Duration Seconds" type="number" fullWidth value={quizForm.duration_seconds} onChange={(event) => setQuizForm({ ...quizForm, duration_seconds: event.target.value })} />
+                <MDInput
+                  label="Duration Seconds"
+                  type="number"
+                  fullWidth
+                  value={quizForm.duration_seconds}
+                  onChange={(event) =>
+                    setQuizForm({ ...quizForm, duration_seconds: event.target.value })
+                  }
+                />
               </Grid>
               <Grid item xs={12} md={3}>
-                <MDInput label="Total Marks" type="number" fullWidth value={quizForm.total_points} onChange={(event) => setQuizForm({ ...quizForm, total_points: event.target.value })} />
+                <MDInput
+                  label="Total Marks"
+                  type="number"
+                  fullWidth
+                  value={quizForm.total_points}
+                  onChange={(event) =>
+                    setQuizForm({ ...quizForm, total_points: event.target.value })
+                  }
+                />
               </Grid>
               <Grid item xs={12} md={4}>
                 <MDInput
                   select
                   label="Status"
                   fullWidth
-                  value={`${quizForm.is_published ? "published" : "draft"}-${quizForm.is_open ? "open" : "closed"}`}
+                  value={`${quizForm.is_published ? "published" : "draft"}-${
+                    quizForm.is_open ? "open" : "closed"
+                  }`}
                   onChange={(event) => {
                     const [published, open] = event.target.value.split("-");
-                    setQuizForm({ ...quizForm, is_published: published === "published", is_open: open === "open" });
+                    setQuizForm({
+                      ...quizForm,
+                      is_published: published === "published",
+                      is_open: open === "open",
+                    });
                   }}
                   SelectProps={{ native: true }}
                 >
@@ -906,10 +1010,22 @@ export default function QuizStudioForm({
               <Grid item xs={12} md={4}>
                 <Card sx={surfaceSx}>
                   <MDBox p={2}>
-                    <SettingLine icon="calendar_month" label="Term" value={`${quizForm.term} · ${quizForm.academic_year}`} />
-                    <SettingLine icon="date_range" label="Week" value={`Week ${quizForm.week_number}`} />
+                    <SettingLine
+                      icon="calendar_month"
+                      label="Term"
+                      value={`${quizForm.term} · ${quizForm.academic_year}`}
+                    />
+                    <SettingLine
+                      icon="date_range"
+                      label="Week"
+                      value={`Week ${quizForm.week_number}`}
+                    />
                     <SettingLine icon="quiz" label="Questions" value={quizForm.questions.length} />
-                    <SettingLine icon="score" label="Allocated" value={`${allocatedMarks} / ${quizForm.total_points}`} />
+                    <SettingLine
+                      icon="score"
+                      label="Allocated"
+                      value={`${allocatedMarks} / ${quizForm.total_points}`}
+                    />
                   </MDBox>
                 </Card>
               </Grid>
@@ -929,7 +1045,18 @@ export default function QuizStudioForm({
         sx={{ bgcolor: "#f3f7fd", border: "1px solid #e2eaf5", borderRadius: "14px" }}
       >
         <MDBox display="flex" alignItems="center" gap={1.2}>
-          <MDBox display="flex" alignItems="center" justifyContent="center" sx={{ width: 42, height: 42, borderRadius: "50%", bgcolor: "#e1eeff", color: "#1A73E8" }}>
+          <MDBox
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            sx={{
+              width: 42,
+              height: 42,
+              borderRadius: "50%",
+              bgcolor: "#e1eeff",
+              color: "#1A73E8",
+            }}
+          >
             <Icon>check</Icon>
           </MDBox>
           <MDBox>

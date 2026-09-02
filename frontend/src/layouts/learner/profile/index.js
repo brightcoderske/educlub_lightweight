@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
@@ -96,16 +95,11 @@ function LearnerProfile() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="My Profile"
-            subtitle="Keep your learner details complete and protect your password."
-          />
-        </MDBox>
-
+      <DashboardNavbar
+        title="My Profile"
+        subtitle="Keep your learner details complete and protect your password."
+      />
+      <MDBox py={2}>
         <Grid container spacing={3}>
           <Grid item xs={12} lg={6}>
             <Card>

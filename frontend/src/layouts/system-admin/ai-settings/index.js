@@ -130,15 +130,11 @@ function SystemAdminAiSettings() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3}>
-          <MDTypography variant="h3">AI Control Center</MDTypography>
-          <MDTypography variant="body2" color="text">
-            Configure provider access, global limits, and role permissions before enabling AI tools.
-          </MDTypography>
-        </MDBox>
-
+      <DashboardNavbar
+        title="AI Control Center"
+        subtitle="Configure provider access, global limits, and role permissions before enabling AI tools."
+      />
+      <MDBox py={2}>
         {error && (
           <MDBox mb={2} p={2} borderRadius="lg" bgColor="error">
             <MDTypography variant="button" color="white">

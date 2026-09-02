@@ -8,7 +8,6 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import CertificatePreviewModal from "components/CertificatePreviewModal";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
@@ -32,14 +31,8 @@ function LearnerCertificates() {
       setLoading(true);
       setError("");
       try {
-        const learners = await apiClient.get(`/learners?email=${encodeURIComponent(user?.email)}`);
-        const learner = learners[0];
-        if (!learner) {
-          setCertificates([]);
-          return;
-        }
         const [response, badgeResponse] = await Promise.all([
-          apiClient.get(`/certificates?learner_id=${learner.id}`),
+          apiClient.get("/certificates"),
           apiClient.get("/courses/learner/badges").catch(() => []),
         ]);
         setCertificates(response);
@@ -62,15 +55,11 @@ function LearnerCertificates() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="Certificates & Badges"
-            subtitle="Your approved certificates, course achievements and typing badges."
-          />
-        </MDBox>
+      <DashboardNavbar
+        title="Certificates & Badges"
+        subtitle="Your approved certificates and badges from every term. Preview or download them anytime."
+      />
+      <MDBox py={2}>
         <Card>
           <MDBox p={2}>
             <MDTypography variant="h6" fontWeight="bold">

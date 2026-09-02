@@ -77,7 +77,7 @@ async function submitAttempt(user, data = {}) {
     data.duration_seconds,
     numberInRange(data.duration_seconds, 1, 3600, 60),
   );
-  const durationSeconds = Math.round(score.duration_seconds);
+  const durationSeconds = Math.round(numberInRange(data.duration_seconds, 1, 3600, 1));
   const rawWpm = numberInRange(score.raw_wpm, 0, 300, 0);
   const netWpm = numberInRange(score.final_score, 0, 300, 0);
   const accuracy = numberInRange(score.accuracy, 0, 100, 0);
@@ -86,7 +86,7 @@ async function submitAttempt(user, data = {}) {
   // An activity passes on the marks just calculated, never on a client claim.
   const goalWpm = numberInRange(data.goal_wpm, 0, 300, 0);
   const accuracyGoal = numberInRange(data.accuracy_goal, 0, 100, 100);
-  const finished = score.expected_words > 0 && score.completed_words >= score.expected_words;
+  const finished = score.expected_characters > 0 && score.typed_characters >= score.expected_characters;
   const passed = finished && accuracy >= accuracyGoal && netWpm >= goalWpm;
 
   const result = await query(
@@ -114,7 +114,7 @@ async function submitAttempt(user, data = {}) {
   return result.rows[0];
 }
 
-async function getReport(user, filters = {}) {
+function reportScope(user, filters = {}) {
   if (!["system_admin", "school_admin", "teacher"].includes(user.role)) {
     throw new Error("Insufficient permissions.");
   }
@@ -129,6 +129,7 @@ async function getReport(user, filters = {}) {
       where.push(`l.school_id = $${values.length}`);
     }
   } else {
+    if (!user.schoolId) throw new Error("School profile not found.");
     values.push(user.schoolId);
     where.push(`l.school_id = $${values.length}`);
     if (user.role === "teacher") {
@@ -157,11 +158,25 @@ async function getReport(user, filters = {}) {
     where.push(`l.full_name ILIKE $${values.length}`);
   }
 
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  if (filters.learner_id) {
+    values.push(filters.learner_id);
+    where.push(`l.id = $${values.length}`);
+  }
+  return { values, whereSql: `WHERE ${where.length ? where.join(" AND ") : "1=1"} ${learnerScope}` };
+}
+
+async function getReport(user, filters = {}) {
+  const { values, whereSql } = reportScope(user, filters);
   const result = await query(
-    `WITH learner_attempts AS (
+    `WITH scoped_learners AS (
+       SELECT l.id, l.full_name, l.grade, l.stream, l.school_id
+       FROM learners l
+       ${whereSql}
+     ),
+     learner_attempts AS (
        SELECT tpa.*
        FROM typing_practice_attempts tpa
+       JOIN scoped_learners scope ON scope.id = tpa.learner_id
      ),
      activity_summary AS (
        SELECT learner_id,
@@ -173,6 +188,9 @@ async function getReport(user, filters = {}) {
               MAX(net_wpm)::numeric(8, 2) AS best_net_wpm,
               MAX(accuracy)::numeric(5, 2) AS best_accuracy,
               MIN(mistakes)::integer AS fewest_mistakes,
+              SUM(duration_seconds) AS practice_seconds,
+              SUM(net_wpm) AS total_net_wpm,
+              SUM(accuracy) AS total_accuracy,
               MAX(submitted_at) AS last_attempt_at
        FROM learner_attempts
        GROUP BY learner_id, track_key, level_number, activity_key
@@ -184,7 +202,10 @@ async function getReport(user, filters = {}) {
               COALESCE(SUM(attempts), 0)::integer AS total_attempts,
               MAX(best_net_wpm)::numeric(8, 2) AS best_net_wpm,
               MAX(best_accuracy)::numeric(5, 2) AS best_accuracy,
-              MAX(last_attempt_at) AS last_practiced_at
+              MAX(last_attempt_at) AS last_practiced_at,
+              SUM(practice_seconds) AS practice_seconds,
+              SUM(total_net_wpm) / NULLIF(SUM(attempts), 0) AS average_net_wpm,
+              SUM(total_accuracy) / NULLIF(SUM(attempts), 0) AS average_accuracy
        FROM activity_summary
        GROUP BY learner_id
      ),
@@ -212,6 +233,9 @@ async function getReport(user, filters = {}) {
             COALESCE(ls.best_net_wpm, 0)::numeric(8, 2) AS best_net_wpm,
             COALESCE(ls.best_accuracy, 0)::numeric(5, 2) AS best_accuracy,
             ls.last_practiced_at,
+            COALESCE(ls.practice_seconds, 0) AS practice_seconds,
+            ROUND(ls.average_net_wpm, 2) AS average_net_wpm,
+            ROUND(ls.average_accuracy, 2) AS average_accuracy,
             CASE
               WHEN ls.learner_id IS NULL THEN 'not_started'
               WHEN COALESCE(ls.completed_activities, 0) < 3 AND COALESCE(ls.total_attempts, 0) >= 8 THEN 'needs_support'
@@ -219,13 +243,10 @@ async function getReport(user, filters = {}) {
               WHEN COALESCE(ls.completed_activities, 0) >= 10 THEN 'progressing'
               ELSE 'started'
             END AS status
-     FROM learners l
+     FROM scoped_learners l
      JOIN schools s ON s.id = l.school_id
      LEFT JOIN learner_summary ls ON ls.learner_id = l.id
      LEFT JOIN latest_activity la ON la.learner_id = l.id
-     ${whereSql}
-     ${whereSql ? "AND" : "WHERE"} 1=1
-     ${learnerScope}
      ORDER BY l.full_name`,
     values,
   );
@@ -233,8 +254,34 @@ async function getReport(user, filters = {}) {
   return result.rows;
 }
 
+async function getAttempts(user, learnerId, filters = {}) {
+  const id = Number(learnerId);
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error("Invalid learner.");
+  const { values, whereSql } = reportScope(user, { learner_id: id });
+  const learnerResult = await query(
+    `SELECT l.id, l.full_name, l.grade, l.stream FROM learners l ${whereSql} LIMIT 1`,
+    values,
+  );
+  const learner = learnerResult.rows[0];
+  if (!learner) throw new Error("Learner not found or not assigned to you.");
+  const limit = Math.floor(numberInRange(filters.limit, 1, 100, 20));
+  const offset = Math.floor(numberInRange(filters.offset, 0, 1000000, 0));
+  const [attempts, count] = await Promise.all([
+    query(
+      `SELECT id, track_key, level_number, activity_key, activity_title, raw_wpm, net_wpm,
+              accuracy, mistakes, duration_seconds, passed, submitted_at
+       FROM typing_practice_attempts WHERE learner_id = $1
+       ORDER BY submitted_at DESC, id DESC LIMIT $2 OFFSET $3`,
+      [id, limit, offset],
+    ),
+    query("SELECT COUNT(*) AS total FROM typing_practice_attempts WHERE learner_id = $1", [id]),
+  ]);
+  return { learner, attempts: attempts.rows, total: Number(count.rows[0].total), limit, offset };
+}
+
 module.exports = {
   getProgress,
   submitAttempt,
   getReport,
+  getAttempts,
 };

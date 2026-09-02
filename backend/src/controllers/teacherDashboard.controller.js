@@ -10,17 +10,15 @@ async function getDashboard(req, res) {
                 (c.template_id IS NOT NULL
                   AND COALESCE(c.template_version, 0) <
                       COALESCE(ct.version, 1)) AS update_available,
-                COUNT(DISTINCT ca.learner_id)::int AS learner_count
+                (SELECT COUNT(DISTINCT ca.learner_id)
+                 FROM course_allocations ca
+                 WHERE ca.course_id = c.id AND ca.status IN ('active', 'completed')) AS learner_count
          FROM course_teacher_assignments cta
          JOIN courses c ON c.id = cta.course_id
          LEFT JOIN course_templates ct ON ct.id = c.template_id
-         LEFT JOIN course_allocations ca
-           ON ca.course_id = c.id
-          AND ca.status IN ('active', 'completed')
          WHERE cta.teacher_user_id = $1
            AND cta.is_active = true
            AND c.school_id = $2
-         GROUP BY c.id, ct.version
          ORDER BY c.name`,
         params,
       ),

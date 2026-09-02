@@ -66,11 +66,9 @@ async function getAllSchools(req, res) {
 
     const result = await query(
       `SELECT s.*,
-              COUNT(l.id)::integer AS learners_count
+              (SELECT COUNT(*) FROM learners l WHERE l.school_id = s.id) AS learners_count
        FROM schools s
-       LEFT JOIN learners l ON l.school_id = s.id
        ${scopeSql}
-       GROUP BY s.id
        ORDER BY s.name`,
       params
     );

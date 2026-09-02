@@ -8,6 +8,7 @@ const { AsyncLocalStorage } = require("async_hooks");
 const { attachPoolErrorHandler } = require("./poolErrors");
 const { translate } = require("./sqlDialect");
 const { planReturning } = require("./returningEmulation");
+const { typeCast } = require("./mysqlTypes");
 const logger = require("../utils/logger");
 
 const requestContext = new AsyncLocalStorage();
@@ -71,6 +72,8 @@ const pool = mysql.createPool({
   // something else. utf8mb4_unicode_ci exists in both and mysql2 knows it.
   charset: process.env.MYSQL_COLLATION || "utf8mb4_unicode_ci",
   timezone: "Z",
+  dateStrings: ["DATE"],
+  typeCast,
   enableKeepAlive: true,
 });
 

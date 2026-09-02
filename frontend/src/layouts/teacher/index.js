@@ -7,7 +7,7 @@ import Icon from "@mui/material/Icon";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -51,16 +51,13 @@ function TeacherDashboard() {
   const summary = data.summary || {};
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <DashboardIdentity
-          user={user}
-          title="Teacher Dashboard"
-          subtitle={`${
-            user?.schoolName || "Your school"
-          } · Courses, learners, reviews and teaching work`}
-        />
-
+      <DashboardNavbar
+        title="Teacher Dashboard"
+        subtitle={`${
+          user?.schoolName || "Your school"
+        } · Courses, learners, reviews and teaching work`}
+      />
+      <MDBox py={2}>
         <Grid container spacing={3} mt={0.5}>
           <Grid item xs={12} sm={6} lg={4}>
             <ComplexStatisticsCard
@@ -138,9 +135,7 @@ function TeacherDashboard() {
                           size="small"
                           variant="outlined"
                           color="success"
-                          onClick={() =>
-                            navigate(`/school-admin/courses/${course.id}/preview`)
-                          }
+                          onClick={() => navigate(`/school-admin/courses/${course.id}/preview`)}
                         >
                           View as Learner
                         </MDButton>

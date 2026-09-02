@@ -78,7 +78,7 @@ function csvEscape(value) {
  * request, so every filter, sort and metric switch below is local - no further
  * network calls once the table is on screen.
  */
-function WeeklyMatrix({ defaultMetric, title, onScoreClick }) {
+function WeeklyMatrix({ defaultMetric, title, onScoreClick, assessmentTerm, assessmentYear }) {
   const [weeks, setWeeks] = useState([]);
   const [learners, setLearners] = useState([]);
   const [period, setPeriod] = useState({ term: null, academicYear: null });
@@ -114,7 +114,13 @@ function WeeklyMatrix({ defaultMetric, title, onScoreClick }) {
     const filtered = learners.filter((row) => {
       if (grade && row.grade !== grade) return false;
       if (stream && row.stream !== stream) return false;
-      if (needle && !String(row.full_name || "").toLowerCase().includes(needle)) return false;
+      if (
+        needle &&
+        !String(row.full_name || "")
+          .toLowerCase()
+          .includes(needle)
+      )
+        return false;
       return true;
     });
 
@@ -131,9 +137,7 @@ function WeeklyMatrix({ defaultMetric, title, onScoreClick }) {
     const direction = order === "asc" ? 1 : -1;
     return withAverages.sort((left, right) => {
       if (orderBy === "average") {
-        return (
-          ((left.averages[sortMetric] ?? -1) - (right.averages[sortMetric] ?? -1)) * direction
-        );
+        return ((left.averages[sortMetric] ?? -1) - (right.averages[sortMetric] ?? -1)) * direction;
       }
       return String(left[orderBy] || "").localeCompare(String(right[orderBy] || "")) * direction;
     });
@@ -143,7 +147,11 @@ function WeeklyMatrix({ defaultMetric, title, onScoreClick }) {
     setLoading(true);
     setError("");
     try {
-      const data = await apiClient.get("/leaderboard/school-weekly-matrix");
+      const filters =
+        assessmentTerm && assessmentYear
+          ? new URLSearchParams({ term: assessmentTerm, academicYear: assessmentYear }).toString()
+          : "";
+      const data = await apiClient.get(`/leaderboard/school-weekly-matrix?${filters}`);
       setWeeks(Array.isArray(data.weeks) ? data.weeks : []);
       setLearners(Array.isArray(data.learners) ? data.learners : []);
       setPeriod({ term: data.term, academicYear: data.academicYear });
@@ -156,7 +164,7 @@ function WeeklyMatrix({ defaultMetric, title, onScoreClick }) {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [assessmentTerm, assessmentYear]);
 
   const sortHandler = (field) => () => {
     if (orderBy === field) {
@@ -293,8 +301,8 @@ function WeeklyMatrix({ defaultMetric, title, onScoreClick }) {
           once above the table rather than relying on hover alone. */}
       {onScoreClick && (
         <MDTypography variant="caption" color="text" display="block" mb={1}>
-          Click any underlined quiz score to review that learner&apos;s work for the week and
-          mark it.
+          Click any underlined quiz score to review that learner&apos;s work for the week and mark
+          it.
         </MDTypography>
       )}
 
@@ -434,6 +442,8 @@ WeeklyMatrix.defaultProps = {
   defaultMetric: "all",
   title: "Weekly matrix",
   onScoreClick: null,
+  assessmentTerm: null,
+  assessmentYear: null,
 };
 
 WeeklyMatrix.propTypes = {
@@ -441,6 +451,8 @@ WeeklyMatrix.propTypes = {
   title: PropTypes.string,
   // (learnerRow, weekNumber) => void. Enables the quiz score link.
   onScoreClick: PropTypes.func,
+  assessmentTerm: PropTypes.string,
+  assessmentYear: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
 export default WeeklyMatrix;

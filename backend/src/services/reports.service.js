@@ -29,17 +29,8 @@ function normalizeReportCardSettings(settings = {}) {
   );
 }
 
-async function ensureReportCardSettingsColumn() {
-  await query(
-    `ALTER TABLE IF EXISTS schools
-     ADD COLUMN IF NOT EXISTS report_card_settings JSONB
-     DEFAULT '{"show_weekly_typing":true,"show_weekly_quizzes":true,"show_active_courses":true,"show_competitions":true,"show_badges":true,"show_teacher_feedback":true}'::jsonb`
-  );
-}
-
 async function getReportCardSettings(schoolId) {
   if (!schoolId) return normalizeReportCardSettings();
-  await ensureReportCardSettingsColumn();
   const result = await query(
     "SELECT report_card_settings FROM schools WHERE id = $1 LIMIT 1",
     [schoolId]
@@ -71,7 +62,6 @@ async function saveReportCardSettings(user, schoolId, settings) {
     throw error;
   }
   const normalized = normalizeReportCardSettings(settings);
-  await ensureReportCardSettingsColumn();
   const result = await query(
     `UPDATE schools
      SET report_card_settings = $2::jsonb,
@@ -725,7 +715,7 @@ function drawReportFooter(doc) {
 
 async function isClosedReportPeriod(term, academicYear) {
   const result = await query(
-    `SELECT t.end_date
+    `SELECT t.end_date < CURRENT_DATE AS is_closed
      FROM terms t
      LEFT JOIN academic_years ay ON ay.id = t.academic_year_id
      WHERE t.name = $1
@@ -735,8 +725,7 @@ async function isClosedReportPeriod(term, academicYear) {
     [term, Number(academicYear)]
   );
 
-  const endDate = result.rows[0]?.end_date;
-  return endDate ? new Date(endDate) < new Date() : false;
+  return Boolean(result.rows[0]?.is_closed);
 }
 
 async function getTermDateRange(term, academicYear) {

@@ -15,7 +15,7 @@ import Chip from "@mui/material/Chip";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -67,18 +67,19 @@ function Teachers() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-          <DashboardIdentity
-            user={user}
-            title="Teachers"
-            subtitle={`Teacher accounts for ${user?.schoolName || "your school"}`}
-          />
-          <MDButton color="info" onClick={() => setOpen(true)}>
-            Add Teacher
-          </MDButton>
-        </MDBox>
+      <DashboardNavbar
+        title="Teachers"
+        subtitle={`Teacher accounts for ${user?.schoolName || "your school"}`}
+        actions={
+          <>
+            {" "}
+            <MDButton color="info" onClick={() => setOpen(true)}>
+              Add Teacher
+            </MDButton>{" "}
+          </>
+        }
+      />
+      <MDBox py={2}>
         <Card>
           <MDBox p={2}>
             {error && (

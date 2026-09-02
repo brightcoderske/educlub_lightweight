@@ -15,68 +15,74 @@ Coded by www.creative-tim.com
 
 // prop-types is a library for typechecking of props
 import PropTypes from "prop-types";
+import { Link } from "react-router-dom";
 
 // @mui material components
 import Card from "@mui/material/Card";
-import Divider from "@mui/material/Divider";
 import Icon from "@mui/material/Icon";
 
 // Material Dashboard 2 React components
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 
-function ComplexStatisticsCard({ color, title, count, percentage, icon }) {
+function ComplexStatisticsCard({ color, title, count, percentage, icon, to }) {
   return (
-    <Card sx={{ height: "100%" }}>
-      <MDBox
-        display="flex"
-        justifyContent="space-between"
-        alignItems={{ xs: "center", sm: "flex-start" }}
-        pt={{ xs: 1.5, sm: 1 }}
-        px={{ xs: 1.5, sm: 2 }}
-      >
+    <Card
+      component={to ? Link : "div"}
+      to={to}
+      sx={{
+        height: "100%",
+        border: "1px solid #e8edf2",
+        boxShadow: "0 2px 6px rgba(20, 35, 60, 0.04)",
+        ...(to && {
+          "&:hover": { borderColor: "#94b9ef" },
+          "&:focus-visible": { outline: "2px solid #2563eb" },
+        }),
+      }}
+    >
+      <MDBox display="flex" justifyContent="space-between" alignItems="center" gap={1.25} p={1.5}>
         <MDBox
-          variant="gradient"
-          bgColor={color}
-          color={color === "light" ? "dark" : "white"}
-          coloredShadow={color}
-          borderRadius="xl"
+          borderRadius="md"
           display="flex"
           justifyContent="center"
           alignItems="center"
-          width={{ xs: "3rem", sm: "4rem" }}
-          height={{ xs: "3rem", sm: "4rem" }}
-          mt={{ xs: 0, sm: -3 }}
+          width="2.25rem"
+          height="2.25rem"
           flexShrink={0}
-          sx={{ borderRadius: { xs: "8px", sm: "0.75rem" } }}
+          sx={(theme) => ({
+            borderRadius: "8px",
+            bgcolor: "#eef4fb",
+            color: theme.palette[color]?.main || "#175cd3",
+          })}
         >
-          <Icon fontSize="medium" color="inherit">
+          <Icon fontSize="small" color="inherit">
             {icon}
           </Icon>
         </MDBox>
-        <MDBox textAlign="right" lineHeight={1.25}>
-          <MDTypography variant="button" fontWeight="light" color="text">
+        <MDBox textAlign="right" lineHeight={1.25} minWidth={0}>
+          <MDTypography variant="caption" fontWeight="medium" color="text">
             {title}
           </MDTypography>
-          <MDTypography variant="h4" sx={{ fontSize: { xs: "1.5rem", sm: "1.5rem" } }}>
+          <MDTypography variant="h4" sx={{ fontSize: "1.35rem", lineHeight: 1.3 }}>
             {count}
           </MDTypography>
         </MDBox>
       </MDBox>
-      <Divider sx={{ my: { xs: 1, sm: 2 } }} />
-      <MDBox pb={{ xs: 1.5, sm: 2 }} px={{ xs: 1.5, sm: 2 }}>
-        <MDTypography component="p" variant="button" color="text" display="flex">
-          <MDTypography
-            component="span"
-            variant="button"
-            fontWeight="bold"
-            color={percentage.color}
-          >
-            {percentage.amount}
+      {(percentage.amount || percentage.label) && (
+        <MDBox pb={1.25} px={1.5}>
+          <MDTypography component="p" variant="caption" color="text">
+            <MDTypography
+              component="span"
+              variant="caption"
+              fontWeight="bold"
+              color={percentage.color}
+            >
+              {percentage.amount}
+            </MDTypography>
+            &nbsp;{percentage.label}
           </MDTypography>
-          &nbsp;{percentage.label}
-        </MDTypography>
-      </MDBox>
+        </MDBox>
+      )}
     </Card>
   );
 }
@@ -120,6 +126,7 @@ ComplexStatisticsCard.propTypes = {
     label: PropTypes.string,
   }),
   icon: PropTypes.node.isRequired,
+  to: PropTypes.string,
 };
 
 export default ComplexStatisticsCard;

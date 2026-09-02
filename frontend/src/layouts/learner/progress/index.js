@@ -10,7 +10,6 @@ import TableRow from "@mui/material/TableRow";
 import Chip from "@mui/material/Chip";
 import Icon from "@mui/material/Icon";
 
-import DashboardIdentity from "components/DashboardIdentity";
 import MDBox from "components/MDBox";
 import MDInput from "components/MDInput";
 import MDProgress from "components/MDProgress";
@@ -117,15 +116,11 @@ function LearnerProgress() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="My Progress"
-            subtitle="Weekly quiz, typing, and course progress from eduClub tracking."
-          />
-        </MDBox>
+      <DashboardNavbar
+        title="My Progress"
+        subtitle="Weekly quiz, typing, and course progress from eduClub tracking."
+      />
+      <MDBox py={2}>
         <Grid container spacing={3}>
           <Grid item xs={12} md={3}>
             <MDInput

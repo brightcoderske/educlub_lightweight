@@ -1611,14 +1611,14 @@ async function getActivityReview(activityId, user = {}, filters = {}) {
      LEFT JOIN activity_grades g
        ON g.learner_id = l.id
       AND g.activity_id = $1::integer
-     LEFT JOIN LATERAL (
-       SELECT qa.*
-       FROM quiz_attempts qa
-       WHERE qa.learner_id = l.id
-         AND qa.activity_id = $1::integer
-       ORDER BY qa.attempt_number DESC
+     LEFT JOIN quiz_attempts qa ON qa.id = (
+       SELECT latest.id
+       FROM quiz_attempts latest
+       WHERE latest.learner_id = l.id
+         AND latest.activity_id = $1::integer
+       ORDER BY latest.attempt_number DESC, latest.id DESC
        LIMIT 1
-     ) qa ON true
+     )
      WHERE ca.course_id = $2::integer
        AND ca.status IN ('active', 'in_progress', 'completed')
        AND l.is_active = true

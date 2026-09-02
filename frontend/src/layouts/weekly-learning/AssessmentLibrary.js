@@ -96,6 +96,7 @@ function StatusChip({ open }) {
 
 export default function AssessmentLibrary({
   activeAcademicTerm,
+  canCreate,
   loading,
   quizTests,
   typingTests,
@@ -138,7 +139,7 @@ export default function AssessmentLibrary({
                   <Icon>insights</Icon>&nbsp; Performance matrix
                 </MDButton>
               )}
-              {!isLearner && activeAcademicTerm && (
+              {!isLearner && canCreate && (
                 <MDButton variant="outlined" color="info" size="small" onClick={onCreateQuiz}>
                   <Icon>add</Icon>&nbsp; New quiz
                 </MDButton>
@@ -147,9 +148,9 @@ export default function AssessmentLibrary({
           }
         />
         {loading ? (
-          <EmptyState icon="hourglass_top">Loading current-term quizzes...</EmptyState>
+          <EmptyState icon="hourglass_top">Loading quizzes...</EmptyState>
         ) : quizTests.length === 0 ? (
-          <EmptyState icon="quiz">No quizzes are available for the current term.</EmptyState>
+          <EmptyState icon="quiz">No quizzes are available for this term.</EmptyState>
         ) : (
           <TableContainer sx={{ overflowX: "auto" }}>
             <Table sx={{ minWidth: 760 }}>
@@ -172,13 +173,9 @@ export default function AssessmentLibrary({
                         color="info"
                         size="small"
                         aria-label={
-                          isLearner
-                            ? `Open ${test.name}`
-                            : `View performance for ${test.name}`
+                          isLearner ? `Open ${test.name}` : `View performance for ${test.name}`
                         }
-                        onClick={() =>
-                          isLearner ? onOpenQuiz(test) : onOpenQuizPerformance(test)
-                        }
+                        onClick={() => (isLearner ? onOpenQuiz(test) : onOpenQuizPerformance(test))}
                         sx={{
                           px: 0,
                           minWidth: 0,
@@ -222,18 +219,38 @@ export default function AssessmentLibrary({
                         </MDButton>
                       ) : canManageAssessment(test) ? (
                         <MDBox display="flex" justifyContent="flex-end" flexWrap="wrap" gap={0.25}>
-                          <MDButton variant="text" color="info" size="small" onClick={() => onEditQuiz(test)}>
+                          <MDButton
+                            variant="text"
+                            color="info"
+                            size="small"
+                            onClick={() => onEditQuiz(test)}
+                          >
                             Edit
                           </MDButton>
-                          <MDButton variant="text" color="success" size="small" onClick={() => onDuplicateQuiz(test)}>
+                          <MDButton
+                            variant="text"
+                            color="success"
+                            size="small"
+                            onClick={() => onDuplicateQuiz(test)}
+                          >
                             Duplicate
                           </MDButton>
-                          <MDButton variant="text" color="error" size="small" onClick={() => onDeleteQuiz(test)}>
+                          <MDButton
+                            variant="text"
+                            color="error"
+                            size="small"
+                            onClick={() => onDeleteQuiz(test)}
+                          >
                             Delete
                           </MDButton>
                         </MDBox>
                       ) : (
-                        <MDButton variant="text" color="info" size="small" onClick={() => onOpenQuizPerformance(test)}>
+                        <MDButton
+                          variant="text"
+                          color="info"
+                          size="small"
+                          onClick={() => onOpenQuizPerformance(test)}
+                        >
                           Review
                         </MDButton>
                       )}
@@ -259,7 +276,7 @@ export default function AssessmentLibrary({
                   <Icon>insights</Icon>&nbsp; Performance matrix
                 </MDButton>
               )}
-              {!isLearner && activeAcademicTerm && (
+              {!isLearner && canCreate && (
                 <MDButton variant="outlined" color="info" size="small" onClick={onCreateTyping}>
                   <Icon>add</Icon>&nbsp; New typing test
                 </MDButton>
@@ -268,9 +285,9 @@ export default function AssessmentLibrary({
           }
         />
         {loading ? (
-          <EmptyState icon="hourglass_top">Loading current-term typing tests...</EmptyState>
+          <EmptyState icon="hourglass_top">Loading typing tests...</EmptyState>
         ) : typingTests.length === 0 ? (
-          <EmptyState icon="keyboard">No typing tests are available for the current term.</EmptyState>
+          <EmptyState icon="keyboard">No typing tests are available for this term.</EmptyState>
         ) : (
           <TableContainer sx={{ overflowX: "auto" }}>
             <Table sx={{ minWidth: 720 }}>
@@ -320,13 +337,28 @@ export default function AssessmentLibrary({
                         </MDButton>
                       ) : canManageAssessment(test) ? (
                         <MDBox display="flex" justifyContent="flex-end" flexWrap="wrap" gap={0.25}>
-                          <MDButton variant="text" color="info" size="small" onClick={() => onEditTyping(test)}>
+                          <MDButton
+                            variant="text"
+                            color="info"
+                            size="small"
+                            onClick={() => onEditTyping(test)}
+                          >
                             Edit
                           </MDButton>
-                          <MDButton variant="text" color="success" size="small" onClick={() => onDuplicateTyping(test)}>
+                          <MDButton
+                            variant="text"
+                            color="success"
+                            size="small"
+                            onClick={() => onDuplicateTyping(test)}
+                          >
                             Duplicate
                           </MDButton>
-                          <MDButton variant="text" color="error" size="small" onClick={() => onDeleteTyping(test)}>
+                          <MDButton
+                            variant="text"
+                            color="error"
+                            size="small"
+                            onClick={() => onDeleteTyping(test)}
+                          >
                             Delete
                           </MDButton>
                         </MDBox>

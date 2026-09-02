@@ -124,10 +124,9 @@ async function listCompetitionsForLearner(userId) {
 async function listCompetitions() {
   const result = await query(
     `SELECT c.*,
-            COUNT(ce.id) FILTER (WHERE ce.status = 'enrolled')::integer AS enrolled_count
+            (SELECT COUNT(*) FROM competition_enrollments ce
+             WHERE ce.competition_id = c.id AND ce.status = 'enrolled') AS enrolled_count
      FROM competitions c
-     LEFT JOIN competition_enrollments ce ON ce.competition_id = c.id
-     GROUP BY c.id
      ORDER BY c.is_featured DESC, c.start_date DESC`
   );
   return result.rows.map(hydrateCompetition);
@@ -502,8 +501,8 @@ async function getSchoolCompetitionReport(schoolId, filters = {}) {
        )
        AND (
          $4::text = ''
-         OR regexp_replace(COALESCE(l.grade, ''), '\\D', '', 'g') =
-            regexp_replace($4::text, '\\D', '', 'g')
+         OR regexp_replace(COALESCE(l.grade, ''), '[^0-9]', '') =
+            regexp_replace($4::text, '[^0-9]', '')
        )
        AND ($5::text = '' OR c.competition_type = $5)
        AND ${timingFilters[normalized.status]}

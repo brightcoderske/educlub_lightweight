@@ -10,7 +10,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -77,7 +77,7 @@ function Leaderboard() {
 
   useEffect(() => {
     const cacheKey = `school-admin:${user?.schoolId}:leaderboard:${weekNumber}:${term}:${academicYear}:${category}`;
-    fetchLeaderboard(Boolean(getCachedPage(cacheKey)));
+    fetchLeaderboard();
   }, [weekNumber, term, academicYear, category]);
 
   useEffect(() => {
@@ -126,16 +126,11 @@ function Leaderboard() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="Weekly Leaderboards"
-            subtitle="View weekly performance for quizzes, typing, and active course progress."
-          />
-        </MDBox>
-
+      <DashboardNavbar
+        title="Weekly Leaderboards"
+        subtitle="View weekly performance for quizzes, typing, and active course progress."
+      />
+      <MDBox py={2}>
         <Grid container spacing={3}>
           <Grid item xs={12}>
             <Card>

@@ -618,34 +618,24 @@ function CourseReviews() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox
-          mb={2.5}
-          display="flex"
-          flexDirection={{ xs: "column", sm: "row" }}
-          alignItems={{ xs: "flex-start", sm: "center" }}
-          justifyContent="space-between"
-          gap={1.5}
-        >
-          <MDBox>
+      <DashboardNavbar
+        title={title}
+        subtitle={subtitle}
+        actions={
+          <>
+            {" "}
             <MDButton variant="text" color="dark" size="small" onClick={goBack}>
               <Icon sx={{ mr: 0.5 }}>arrow_back</Icon>
               Back
             </MDButton>
-            <MDTypography variant="h3" mt={0.5}>
-              {title}
-            </MDTypography>
-            <MDTypography variant="body2" color="text">
-              {subtitle}
-            </MDTypography>
-          </MDBox>
-          <MDButton variant="outlined" color="info" onClick={loadReport}>
-            <Icon sx={{ mr: 0.5 }}>refresh</Icon>
-            Refresh
-          </MDButton>
-        </MDBox>
-
+            <MDButton variant="outlined" color="info" onClick={loadReport}>
+              <Icon sx={{ mr: 0.5 }}>refresh</Icon>
+              Refresh
+            </MDButton>{" "}
+          </>
+        }
+      />
+      <MDBox py={2}>
         {error && (
           <Card sx={{ mb: 2, borderLeft: "4px solid", borderColor: "error.main" }}>
             <MDBox p={2} display="flex" alignItems="center" justifyContent="space-between" gap={2}>

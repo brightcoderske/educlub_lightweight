@@ -1,11 +1,13 @@
+import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Grid from "@mui/material/Grid";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
 import Card from "@mui/material/Card";
+import Alert from "@mui/material/Alert";
 import Icon from "@mui/material/Icon";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import AdminFeedbackPanel from "components/AdminFeedbackPanel";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -16,6 +18,7 @@ import { apiClient } from "lib/api";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 function SchoolAdminDashboard() {
+  const [loadErrors, setLoadErrors] = useState([]);
   const { user, isSchoolAdmin } = useAuth();
   const [stats, setStats] = useState({
     learners: 0,
@@ -37,6 +40,12 @@ function SchoolAdminDashboard() {
     }
 
     const fetchData = async () => {
+      setLoadErrors([]);
+      const load = (endpoint) =>
+        apiClient.get(endpoint).catch((error) => {
+          setLoadErrors((current) => [...current, error.message]);
+          return null;
+        });
       const cached = getCachedPage(cacheKey)?.value;
       if (cached) {
         setStats(cached.stats || stats);
@@ -46,11 +55,11 @@ function SchoolAdminDashboard() {
       try {
         const [learnersRes, allocationsRes, certificatesRes, coursesRes, termsRes] =
           await Promise.all([
-            apiClient.get(`/learners?school_id=${user?.schoolId}`),
-            apiClient.get(`/allocations?school_id=${user?.schoolId}`),
-            apiClient.get(`/certificates?school_id=${user?.schoolId}`),
-            apiClient.get("/courses"),
-            apiClient.get("/academic/terms"),
+            load(`/learners?school_id=${user?.schoolId}`),
+            load(`/allocations?school_id=${user?.schoolId}`),
+            load(`/certificates?school_id=${user?.schoolId}`),
+            load("/courses"),
+            load("/academic/terms"),
           ]);
         const todayTerm = await apiClient.get("/academic/terms/current").catch(() => null);
         const completionSummary = await apiClient
@@ -70,16 +79,16 @@ function SchoolAdminDashboard() {
         setCurrentTerm(todayTerm);
 
         const nextStats = {
-          learners: learnersRes.length || 0,
-          allocated: allocationsRes.length || 0,
-          completed: allocationsRes.filter((a) => a.status === "completed").length || 0,
-          certificates: certificatesRes.length || 0,
-          courses: coursesRes.length || 0,
+          learners: learnersRes?.length ?? "—",
+          allocated: allocationsRes?.length ?? "—",
+          completed: allocationsRes?.filter((a) => a.status === "completed").length ?? "—",
+          certificates: certificatesRes?.length ?? "—",
+          courses: coursesRes?.length ?? "—",
           activeTerms:
-            termsRes.filter((termItem) => new Date(termItem.end_date) < new Date()).length || 0,
+            termsRes?.filter((termItem) => new Date(termItem.end_date) < new Date()).length ?? "—",
           completionRate:
             completionSummary?.completion_rate ??
-            (allocationsRes.length > 0
+            (allocationsRes?.length > 0
               ? Math.round(
                   (allocationsRes.filter((a) => a.status === "completed").length /
                     allocationsRes.length) *
@@ -90,10 +99,10 @@ function SchoolAdminDashboard() {
         };
 
         setStats(nextStats);
-        setRecentActivity(allocationsRes.slice(0, 5));
+        setRecentActivity(allocationsRes?.slice(0, 5) || []);
         setCachedPage(cacheKey, {
           stats: nextStats,
-          recentActivity: allocationsRes.slice(0, 5),
+          recentActivity: allocationsRes?.slice(0, 5) || [],
           currentTerm: todayTerm,
         });
       } catch (error) {
@@ -102,7 +111,7 @@ function SchoolAdminDashboard() {
     };
 
     fetchData();
-  }, [isSchoolAdmin, user?.schoolId]);
+  }, [user?.role, user?.schoolId]);
 
   if (!isSchoolAdmin()) {
     return <MDBox>Access denied. School Admin only.</MDBox>;
@@ -110,98 +119,89 @@ function SchoolAdminDashboard() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center">
-          <DashboardIdentity
-            user={user}
-            title="School Admin Dashboard"
-            subtitle="Manage learners, course allocations, progress, reports, and certificates."
-          />
-          <MDButton variant="gradient" color="info">
-            Quick Actions
-          </MDButton>
-        </MDBox>
-
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6} lg={2.4}>
-            <MDBox mb={1.5}>
+      <DashboardNavbar
+        title="School Admin Dashboard"
+        subtitle="Manage learners, course allocations, progress, reports, and certificates."
+        actions={
+          <>
+            {" "}
+            <MDButton
+              component={Link}
+              to="/school-admin/learners"
+              variant="outlined"
+              color="info"
+              size="small"
+            >
+              Manage Learners
+            </MDButton>{" "}
+          </>
+        }
+      />
+      <MDBox py={2}>
+        {loadErrors.length > 0 && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            Some data could not refresh: {[...new Set(loadErrors)].join("; ")}
+          </Alert>
+        )}
+        <Grid container spacing={2}>
+          <Grid item xs={6} sm={4} lg={2.4}>
+            <MDBox mb={0}>
               <ComplexStatisticsCard
                 color="dark"
                 icon="school"
                 title="Total Learners"
+                to="/school-admin/learners"
                 count={stats.learners}
-                percentage={{
-                  color: "success",
-                  amount: "+12%",
-                  label: "than last month",
-                }}
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={2.4}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} sm={4} lg={2.4}>
+            <MDBox mb={0}>
               <ComplexStatisticsCard
                 icon="assignment_turned_in"
                 title="Allocations"
+                to="/school-admin/allocations"
                 count={stats.allocated}
-                percentage={{
-                  color: "success",
-                  amount: "+15%",
-                  label: "than last month",
-                }}
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={2.4}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} sm={4} lg={2.4}>
+            <MDBox mb={0}>
               <ComplexStatisticsCard
                 color="success"
                 icon="check_circle"
                 title="Completed"
+                to="/school-admin/progress"
                 count={stats.completed}
-                percentage={{
-                  color: "success",
-                  amount: "+8%",
-                  label: "than last month",
-                }}
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={2.4}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} sm={4} lg={2.4}>
+            <MDBox mb={0}>
               <ComplexStatisticsCard
                 color="primary"
                 icon="card_membership"
                 title="Certificates"
+                to="/school-admin/certificates"
                 count={stats.certificates}
-                percentage={{
-                  color: "success",
-                  amount: "+5",
-                  label: "Just issued",
-                }}
               />
             </MDBox>
           </Grid>
-          <Grid item xs={12} md={6} lg={2.4}>
-            <MDBox mb={1.5}>
+          <Grid item xs={6} sm={4} lg={2.4}>
+            <MDBox mb={0}>
               <ComplexStatisticsCard
                 color="warning"
                 icon="menu_book"
                 title="Courses"
+                to="/school-admin/courses"
                 count={stats.courses}
-                percentage={{
-                  color: "info",
-                  amount: "Active",
-                  label: "courses",
-                }}
               />
             </MDBox>
           </Grid>
 
           <Grid item xs={12} lg={8}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={2}>
                 <MDTypography variant="h6" fontWeight="bold" mb={2}>
                   Recent Activity
                 </MDTypography>
@@ -254,7 +254,7 @@ function SchoolAdminDashboard() {
 
           <Grid item xs={12} lg={4}>
             <Card>
-              <MDBox p={3}>
+              <MDBox p={2}>
                 <MDTypography variant="h6" fontWeight="bold" mb={2}>
                   Quick Stats
                 </MDTypography>

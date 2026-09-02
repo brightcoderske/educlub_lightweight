@@ -39,8 +39,17 @@ async function report(req, res) {
   }
 }
 
+async function attempts(req, res) {
+  try {
+    res.json(await typingPracticeService.getAttempts(req.user, req.params.learnerId, req.query));
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to load typing activity log." });
+  }
+}
+
 module.exports = {
   getProgress,
   submitAttempt,
   report,
+  attempts,
 };

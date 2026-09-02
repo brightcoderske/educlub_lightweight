@@ -14,7 +14,7 @@ import MDInput from "components/MDInput";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 
@@ -138,23 +138,23 @@ function SchoolAdminCompetitions() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2} display="flex" justifyContent="space-between" alignItems="center">
-          <DashboardIdentity
-            user={user}
-            title="Competitions"
-            subtitle={
-              isTeacher
-                ? "Find school learners and review competition performance."
-                : "Track enrolled learners and performance in monthly challenges."
-            }
-          />
-          <MDButton variant="gradient" color="info" onClick={loadRows}>
-            Refresh
-          </MDButton>
-        </MDBox>
-
+      <DashboardNavbar
+        title="Competitions"
+        subtitle={
+          isTeacher
+            ? "Find school learners and review competition performance."
+            : "Track enrolled learners and performance in monthly challenges."
+        }
+        actions={
+          <>
+            {" "}
+            <MDButton variant="gradient" color="info" onClick={loadRows}>
+              Refresh
+            </MDButton>{" "}
+          </>
+        }
+      />
+      <MDBox py={2}>
         {error && (
           <MDTypography variant="caption" color="error" display="block" mb={2}>
             {error}

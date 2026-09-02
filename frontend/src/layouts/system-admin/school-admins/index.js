@@ -69,7 +69,7 @@ function SystemAdminSchoolAdmins() {
   };
 
   useEffect(() => {
-    if (isSystemAdmin()) loadData(Boolean(getCachedPage(CACHE_KEY)));
+    if (isSystemAdmin()) loadData();
   }, []);
 
   const handleCreate = async () => {
@@ -166,15 +166,11 @@ function SystemAdminSchoolAdmins() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3}>
-          <MDTypography variant="h3">School Staff</MDTypography>
-          <MDTypography variant="body2" color="text">
-            Create school administrators or teachers and send first-login credentials.
-          </MDTypography>
-        </MDBox>
-
+      <DashboardNavbar
+        title="School Staff"
+        subtitle="Create school administrators or teachers and send first-login credentials."
+      />
+      <MDBox py={2}>
         <Card>
           <MDBox p={2}>
             <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>

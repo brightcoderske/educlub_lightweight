@@ -31,10 +31,6 @@ function DashboardLayout({ children }) {
   const [controller, dispatch] = useMaterialUIController();
   const { miniSidenav } = controller;
   const { pathname } = useLocation();
-  const focusLearning =
-    pathname.startsWith("/learner/my-typing-tutor") ||
-    pathname.includes("/preview") ||
-    pathname.includes("/learn");
 
   useEffect(() => {
     setLayout(dispatch, "dashboard");
@@ -47,14 +43,17 @@ function DashboardLayout({ children }) {
         position: "relative",
 
         [breakpoints.up("sm")]: {
-          p: 3,
+          p: 2.5,
         },
 
-        [breakpoints.up("xl")]: {
-          marginLeft: miniSidenav ? pxToRem(120) : pxToRem(274),
-          ...(focusLearning && {
-            marginLeft: pxToRem(28),
-          }),
+        "& .MuiCard-root": {
+          border: "1px solid #e2e8f0",
+          borderRadius: "10px",
+          boxShadow: "0 2px 5px rgba(15,23,42,0.03)",
+        },
+        "& .MuiTypography-h3": { fontSize: "1.45rem", lineHeight: 1.3 },
+        [breakpoints.up("lg")]: {
+          marginLeft: miniSidenav ? pxToRem(76) : pxToRem(248),
           transition: transitions.create(["margin-left", "margin-right"], {
             easing: transitions.easing.easeInOut,
             duration: transitions.duration.standard,

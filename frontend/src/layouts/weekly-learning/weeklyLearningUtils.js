@@ -7,11 +7,7 @@ export const categories = [
   ["weekly_quiz", "Weekly Quizzes"],
 ];
 
-export const defaultLessons = () => [
-  { title: "Lesson 1", passage: "", instructions: "" },
-  { title: "Lesson 2", passage: "", instructions: "" },
-  { title: "Lesson 3", passage: "", instructions: "" },
-];
+export const defaultLessons = () => [{ title: "Lesson 1", passage: "", instructions: "" }];
 
 export const emptyTypingForm = () => ({
   name: "Week 1 Typing Assessment",

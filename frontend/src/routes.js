@@ -45,7 +45,9 @@ const SetPassword = lazy(() => import("layouts/authentication/set-password"));
 const PrivacyConsent = lazy(() => import("layouts/authentication/privacy-consent"));
 const RegistrationLanding = lazy(() => import("layouts/landing"));
 const PublicSite = lazy(() => import("layouts/public-site"));
-const PublicNotFound = lazy(() => import("layouts/public-site").then((module) => ({ default: module.PublicNotFound })));
+const PublicNotFound = lazy(() =>
+  import("layouts/public-site").then((module) => ({ default: module.PublicNotFound }))
+);
 import { PUBLIC_ALIASES, PUBLIC_PAGE_PATHS } from "layouts/public-site/publicPages";
 const Reports = lazy(() => import("layouts/school-admin/reports"));
 const Leaderboard = lazy(() => import("layouts/school-admin/leaderboard"));
@@ -320,7 +322,7 @@ const routes = [
   },
   {
     type: "collapse",
-    name: "Weekly Practice",
+    name: "Typing Tutor",
     key: "school-admin-typing-tutor",
     icon: <Icon fontSize="small">keyboard_alt</Icon>,
     route: "/school-admin/typing-tutor",

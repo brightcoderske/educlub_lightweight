@@ -214,15 +214,11 @@ function SystemAdminAcademic() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3}>
-          <MDTypography variant="h3">Academic Years & Terms</MDTypography>
-          <MDTypography variant="body2" color="text">
-            Edit dates, active records, and week calculation from one system-admin screen.
-          </MDTypography>
-        </MDBox>
-
+      <DashboardNavbar
+        title="Academic Years & Terms"
+        subtitle="Edit dates, active records, and week calculation from one system-admin screen."
+      />
+      <MDBox py={2}>
         {error && (
           <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#fee2e2" }}>
             <MDTypography variant="body2" color="error">

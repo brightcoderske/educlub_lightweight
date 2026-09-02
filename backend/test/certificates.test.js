@@ -37,7 +37,7 @@ test("certificate APIs are scoped and return authenticated PDF downloads", () =>
   assert.match(controller, /application\/pdf/);
   assert.match(certificatesService, /PDFDocument/);
   assert.match(certificatesService, /assertCertificateAccess/);
-  assert.match(certificatesService, /c\.status = 'approved'/);
+  assert.match(certificatesService, /c\.status IN \('approved', 'issued'\)/);
 });
 
 test("certificate PDF and preview use the premium eduClub visual style", () => {

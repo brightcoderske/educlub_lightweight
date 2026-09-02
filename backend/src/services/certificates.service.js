@@ -74,7 +74,7 @@ function assertCertificateAccess(certificate, user = {}, options = {}) {
     user.role === "learner" &&
     Number(certificate.learner_user_id) === Number(user.userId)
   ) {
-    if (options.approvedOnly && certificate.status !== "approved") {
+    if (options.approvedOnly && !["approved", "issued"].includes(certificate.status)) {
       const error = new Error("Certificate is waiting for school approval.");
       error.status = 403;
       throw error;
@@ -101,7 +101,7 @@ async function getAllCertificates(filters = {}, user = {}) {
   if (user.role === "learner") {
     params.push(user.userId);
     where.push(`l.user_id = $${params.length}::integer`);
-    where.push("c.status = 'approved'");
+    where.push("c.status IN ('approved', 'issued')");
   } else if (isSchoolStaff(user)) {
     params.push(user.schoolId);
     where.push(`l.school_id = $${params.length}::integer`);

@@ -9,7 +9,7 @@ import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Divider from "@mui/material/Divider";
-import DashboardIdentity from "components/DashboardIdentity";
+
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -305,16 +305,11 @@ function Reports() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={2}>
-          <DashboardIdentity
-            user={user}
-            title="Performance Reports"
-            subtitle="Generate branded PDF reports with course performance and weekly progress."
-          />
-        </MDBox>
-
+      <DashboardNavbar
+        title="Performance Reports"
+        subtitle="Generate branded PDF reports with course performance and weekly progress."
+      />
+      <MDBox py={2}>
         <Grid container spacing={3}>
           <Grid item xs={12}>
             <Card>

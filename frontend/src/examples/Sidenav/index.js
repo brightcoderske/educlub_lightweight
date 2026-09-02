@@ -14,208 +14,203 @@ Coded by www.creative-tim.com
 */
 
 import { useEffect } from "react";
-
-// react-router-dom components
-import { useLocation, NavLink } from "react-router-dom";
-
-// prop-types is a library for typechecking of props.
+import { NavLink, useLocation } from "react-router-dom";
 import PropTypes from "prop-types";
-
-// @mui material components
-import List from "@mui/material/List";
-import Divider from "@mui/material/Divider";
-import Link from "@mui/material/Link";
+import Drawer from "@mui/material/Drawer";
 import Icon from "@mui/material/Icon";
-
-// Material Dashboard 2 React components
+import IconButton from "@mui/material/IconButton";
+import List from "@mui/material/List";
+import ListItem from "@mui/material/ListItem";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Tooltip from "@mui/material/Tooltip";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
+import { useMaterialUIController, setMiniSidenav } from "context";
+import { useAuth } from "context/AuthContext";
 
-// Material Dashboard 2 React example components
-import SidenavCollapse from "examples/Sidenav/SidenavCollapse";
-
-// Custom styles for the Sidenav
-import SidenavRoot from "examples/Sidenav/SidenavRoot";
-import sidenavLogoLabel from "examples/Sidenav/styles/sidenav";
-
-// Material Dashboard 2 React context
-import {
-  useMaterialUIController,
-  setMiniSidenav,
-  setTransparentSidenav,
-  setWhiteSidenav,
-} from "context";
-
-function Sidenav({ brand, brandName, routes, ...rest }) {
+function Sidenav({ brand, brandName, routes }) {
+  const { logout } = useAuth();
   const [controller, dispatch] = useMaterialUIController();
-  const { miniSidenav, transparentSidenav, whiteSidenav, darkMode } = controller;
-  const location = useLocation();
-  const focusLearning =
-    location.pathname.startsWith("/learner/my-typing-tutor") ||
-    location.pathname.includes("/preview") ||
-    location.pathname.includes("/learn");
-
-  let textColor = "white";
-
-  if (transparentSidenav || (whiteSidenav && !darkMode)) {
-    textColor = "dark";
-  } else if (whiteSidenav && darkMode) {
-    textColor = "inherit";
-  }
-
-  const closeSidenav = () => setMiniSidenav(dispatch, true);
+  const desktop = useMediaQuery((theme) => theme.breakpoints.up("lg"));
+  const { pathname } = useLocation();
+  const collapsed = desktop && controller.miniSidenav;
+  const close = () => setMiniSidenav(dispatch, true);
+  const activeRoute = routes
+    .filter(({ route }) => route && (pathname === route || pathname.startsWith(route + "/")))
+    .sort((a, b) => b.route.length - a.route.length)[0]?.route;
 
   useEffect(() => {
-    // A function that sets the mini state of the sidenav.
-    function handleMiniSidenav() {
-      setMiniSidenav(dispatch, window.innerWidth < 1200);
-      setTransparentSidenav(dispatch, window.innerWidth < 1200 ? false : transparentSidenav);
-      setWhiteSidenav(dispatch, window.innerWidth < 1200 ? false : whiteSidenav);
-    }
+    setMiniSidenav(dispatch, !desktop);
+  }, [desktop, dispatch]);
 
-    /** 
-     The event listener that's calling the handleMiniSidenav function when resizing the window.
-    */
-    window.addEventListener("resize", handleMiniSidenav);
-
-    // Call the handleMiniSidenav function to set the state with the initial value.
-    handleMiniSidenav();
-
-    // Remove event listener on cleanup
-    return () => window.removeEventListener("resize", handleMiniSidenav);
-  }, [dispatch, location]);
-
-  // Render all the routes from the routes.js (All the visible items on the Sidenav)
-  const renderRoutes = routes.map(({ type, name, icon, title, noCollapse, key, href, route }) => {
-    let returnValue;
-    const active =
-      route && (location.pathname === route || location.pathname.startsWith(`${route}/`));
-
-    if (type === "collapse") {
-      returnValue = href ? (
-        <Link
-          href={href}
-          key={key}
-          target="_blank"
-          rel="noreferrer"
-          sx={{ textDecoration: "none" }}
-        >
-          <SidenavCollapse name={name} icon={icon} active={active} noCollapse={noCollapse} />
-        </Link>
-      ) : (
-        <NavLink key={key} to={route}>
-          <SidenavCollapse name={name} icon={icon} active={active} />
-        </NavLink>
-      );
-    } else if (type === "title") {
-      returnValue = (
-        <MDTypography
-          key={key}
-          color={textColor}
-          display="block"
-          variant="caption"
-          fontWeight="bold"
-          textTransform="uppercase"
-          pl={3}
-          mt={2}
-          mb={1}
-          ml={1}
-        >
-          {title}
-        </MDTypography>
-      );
-    } else if (type === "divider") {
-      returnValue = (
-        <Divider
-          key={key}
-          light={
-            (!darkMode && !whiteSidenav && !transparentSidenav) ||
-            (darkMode && !transparentSidenav && whiteSidenav)
-          }
-        />
-      );
-    }
-
-    return returnValue;
-  });
+  useEffect(() => {
+    if (!desktop) setMiniSidenav(dispatch, true);
+  }, [pathname, desktop, dispatch]);
 
   return (
-    <>
-      {focusLearning && (
-        <MDBox
-          display={{ xs: "none", xl: "grid" }}
-          position="fixed"
-          top={18}
-          left={6}
-          width={38}
-          height={38}
-          borderRadius="md"
-          zIndex={1301}
-          sx={{
-            placeItems: "center",
-            bgcolor: "#111827",
-            color: "#ffffff",
-            boxShadow: "0 8px 20px rgba(17,24,39,0.25)",
-            pointerEvents: "none",
-          }}
-        >
-          <Icon>menu_open</Icon>
-        </MDBox>
-      )}
-      <SidenavRoot
-        {...rest}
-        variant="permanent"
-        ownerState={{ transparentSidenav, whiteSidenav, miniSidenav, darkMode, focusLearning }}
+    <Drawer
+      variant={desktop ? "permanent" : "temporary"}
+      open={desktop || !controller.miniSidenav}
+      onClose={close}
+      ModalProps={{ keepMounted: true }}
+      PaperProps={{ component: "nav", id: "dashboard-navigation", "aria-label": "Main navigation" }}
+      sx={{
+        width: 0,
+        "& .MuiDrawer-paper": {
+          width: collapsed ? 76 : 248,
+          maxWidth: "85vw",
+          height: "100dvh",
+          m: 0,
+          borderRadius: 0,
+          background: "#ffffff",
+          borderRight: "1px solid #e2e8f0",
+          boxShadow: desktop ? "none" : "8px 0 30px rgba(15,23,42,0.12)",
+          overflowX: "hidden",
+          transition: "width 180ms ease",
+        },
+      }}
+    >
+      <MDBox
+        display="flex"
+        alignItems="center"
+        gap={1}
+        px={2}
+        height={72}
+        flexShrink={0}
+        borderBottom="1px solid #edf1f5"
       >
-        <MDBox pt={3} pb={1} px={4} textAlign="center">
-          <MDBox
-            display={{ xs: "block", xl: "none" }}
-            position="absolute"
-            top={0}
-            right={0}
-            p={1.625}
-            onClick={closeSidenav}
-            sx={{ cursor: "pointer" }}
-          >
-            <MDTypography variant="h6" color="secondary">
-              <Icon sx={{ fontWeight: "bold" }}>close</Icon>
-            </MDTypography>
-          </MDBox>
-          <MDBox component={NavLink} to="/" display="flex" alignItems="center">
-            {brand && <MDBox component="img" src={brand} alt="Brand" width="2rem" />}
+        <MDBox
+          component={NavLink}
+          to="/"
+          display="flex"
+          alignItems="center"
+          gap={1.25}
+          minWidth={0}
+          sx={{ textDecoration: "none" }}
+        >
+          {brand && (
             <MDBox
-              width={!brandName && "100%"}
-              sx={(theme) => sidenavLogoLabel(theme, { miniSidenav })}
+              component="img"
+              src={brand}
+              alt=""
+              width={32}
+              height={32}
+              sx={{ objectFit: "contain" }}
+            />
+          )}
+          {!collapsed && (
+            <MDTypography
+              variant="button"
+              fontWeight="bold"
+              sx={{
+                color: "#172b46",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
             >
-              <MDTypography component="h6" variant="button" fontWeight="medium" color={textColor}>
-                {brandName}
-              </MDTypography>
-            </MDBox>
-          </MDBox>
+              {brandName}
+            </MDTypography>
+          )}
         </MDBox>
-        <Divider
-          light={
-            (!darkMode && !whiteSidenav && !transparentSidenav) ||
-            (darkMode && !transparentSidenav && whiteSidenav)
-          }
-        />
-        <List>{renderRoutes}</List>
-      </SidenavRoot>
-    </>
+        {!desktop && (
+          <IconButton
+            aria-label="Close navigation"
+            onClick={close}
+            sx={{ ml: "auto", color: "#475569" }}
+          >
+            <Icon>close</Icon>
+          </IconButton>
+        )}
+      </MDBox>
+      <List sx={{ p: 1.25, overflowY: "auto", flex: 1 }}>
+        {routes
+          .filter((route) => route.type === "collapse")
+          .map(({ key, name, icon, route, href }) => (
+            <ListItem key={key} disablePadding sx={{ mb: 0.5 }}>
+              <Tooltip title={collapsed ? name : ""} placement="right">
+                <ListItemButton
+                  component={href ? "a" : NavLink}
+                  {...(href
+                    ? { href, target: "_blank", rel: "noreferrer" }
+                    : { to: route, end: route === activeRoute })}
+                  selected={route === activeRoute}
+                  aria-label={name}
+                  onClick={() => {
+                    if (!desktop) close();
+                  }}
+                  sx={{
+                    minHeight: 42,
+                    px: collapsed ? 1.25 : 1.5,
+                    borderRadius: "8px",
+                    color: "#475569",
+                    "&.Mui-selected": { bgcolor: "#eaf2ff", color: "#175cd3" },
+                    "&:hover": { bgcolor: "#f1f5f9" },
+                    "&.Mui-selected:hover": { bgcolor: "#deebff" },
+                    "&:focus-visible": { outline: "2px solid #2563eb", outlineOffset: 1 },
+                  }}
+                >
+                  <ListItemIcon
+                    sx={{
+                      minWidth: collapsed ? 28 : 34,
+                      color: "inherit",
+                      "& .material-icons-round": { fontSize: "20px !important" },
+                    }}
+                  >
+                    {icon}
+                  </ListItemIcon>
+                  {!collapsed && (
+                    <ListItemText
+                      primary={name}
+                      primaryTypographyProps={{
+                        fontSize: "0.82rem",
+                        fontWeight: route === activeRoute ? 600 : 400,
+                      }}
+                    />
+                  )}
+                </ListItemButton>
+              </Tooltip>
+            </ListItem>
+          ))}
+      </List>
+      <MDBox p={1.25} borderTop="1px solid #edf1f5" flexShrink={0}>
+        <Tooltip title={collapsed ? "Log out" : ""} placement="right">
+          <ListItemButton
+            component="button"
+            aria-label="Log out"
+            onClick={logout}
+            sx={{
+              width: "100%",
+              minHeight: 44,
+              px: 1.5,
+              borderRadius: "8px",
+              color: "#475569",
+              "&:hover": { bgcolor: "#f1f5f9" },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: collapsed ? 28 : 34, color: "inherit" }}>
+              <Icon sx={{ fontSize: "20px !important" }}>logout</Icon>
+            </ListItemIcon>
+            {!collapsed && (
+              <ListItemText
+                primary="Log out"
+                primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: 600 }}
+              />
+            )}
+          </ListItemButton>
+        </Tooltip>
+      </MDBox>
+    </Drawer>
   );
 }
 
-// Setting default values for the props of Sidenav
-Sidenav.defaultProps = {
-  color: "info",
-  brand: "",
-};
-
-// Typechecking props for the Sidenav
+Sidenav.defaultProps = { brand: "" };
 Sidenav.propTypes = {
   brand: PropTypes.string,
   brandName: PropTypes.string.isRequired,
   routes: PropTypes.arrayOf(PropTypes.object).isRequired,
 };
-
 export default Sidenav;

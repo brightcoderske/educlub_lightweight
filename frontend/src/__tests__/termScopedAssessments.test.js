@@ -4,7 +4,7 @@ import path from "path";
 const readSource = (relativePath) =>
   fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
 
-test("typing and quiz lists load in parallel while the API enforces the current period", () => {
+test("typing and quiz lists load in parallel with explicit history selection limited to staff", () => {
   const source = readSource("layouts/weekly-learning/index.js");
 
   expect(source).toContain('apiClient.get("/academic/terms/current")');
@@ -16,9 +16,10 @@ test("typing and quiz lists load in parallel while the API enforces the current 
   expect(source).not.toContain('params.set("term", currentPeriod.name)');
   expect(source).not.toContain('params.set("academic_year", currentPeriod.academic_year)');
   expect(source).toContain("No current academic term");
-  expect(source).toContain("strictly term-scoped");
-  expect(source).toContain("expired Term 2 content will not be used as a");
-  expect(source).toContain("activeAcademicTerm && (");
+  expect(source).toContain('!isLearner() && searchParams.get("term")');
+  expect(source).toContain('params.set("term", requestedTerm)');
+  expect(source).toContain('params.set("academic_year", requestedYear)');
+  expect(source).toContain("canAuthorAssessments && termOptions.length > 0");
 });
 
 test("assessment editors and heavy performance views load independently", () => {

@@ -32,11 +32,12 @@ const CACHE_KEY = "system-admin:learners";
 
 function SystemAdminLearners() {
   const { isSystemAdmin } = useAuth();
-  const [schools, setSchools] = useState([]);
-  const [learners, setLearners] = useState([]);
+  const cachedData = getCachedPage(CACHE_KEY)?.value;
+  const [schools, setSchools] = useState(() => cachedData?.schools || []);
+  const [learners, setLearners] = useState(() => cachedData?.learners || []);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedData);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [selectedLearnerId, setSelectedLearnerId] = useState(null);
@@ -73,7 +74,7 @@ function SystemAdminLearners() {
   };
 
   useEffect(() => {
-    if (isSystemAdmin()) loadData(Boolean(getCachedPage(CACHE_KEY)));
+    if (isSystemAdmin()) loadData();
   }, []);
 
   const handleCreate = async () => {
@@ -227,16 +228,11 @@ function SystemAdminLearners() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox py={3}>
-        <MDBox mb={3}>
-          <MDTypography variant="h3">Learners</MDTypography>
-          <MDTypography variant="body2" color="text">
-            Register learner accounts with school and name only. School Admins can complete the
-            profile later.
-          </MDTypography>
-        </MDBox>
-
+      <DashboardNavbar
+        title="Learners"
+        subtitle="Register learner accounts with school and name only. School Admins can complete the profile later."
+      />
+      <MDBox py={2}>
         <Card>
           <MDBox p={2}>
             <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>

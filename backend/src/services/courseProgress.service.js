@@ -1,5 +1,12 @@
 const { query } = require("../config");
 
+const closedAllocationPeriodSql = `EXISTS (
+  SELECT 1 FROM terms history_term
+  JOIN academic_years history_year ON history_year.id = history_term.academic_year_id
+  WHERE history_term.name = a.term AND history_year.year = a.academic_year
+    AND history_term.end_date < CURRENT_DATE
+)`;
+
 function toNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -82,6 +89,7 @@ async function getActiveAllocations(learnerId, term = null, academicYear = null)
     `SELECT a.id AS allocation_id,
             a.term,
             a.academic_year,
+            ${closedAllocationPeriodSql} AS is_closed_period,
             c.id,
             c.name
      FROM course_allocations a
@@ -321,12 +329,23 @@ async function getLearnerCourseProgress(learnerId, term, academicYear, options =
     requestedAcademicYear
   );
   const progress = [];
+  const historyByPeriod = new Map();
 
   for (const course of allocations) {
     const effectiveTerm = term || course.term || "Term 1";
     const effectiveAcademicYear = Number(
       academicYear || course.academic_year || new Date().getFullYear()
     );
+    if (course.is_closed_period) {
+      const periodKey = JSON.stringify([effectiveTerm, effectiveAcademicYear]);
+      if (!historyByPeriod.has(periodKey)) {
+        historyByPeriod.set(periodKey, await getCachedCourseProgressForPeriod(learnerId, effectiveTerm, effectiveAcademicYear));
+      }
+      const saved = historyByPeriod.get(periodKey);
+      const snapshot = saved.find((item) => Number(item.course_id) === Number(course.id));
+      if (snapshot) progress.push(snapshot);
+      continue;
+    }
     const progressData = await buildNativeCourseProgress(learnerId, course);
 
     await cacheProgress(learnerId, course.id, effectiveTerm, effectiveAcademicYear, progressData);
@@ -387,18 +406,22 @@ async function getSchoolCourseProgress({
     // recent allocation per learner. MySQL has no DISTINCT ON, so the same rule
     // is expressed as a numbered window filtered to the first row.
     `SELECT id, full_name, grade, stream, email,
-            allocation_term, allocation_academic_year, course_name
+            allocation_term, allocation_academic_year, course_name, is_closed_period, cached_progress
      FROM (
        SELECT l.id, l.full_name, l.grade, l.stream, l.email,
               a.term AS allocation_term,
               a.academic_year AS allocation_academic_year,
               c.name AS course_name,
+              ${closedAllocationPeriodSql} AS is_closed_period,
+              pc.progress_data AS cached_progress,
               ROW_NUMBER() OVER (
                 PARTITION BY l.id ORDER BY a.allocated_at DESC
               ) AS recency
        FROM learners l
        JOIN course_allocations a ON a.learner_id = l.id
        JOIN courses c ON c.id = a.course_id
+       LEFT JOIN progress_cache pc ON pc.learner_id = a.learner_id AND pc.course_id = a.course_id
+         AND pc.term = a.term AND pc.academic_year = a.academic_year
        WHERE l.school_id = $1
          AND a.course_id = $2
          AND a.status IN ('active', 'in_progress', 'completed')
@@ -419,13 +442,14 @@ async function getSchoolCourseProgress({
   );
 
   const course = { id: Number(courseId), name: learners[0]?.course_name };
+  const currentLearners = learners.filter((learner) => !learner.is_closed_period);
   const progressByLearner = await buildNativeCourseProgressForLearners(
-    learners.map((learner) => learner.id),
+    currentLearners.map((learner) => learner.id),
     course
   );
 
   await cacheProgressBatch(
-    learners.map((learner) => ({
+    currentLearners.map((learner) => ({
       learnerId: learner.id,
       courseId: course.id,
       term: term || learner.allocation_term || "Term 1",
@@ -438,7 +462,9 @@ async function getSchoolCourseProgress({
 
   const rows = [];
   for (const learner of learners) {
-    const progress = progressByLearner.get(Number(learner.id));
+    const progress = learner.is_closed_period
+      ? learner.cached_progress
+      : progressByLearner.get(Number(learner.id));
     if (!progress) continue;
 
     const selectedModule =
@@ -503,6 +529,8 @@ async function getSchoolCompletionSummary({ schoolId, term, academicYear }) {
      LEFT JOIN progress_cache pc
        ON pc.learner_id = a.learner_id
       AND pc.course_id = a.course_id
+      AND pc.term = a.term
+      AND pc.academic_year = a.academic_year
      WHERE l.school_id = $1
        AND a.status IN ('active', 'in_progress', 'completed')
        AND COALESCE(c.course_category, 'general') = 'general'

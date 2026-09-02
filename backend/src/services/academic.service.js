@@ -65,29 +65,20 @@ async function getAllTerms() {
   const result = await query(
     `SELECT t.*,
             ay.year AS academic_year,
-            CONCAT(ay.year, ' - ', t.name) AS term_label,
-            COALESCE(
-              JSON_ARRAYAGG(
-                JSON_OBJECT(
-                  'id', tw.id,
-                  'week_number', tw.week_number,
-                  'start_date', tw.start_date,
-                  'end_date', tw.end_date
-                )
-              ),
-              JSON_ARRAY()
-            ) AS weeks
+            CONCAT(ay.year, ' - ', t.name) AS term_label
      FROM terms t
      LEFT JOIN academic_years ay ON ay.id = t.academic_year_id
-     LEFT JOIN (
-       SELECT id, term_id, week_number, start_date, end_date
-       FROM term_weeks
-       ORDER BY term_id, week_number
-     ) tw ON tw.term_id = t.id
-     GROUP BY t.id, ay.year
      ORDER BY ay.year DESC, t.term_type, t.name`
   );
-  return result.rows;
+  const weeks = await query(
+    "SELECT id, term_id, week_number, start_date, end_date FROM term_weeks ORDER BY term_id, week_number"
+  );
+  const weeksByTerm = new Map();
+  for (const { term_id, ...week } of weeks.rows) {
+    if (!weeksByTerm.has(term_id)) weeksByTerm.set(term_id, []);
+    weeksByTerm.get(term_id).push(week);
+  }
+  return result.rows.map((term) => ({ ...term, weeks: weeksByTerm.get(term.id) || [] }));
 }
 
 async function getActiveTerm(termType = "regular") {

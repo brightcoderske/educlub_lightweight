@@ -1,14 +1,22 @@
 const aiSettingsService = require("../services/aiSettings.service");
 const aiCourseBuilderService = require("../services/aiCourseBuilder.service");
 
-async function getSettings(req, res) {
-  const settings = await aiSettingsService.getAiSettings();
-  res.json(settings);
+async function getSettings(req, res, next) {
+  try {
+    const settings = await aiSettingsService.getAiSettings();
+    res.json(settings);
+  } catch (error) {
+    next(error);
+  }
 }
 
-async function updateSettings(req, res) {
-  const settings = await aiSettingsService.updateAiSettings(req.body, req.user);
-  res.json({ message: "AI settings updated.", ...settings });
+async function updateSettings(req, res, next) {
+  try {
+    const settings = await aiSettingsService.updateAiSettings(req.body, req.user);
+    res.json({ message: "AI settings updated.", ...settings });
+  } catch (error) {
+    next(error);
+  }
 }
 
 async function getSchoolSettings(req, res) {
@@ -36,9 +44,13 @@ async function updateSchoolSettings(req, res) {
   }
 }
 
-async function getAvailability(req, res) {
-  const availability = await aiSettingsService.getAiAvailability(req.user);
-  res.json(availability);
+async function getAvailability(req, res, next) {
+  try {
+    const availability = await aiSettingsService.getAiAvailability(req.user);
+    res.json(availability);
+  } catch (error) {
+    next(error);
+  }
 }
 
 async function generateCourseBuilderDraft(req, res) {
