@@ -623,23 +623,30 @@ async function getCourseLearningOverview(courseId, user = {}, options = {}) {
   let overrideRows = [];
   if (learner) {
     const overrides = await query(
+      // The needle is passed as JSON text rather than built with
+      // CAST(... AS JSON), which only MySQL 8 understands: MariaDB has no JSON
+      // cast target and rejects the statement outright. A bare number is valid
+      // JSON, so "12" satisfies JSON_CONTAINS on both engines.
       `SELECT o.*
        FROM learning_availability_overrides o
        WHERE o.course_id = $1::integer
          AND o.revoked_at IS NULL
          AND (
            o.target_learner_id = $2::integer
-           OR JSON_CONTAINS(
-                COALESCE(o.target_learner_ids, JSON_ARRAY()),
-                CAST($2::integer AS JSON)
-              )
+           OR JSON_CONTAINS(COALESCE(o.target_learner_ids, JSON_ARRAY()), $3)
            OR (
              o.scope_type = 'class'
-             AND (o.target_grade IS NULL OR o.target_grade = $3::varchar)
-             AND (o.target_stream IS NULL OR o.target_stream = $4::varchar)
+             AND (o.target_grade IS NULL OR o.target_grade = $4::varchar)
+             AND (o.target_stream IS NULL OR o.target_stream = $5::varchar)
            )
          )`,
-      [courseId, learner.id, learner.grade || null, learner.stream || null]
+      [
+        courseId,
+        learner.id,
+        String(Number(learner.id)),
+        learner.grade || null,
+        learner.stream || null,
+      ]
     );
     overrideRows = overrides.rows;
   }

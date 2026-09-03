@@ -177,3 +177,68 @@ test("no query reaches the driver still carrying a JSON operator", () => {
     assert.doesNotMatch(translate(sql, []).sql, /->>?/, `left an operator in: ${sql}`);
   }
 });
+
+// --------------------------------------------------- MySQL-8-only constructs
+
+const fs = require("node:fs");
+const path = require("node:path");
+
+/**
+ * Production runs MariaDB; development commonly runs MySQL 8. SQL that only
+ * MySQL 8 accepts therefore passes every local check and fails in production
+ * only, which is how `CAST(? AS JSON)` reached live and broke the course
+ * learning overview: MariaDB has no JSON cast target and rejects the statement
+ * with a parse error.
+ */
+const MYSQL8_ONLY = [
+  [/\bCAST\s*\([^)]*\bAS\s+JSON\s*\)/i, "CAST(... AS JSON) - MariaDB has no JSON cast target"],
+  [/\bJSON_TABLE\s*\(/i, "JSON_TABLE() - MySQL 8 only"],
+  [/\bJSON_OVERLAPS\s*\(/i, "JSON_OVERLAPS() - MySQL 8 only"],
+  [/\bJSON_SCHEMA_VALID\s*\(/i, "JSON_SCHEMA_VALID() - MySQL 8 only"],
+  [/\bLATERAL\s+\(/i, "LATERAL - MySQL 8.0.14+, not in MariaDB"],
+];
+
+function sourceFiles(dir, found = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) sourceFiles(full, found);
+    else if (entry.name.endsWith(".js")) found.push(full);
+  }
+  return found;
+}
+
+test("no application SQL uses syntax MariaDB cannot parse", () => {
+  const root = path.join(__dirname, "..", "src");
+  const offenders = [];
+
+  for (const file of sourceFiles(root)) {
+    const code = fs
+      .readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/^\s*\/\/.*$/gm, " ");
+
+    for (const [pattern, description] of MYSQL8_ONLY) {
+      if (pattern.test(code)) {
+        offenders.push(`${path.relative(root, file)}: ${description}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `These parse on MySQL 8 and fail on the MariaDB in production:\n${offenders.join("\n")}`,
+  );
+});
+
+test("a learner id is matched against a JSON array without casting", () => {
+  const courses = fs.readFileSync(
+    path.join(__dirname, "..", "src/services/courses.service.js"),
+    "utf8",
+  );
+
+  // The needle goes in as JSON text. A bare number is valid JSON, so this
+  // satisfies JSON_CONTAINS on both engines without a cast.
+  assert.match(courses, /JSON_CONTAINS\(COALESCE\(o\.target_learner_ids, JSON_ARRAY\(\)\), \$\d+\)/);
+  assert.match(courses, /String\(Number\(learner\.id\)\)/);
+});
