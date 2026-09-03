@@ -16,6 +16,7 @@ import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
 import MDProgress from "components/MDProgress";
 import MDTypography from "components/MDTypography";
+import { LearningArt } from "components/DashboardIdentity";
 import { apiClient } from "lib/api";
 import { selectActivityContent, starterCode, starterParts, webPreview } from "./activityContent";
 import { findActivityNavigation, resolveInitialActivity } from "../learningNavigation";
@@ -23,6 +24,13 @@ import { courseOverviewPath, moduleLearningPath } from "../previewNavigation";
 
 function done(status) {
   return ["completed", "graded"].includes(status);
+}
+
+function learningStage(type) {
+  if (type === "quiz") return "Quiz";
+  if (["project", "assignment"].includes(type)) return "Project";
+  if (["coding", "typing"].includes(type)) return "Practice";
+  return "Learn";
 }
 
 function activityIcon(type) {
@@ -468,6 +476,8 @@ function ActivityBody({
 }) {
   const [previewImage, setPreviewImage] = useState("");
   const content = activity?.content || {};
+  const [questionIndex, setQuestionIndex] = useState(0);
+  useEffect(() => setQuestionIndex(0), [activity.id]);
   const learnerContent = selectActivityContent(content, quizResult || {});
   const description = content.description || "";
   const body = content.body || content.text || content.instructions || "";
@@ -483,15 +493,34 @@ function ActivityBody({
 
   return (
     <MDBox>
-      <MDTypography variant="h5" fontWeight="bold">
-        {activity.title}
-      </MDTypography>
-      <MDTypography variant="caption" color="text" textTransform="uppercase">
-        {activity.activity_type} | {activity.points || 0} marks
-      </MDTypography>
-      {learnerContent.badgeName && (
-        <Chip label={learnerContent.badgeName} color="info" size="small" sx={{ ml: 1 }} />
-      )}
+      <MDBox display="flex" alignItems="center" justifyContent="space-between" gap={2}>
+        <MDBox minWidth={0}>
+          <MDTypography
+            variant="h4"
+            fontWeight="bold"
+            sx={{ letterSpacing: "-.025em", color: "#211a42" }}
+          >
+            {activity.title}
+          </MDTypography>
+          <MDTypography variant="caption" color="text" textTransform="uppercase">
+            {activity.activity_type} | {activity.points || 0} marks
+          </MDTypography>
+          {learnerContent.badgeName && (
+            <Chip label={learnerContent.badgeName} color="info" size="small" sx={{ ml: 1 }} />
+          )}
+        </MDBox>
+        {["project", "assignment", "quiz"].includes(activity.activity_type) && (
+          <MDBox
+            sx={{
+              flexShrink: 0,
+              width: { xs: 65, sm: 95 },
+              "& svg": { width: "100%", height: "auto" },
+            }}
+          >
+            <LearningArt kind={activity.activity_type === "quiz" ? "trophy" : "game"} />
+          </MDBox>
+        )}
+      </MDBox>
 
       {description && (
         <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#f8fafc" }}>
@@ -522,9 +551,9 @@ function ActivityBody({
             <MDTypography variant="body2" color="text" mt={1} sx={{ whiteSpace: "pre-wrap" }}>
               {asText(body)}
             </MDTypography>
-          ) : !description && !prompt ? (
+          ) : !description && !prompt && activity.activity_type !== "quiz" ? (
             <MDTypography variant="body2" color="text">
-              This activity is ready for the course builder content.
+              Your teacher is getting this activity ready. Choose another step to keep exploring.
             </MDTypography>
           ) : null}
         </MDBox>
@@ -600,6 +629,35 @@ function ActivityBody({
 
       {activity.activity_type === "quiz" && questions.length > 0 && (
         <MDBox mt={2}>
+          {!quizResult && (
+            <MDBox p={2} sx={{ bgcolor: "#f5f1ff", borderRadius: "14px" }}>
+              <MDBox display="flex" justifyContent="space-between" mb={1}>
+                <MDTypography variant="button" fontWeight="bold" role="status" aria-live="polite">
+                  Question {questionIndex + 1} of {questions.length}
+                </MDTypography>
+                <MDTypography variant="caption" color="text">
+                  Take your time. You’ve got this!
+                </MDTypography>
+              </MDBox>
+              <MDProgress color="info" value={((questionIndex + 1) / questions.length) * 100} />
+              <MDBox display="flex" flexWrap="wrap" gap={0.75} mt={1.5}>
+                {questions.map((question, index) => (
+                  <MDButton
+                    key={question.id || index}
+                    size="small"
+                    color="info"
+                    variant={index === questionIndex ? "contained" : "outlined"}
+                    aria-label={`Go to question ${index + 1}`}
+                    aria-pressed={index === questionIndex}
+                    onClick={() => setQuestionIndex(index)}
+                    sx={{ minWidth: 36, px: 1 }}
+                  >
+                    {index + 1}
+                  </MDButton>
+                ))}
+              </MDBox>
+            </MDBox>
+          )}
           {questions.map((question, index) => (
             <MDBox
               key={`${question.id || index}`}
@@ -607,8 +665,9 @@ function ActivityBody({
               mt={1.5}
               borderRadius="md"
               sx={{
-                bgcolor: ["#eff6ff", "#f0fdf4", "#fff7ed", "#faf5ff"][index % 4],
-                border: "1px solid #dbeafe",
+                display: quizResult || questionIndex === index ? "block" : "none",
+                bgcolor: "#ffffff",
+                border: "1px solid #e5dff4",
               }}
             >
               <MDTypography variant="button" fontWeight="medium">
@@ -707,19 +766,51 @@ function ActivityBody({
                   (question.options || []).map((option) => (
                     <MDBox
                       key={option}
+                      component="label"
                       display="flex"
                       alignItems="center"
                       gap={1}
                       p={1}
                       border="1px solid #d8dee9"
                       borderRadius="md"
-                      sx={{ cursor: "pointer", bgcolor: "#ffffff" }}
-                      onClick={() => onAnswerChange(question.id, option, question.question_type)}
+                      sx={{
+                        cursor: "pointer",
+                        minHeight: 56,
+                        borderRadius: "12px",
+                        borderColor: (
+                          question.question_type === "multi_select"
+                            ? (answers[question.id] || []).includes(option)
+                            : answers[question.id] === option
+                        )
+                          ? "#8b60e4"
+                          : "#e4e0ed",
+                        bgcolor: (
+                          question.question_type === "multi_select"
+                            ? (answers[question.id] || []).includes(option)
+                            : answers[question.id] === option
+                        )
+                          ? "#f3eeff"
+                          : "#fff",
+                        "&:hover": { bgcolor: "#f8f5ff" },
+                      }}
                     >
                       {question.question_type === "multi_select" ? (
-                        <Checkbox checked={(answers[question.id] || []).includes(option)} />
+                        <Checkbox
+                          checked={(answers[question.id] || []).includes(option)}
+                          inputProps={{ "aria-label": String(option) }}
+                          onChange={() =>
+                            onAnswerChange(question.id, option, question.question_type)
+                          }
+                        />
                       ) : (
-                        <Radio checked={answers[question.id] === option} />
+                        <Radio
+                          name={`question-${question.id}`}
+                          checked={answers[question.id] === option}
+                          inputProps={{ "aria-label": String(option) }}
+                          onChange={() =>
+                            onAnswerChange(question.id, option, question.question_type)
+                          }
+                        />
                       )}
                       <MDTypography variant="body2" color="text">
                         {option}
@@ -735,38 +826,65 @@ function ActivityBody({
                   />
                 )}
               </MDBox>
-              {quizResult && learnerContent.questionFeedback[question.id] && (
-                <MDBox
-                  mt={1}
-                  p={1.25}
-                  borderRadius="md"
-                  sx={{
-                    bgcolor: learnerContent.questionFeedback[question.id].correct
-                      ? "#ecfdf5"
-                      : "#fff7ed",
-                  }}
-                >
-                  <MDTypography variant="body2" color="text">
-                    {learnerContent.questionFeedback[question.id].correct
-                      ? "Correct. "
-                      : "Try again. "}
-                    {learnerContent.questionFeedback[question.id].explanation}
-                    {!learnerContent.questionFeedback[question.id].correct &&
-                    learnerContent.questionFeedback[question.id].hint
-                      ? ` Hint: ${learnerContent.questionFeedback[question.id].hint}`
-                      : ""}
-                  </MDTypography>
-                </MDBox>
-              )}
+              {quizResult &&
+                typeof learnerContent.questionFeedback[question.id]?.correct === "boolean" && (
+                  <MDBox
+                    mt={1}
+                    p={1.25}
+                    borderRadius="md"
+                    sx={{
+                      bgcolor: learnerContent.questionFeedback[question.id].correct
+                        ? "#ecfdf5"
+                        : "#fff7ed",
+                    }}
+                  >
+                    <MDTypography variant="body2" color="text">
+                      {learnerContent.questionFeedback[question.id].correct
+                        ? "Correct. "
+                        : "Try again. "}
+                      {learnerContent.questionFeedback[question.id].explanation}
+                      {!learnerContent.questionFeedback[question.id].correct &&
+                      learnerContent.questionFeedback[question.id].hint
+                        ? ` Hint: ${learnerContent.questionFeedback[question.id].hint}`
+                        : ""}
+                    </MDTypography>
+                  </MDBox>
+                )}
             </MDBox>
           ))}
-          <MDBox mt={2}>
-            <MDButton variant="gradient" color="success" disabled={saving} onClick={onSubmitQuiz}>
-              Submit Quiz
-            </MDButton>
+          <MDBox mt={2} display="flex" justifyContent="space-between" gap={1}>
+            {!quizResult && (
+              <MDButton
+                variant="outlined"
+                color="dark"
+                disabled={questionIndex === 0}
+                onClick={() => setQuestionIndex((index) => index - 1)}
+              >
+                Previous Question
+              </MDButton>
+            )}
+            {!quizResult && questionIndex < questions.length - 1 ? (
+              <MDButton
+                variant="contained"
+                color="info"
+                onClick={() => setQuestionIndex((index) => index + 1)}
+              >
+                Next Question <Icon>arrow_forward</Icon>
+              </MDButton>
+            ) : (
+              <MDButton variant="gradient" color="success" disabled={saving} onClick={onSubmitQuiz}>
+                {saving ? "Checking…" : quizResult ? "Check Answers Again" : "Submit Quiz"}
+              </MDButton>
+            )}
           </MDBox>
           {quizResult && (
             <MDBox mt={2} p={2} borderRadius="md" sx={{ bgcolor: "#ecfdf5" }}>
+              <MDBox display="flex" alignItems="center" gap={2}>
+                <LearningArt kind={Number(quizResult.score) >= 80 ? "trophy" : "robot"} size={85} />
+                <MDTypography variant="h6">
+                  {Number(quizResult.score) >= 80 ? "Amazing work!" : "Every try helps you learn."}
+                </MDTypography>
+              </MDBox>
               <MDTypography variant="body2" color="success" fontWeight="bold">
                 Score: {quizResult.score}% ({quizResult.earned_points}/{quizResult.total_points}{" "}
                 marks)
@@ -2158,12 +2276,28 @@ function ModuleLearn() {
 
   return (
     <MDBox
+      component="main"
       minHeight="100vh"
       sx={{
-        backgroundColor: "#f7f1e3",
-        backgroundImage:
-          "radial-gradient(circle at 20% 20%, rgba(37,99,235,0.08), transparent 28%), radial-gradient(circle at 80% 10%, rgba(22,163,74,0.08), transparent 24%), linear-gradient(135deg, rgba(255,255,255,0.55) 25%, transparent 25%)",
-        backgroundSize: "auto, auto, 28px 28px",
+        backgroundColor: "#f7f8fd",
+        "& .MuiCard-root": {
+          borderRadius: "18px",
+          border: "1px solid #e8e3f3",
+          boxShadow: "0 5px 22px #23134505",
+        },
+        "& .MuiButton-root": { borderRadius: "10px", textTransform: "none", minHeight: 42 },
+        '& .MuiButton-contained[data-color="info"]:not(.Mui-disabled)': {
+          background: "linear-gradient(110deg,#7750f8,#5730df)",
+          color: "white",
+        },
+        "& .MuiLinearProgress-root": { height: 7, borderRadius: "10px" },
+        "& button:focus-visible, & input:focus-visible": {
+          outline: "3px solid #af8aff",
+          outlineOffset: 2,
+        },
+        "@media (prefers-reduced-motion: reduce)": {
+          "& *": { animation: "none !important", transition: "none !important" },
+        },
       }}
     >
       <MDBox
@@ -2212,7 +2346,7 @@ function ModuleLearn() {
 
         <MDBox
           mb={2}
-          display="flex"
+          display={{ xs: "flex", md: "none" }}
           gap={1}
           overflow="auto"
           pb={0.5}
@@ -2241,11 +2375,23 @@ function ModuleLearn() {
         </MDBox>
 
         <Grid container spacing={2.5}>
-          <Grid item xs={12} md={3}>
-            <Card>
+          <Grid item xs={12} md={3} sx={{ display: { xs: "none", md: "block" } }}>
+            <Card
+              sx={{
+                bgcolor: "#11162f",
+                position: "sticky",
+                top: 16,
+                "& .MuiButton-root": {
+                  color: "#dedbf1",
+                  borderColor: "#383655",
+                  textAlign: "left",
+                },
+                "& .MuiButton-root.Mui-disabled": { color: "#85859f" },
+              }}
+            >
               <MDBox p={2}>
-                <MDTypography variant="button" color="text" fontWeight="bold">
-                  Activities
+                <MDTypography variant="button" color="white" fontWeight="bold">
+                  Your learning path
                 </MDTypography>
                 <MDBox mt={1} display="flex" flexDirection="column" gap={1}>
                   {(data?.module?.activities || []).map((activity) => (
@@ -2269,12 +2415,24 @@ function ModuleLearn() {
                       disabled={!activity.is_unlocked}
                       title={activity.lock_reason || ""}
                       onClick={() => selectActivity(activity)}
-                      sx={{ justifyContent: "flex-start", minHeight: 40 }}
+                      aria-current={activity.id === activeActivityId ? "step" : undefined}
+                      sx={{ justifyContent: "flex-start", minHeight: 46 }}
                     >
                       {activity.title}
                       {activity.availability_mode === "try_more" ? " | Try More" : ""}
                     </MDButton>
                   ))}
+                </MDBox>
+                <MDBox
+                  mt={2.5}
+                  p={1.5}
+                  textAlign="center"
+                  sx={{ bgcolor: "#262046", borderRadius: "14px" }}
+                >
+                  <LearningArt kind="robot" size={96} />
+                  <MDTypography variant="caption" color="white" display="block">
+                    Big ideas start with small steps.
+                  </MDTypography>
                 </MDBox>
               </MDBox>
             </Card>
@@ -2285,6 +2443,40 @@ function ModuleLearn() {
               <MDBox p={{ xs: 2.5, md: 4 }}>
                 {activeActivity ? (
                   <>
+                    <MDBox
+                      display="flex"
+                      gap={1}
+                      mb={3}
+                      sx={{ overflowX: "auto", pb: 1 }}
+                      aria-label="Learning stages"
+                    >
+                      {["Learn", "Practice", "Quiz", "Project"].map((stage) => {
+                        const activities = (data.module.activities || []).filter(
+                          (activity) => learningStage(activity.activity_type) === stage
+                        );
+                        if (!activities.length) return null;
+                        const available =
+                          activities.find(
+                            (activity) => activity.is_unlocked && !done(activity.status)
+                          ) || activities.find((activity) => activity.is_unlocked);
+                        return (
+                          <MDButton
+                            key={stage}
+                            color="info"
+                            variant={
+                              learningStage(activeActivity.activity_type) === stage
+                                ? "contained"
+                                : "text"
+                            }
+                            aria-pressed={learningStage(activeActivity.activity_type) === stage}
+                            disabled={!available}
+                            onClick={() => selectActivity(available)}
+                          >
+                            {stage}
+                          </MDButton>
+                        );
+                      })}
+                    </MDBox>
                     <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                       <Chip
                         size="small"

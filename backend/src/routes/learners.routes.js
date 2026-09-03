@@ -44,6 +44,14 @@ router.put(
   requireRole("system_admin", "school_admin", "teacher"),
   learnersController.graduateLearner,
 );
+// Before "/:id" so "population" is not read as a learner id.
+router.get(
+  "/population",
+  authenticateToken,
+  requireRole("system_admin", "school_admin", "teacher"),
+  learnersController.getPopulation,
+);
+router.get("/:id/streak", authenticateToken, learnersController.getLearnerStreak);
 router.get("/:id", authenticateToken, learnersController.getLearnerById);
 router.put("/:id", authenticateToken, learnersController.updateLearner);
 router.delete(

@@ -13,9 +13,7 @@ export function selectActivityContent(content = {}, quizResult = {}) {
     levelUp: content.level_up || content.project_brief || "",
     badgeName: content.module_badge?.name || "",
     submission: {
-      accept:
-        metadataText(content.submission_accept, ",") ||
-        DEFAULT_SUBMISSION_ACCEPT,
+      accept: metadataText(content.submission_accept, ",") || DEFAULT_SUBMISSION_ACCEPT,
       help: metadataText(content.submission_help, " "),
     },
     questionFeedback: Object.fromEntries(

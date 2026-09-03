@@ -19,6 +19,30 @@ Object.assign(process.env, {
 const {
   isAllowedSubmissionFile,
 } = require("../src/controllers/courses.controller");
+const { decodeProfilePhoto } = require("../src/services/auth.service");
+
+test("profile photos accept bounded PNGs and explicit removal", () => {
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII=";
+  const photo = decodeProfilePhoto(`data:image/png;base64,${png}`);
+  assert.equal(photo.extension, "png");
+  assert.ok(Buffer.isBuffer(photo.buffer));
+  assert.equal(decodeProfilePhoto(null), null);
+});
+
+test("profile photos reject disguised files, oversized payloads, and missing data", () => {
+  for (const value of [undefined, {}, "", "https://example.com/photo.jpg",
+    "data:image/svg+xml;base64,PHN2Zy8+", "data:image/png;base64,PHNjcmlwdD4=",
+    `data:image/jpeg;base64,${"A".repeat(350000)}`]) {
+    assert.throws(() => decodeProfilePhoto(value), { statusCode: 400 });
+  }
+});
+
+test("profile photos reject a PNG with excessive decoded dimensions or mismatched MIME", () => {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII=", "base64");
+  assert.throws(() => decodeProfilePhoto(`data:image/jpeg;base64,${png.toString("base64")}`), { statusCode: 400 });
+  png.writeUInt32BE(9000, 16);
+  assert.throws(() => decodeProfilePhoto(`data:image/png;base64,${png.toString("base64")}`), { statusCode: 400 });
+});
 
 test("accepts Scratch files from common browser MIME types", () => {
   for (const mimeType of [

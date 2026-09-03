@@ -19,7 +19,10 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
+import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import IconButton from "@mui/material/IconButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
 import Select from "@mui/material/Select";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -28,6 +31,7 @@ import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
+import { useAppPalette } from "lib/appTheme";
 
 function Courses() {
   const { user, isSchoolAdmin } = useAuth();
@@ -40,6 +44,10 @@ function Courses() {
   const [assignments, setAssignments] = useState([]);
   const [assignmentCourse, setAssignmentCourse] = useState(null);
   const [teacherUserId, setTeacherUserId] = useState("");
+  // Six buttons per row made every row three lines tall. One primary action
+  // stays visible; the rest live behind this menu.
+  const [rowMenu, setRowMenu] = useState({ anchor: null, course: null });
+  const palette = useAppPalette();
   const cacheKey = `school-admin:${user?.schoolId || user?.userId}:courses`;
 
   useEffect(() => {
@@ -173,25 +181,25 @@ function Courses() {
         <Grid container spacing={3} mb={3}>
           <Grid item xs={12} md={4}>
             <Card>
-              <MDBox p={3} display="flex" alignItems="center" justifyContent="space-between">
+              <MDBox p={1.5} display="flex" alignItems="center" justifyContent="space-between">
                 <MDBox>
-                  <MDTypography variant="body2" color="text" mb={0.5}>
+                  <MDTypography variant="caption" color="text" display="block" mb={0.25}>
                     Total Courses
                   </MDTypography>
-                  <MDTypography variant="h4" fontWeight="bold">
+                  <MDTypography variant="h5" fontWeight="bold">
                     {courses.length}
                   </MDTypography>
                 </MDBox>
                 <MDBox
-                  width="48px"
-                  height="48px"
+                  width="38px"
+                  height="38px"
                   borderRadius="50%"
                   bgcolor="info.main"
                   display="flex"
                   alignItems="center"
                   justifyContent="center"
                 >
-                  <Icon fontSize="medium" color="white">
+                  <Icon fontSize="small" color="white">
                     menu_book
                   </Icon>
                 </MDBox>
@@ -200,25 +208,25 @@ function Courses() {
           </Grid>
           <Grid item xs={12} md={4}>
             <Card>
-              <MDBox p={3} display="flex" alignItems="center" justifyContent="space-between">
+              <MDBox p={1.5} display="flex" alignItems="center" justifyContent="space-between">
                 <MDBox>
-                  <MDTypography variant="body2" color="text" mb={0.5}>
+                  <MDTypography variant="caption" color="text" display="block" mb={0.25}>
                     Builder Ready
                   </MDTypography>
-                  <MDTypography variant="h4" fontWeight="bold">
+                  <MDTypography variant="h5" fontWeight="bold">
                     {builderReadyCount}
                   </MDTypography>
                 </MDBox>
                 <MDBox
-                  width="48px"
-                  height="48px"
+                  width="38px"
+                  height="38px"
                   borderRadius="50%"
                   bgcolor="success.main"
                   display="flex"
                   alignItems="center"
                   justifyContent="center"
                 >
-                  <Icon fontSize="medium" color="white">
+                  <Icon fontSize="small" color="white">
                     view_module
                   </Icon>
                 </MDBox>
@@ -227,12 +235,12 @@ function Courses() {
           </Grid>
           <Grid item xs={12} md={4}>
             <Card>
-              <MDBox p={3} display="flex" alignItems="center" justifyContent="space-between">
+              <MDBox p={1.5} display="flex" alignItems="center" justifyContent="space-between">
                 <MDBox>
-                  <MDTypography variant="body2" color="text" mb={0.5}>
+                  <MDTypography variant="caption" color="text" display="block" mb={0.25}>
                     Active Courses
                   </MDTypography>
-                  <MDTypography variant="h4" fontWeight="bold">
+                  <MDTypography variant="h5" fontWeight="bold">
                     {activeCount}
                   </MDTypography>
                   {updateCount > 0 && (
@@ -245,15 +253,15 @@ function Courses() {
                   )}
                 </MDBox>
                 <MDBox
-                  width="48px"
-                  height="48px"
+                  width="38px"
+                  height="38px"
                   borderRadius="50%"
                   bgcolor="warning.main"
                   display="flex"
                   alignItems="center"
                   justifyContent="center"
                 >
-                  <Icon fontSize="medium" color="white">
+                  <Icon fontSize="small" color="white">
                     check_circle
                   </Icon>
                 </MDBox>
@@ -297,16 +305,15 @@ function Courses() {
                     </MDTypography>
                   </MDBox>
                 ) : (
-                  <TableContainer>
-                    <Table>
+                  <TableContainer sx={{ overflowX: "auto" }}>
+                    <Table size="small">
                       <TableHead sx={{ display: "table-header-group" }}>
                         <TableRow>
-                          <TableCell>Course Name</TableCell>
-                          <TableCell>Description</TableCell>
+                          <TableCell>Course</TableCell>
                           <TableCell>Level</TableCell>
-                          <TableCell>Weeks</TableCell>
+                          <TableCell align="right">Weeks</TableCell>
                           <TableCell>Status</TableCell>
-                          <TableCell align="center">Actions</TableCell>
+                          <TableCell align="right">Actions</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -347,26 +354,12 @@ function Courses() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <MDTypography
-                                variant="body2"
-                                color="text"
-                                sx={{
-                                  maxWidth: 200,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {course.description || "N/A"}
-                              </MDTypography>
-                            </TableCell>
-                            <TableCell>
-                              <MDTypography variant="body2" color="text">
+                              <MDTypography variant="caption" color="text">
                                 {course.target_level || "All levels"}
                               </MDTypography>
                             </TableCell>
-                            <TableCell>
-                              <MDTypography variant="body2" color="text">
+                            <TableCell align="right">
+                              <MDTypography variant="caption" color="text">
                                 {course.estimated_weeks || "-"}
                               </MDTypography>
                             </TableCell>
@@ -377,10 +370,16 @@ function Courses() {
                                 size="small"
                               />
                             </TableCell>
-                            <TableCell align="center">
-                              <MDBox display="flex" gap={0.5} justifyContent="center">
+                            <TableCell align="right">
+                              <MDBox
+                                display="flex"
+                                gap={0.5}
+                                justifyContent="flex-end"
+                                alignItems="center"
+                                flexWrap="nowrap"
+                              >
                                 <MDButton
-                                  variant="outlined"
+                                  variant="text"
                                   color="info"
                                   size="small"
                                   onClick={() =>
@@ -389,56 +388,16 @@ function Courses() {
                                 >
                                   Build
                                 </MDButton>
-                                <MDButton
-                                  variant="outlined"
-                                  color="info"
+                                <IconButton
                                   size="small"
-                                  onClick={() =>
-                                    navigate(`/school-admin/courses/${course.id}/preview`)
+                                  aria-label={`More actions for ${course.name}`}
+                                  onClick={(event) =>
+                                    setRowMenu({ anchor: event.currentTarget, course })
                                   }
+                                  sx={{ color: palette.textMuted }}
                                 >
-                                  Preview as Learner
-                                </MDButton>
-                                <MDButton
-                                  variant="gradient"
-                                  color="success"
-                                  size="small"
-                                  onClick={() =>
-                                    navigate(`/school-admin/courses/${course.id}/builder?review=1`)
-                                  }
-                                >
-                                  Review Work
-                                </MDButton>
-                                <MDButton
-                                  variant="outlined"
-                                  color="dark"
-                                  size="small"
-                                  onClick={() =>
-                                    navigate(`/school-admin/courses/${course.id}/reviews`)
-                                  }
-                                >
-                                  Reviews
-                                </MDButton>
-                                {user?.role === "school_admin" && (
-                                  <MDButton
-                                    variant="outlined"
-                                    color="warning"
-                                    size="small"
-                                    onClick={() => setAssignmentCourse(course)}
-                                  >
-                                    Teachers
-                                  </MDButton>
-                                )}
-                                {user?.role === "teacher" && course.update_available && (
-                                  <MDButton
-                                    variant="outlined"
-                                    color="warning"
-                                    size="small"
-                                    onClick={() => requestUpdate(course.id)}
-                                  >
-                                    Request Update
-                                  </MDButton>
-                                )}
+                                  <Icon fontSize="small">more_vert</Icon>
+                                </IconButton>
                               </MDBox>
                             </TableCell>
                           </TableRow>
@@ -543,6 +502,66 @@ function Courses() {
           )}
         </Grid>
       </MDBox>
+      <Menu
+        anchorEl={rowMenu.anchor}
+        open={Boolean(rowMenu.anchor)}
+        onClose={() => setRowMenu({ anchor: null, course: null })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        {[
+          [
+            "preview",
+            "visibility",
+            "Preview as Learner",
+            () => navigate(`/school-admin/courses/${rowMenu.course?.id}/preview`),
+            true,
+          ],
+          [
+            "review",
+            "rate_review",
+            "Review Work",
+            () => navigate(`/school-admin/courses/${rowMenu.course?.id}/builder?review=1`),
+            true,
+          ],
+          [
+            "reviews",
+            "forum",
+            "Course Reviews",
+            () => navigate(`/school-admin/courses/${rowMenu.course?.id}/reviews`),
+            true,
+          ],
+          [
+            "teachers",
+            "groups",
+            "Assign Teachers",
+            () => setAssignmentCourse(rowMenu.course),
+            user?.role === "school_admin",
+          ],
+          [
+            "update",
+            "system_update_alt",
+            "Request Update",
+            () => requestUpdate(rowMenu.course?.id),
+            user?.role === "teacher" && Boolean(rowMenu.course?.update_available),
+          ],
+        ]
+          .filter(([, , , , shown]) => shown)
+          .map(([key, icon, label, run]) => (
+            <MenuItem
+              key={key}
+              onClick={() => {
+                run();
+                setRowMenu({ anchor: null, course: null });
+              }}
+            >
+              <ListItemIcon>
+                <Icon fontSize="small">{icon}</Icon>
+              </ListItemIcon>
+              {label}
+            </MenuItem>
+          ))}
+      </Menu>
       <Footer />
       <Dialog
         open={Boolean(assignmentCourse)}

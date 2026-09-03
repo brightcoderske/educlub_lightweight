@@ -28,6 +28,39 @@ export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  useEffect(() => {
+    if (user?.role !== "learner") return undefined;
+    let active = true;
+    apiClient
+      .get("/auth/me")
+      .then((profile) => {
+        if (!active) return;
+        setUser((current) => {
+          if (!current || current.id !== profile.id) return current;
+          const updated = { ...current, profilePhotoUrl: profile.profilePhotoUrl || null };
+          localStorage.setItem("user", JSON.stringify(updated));
+          return updated;
+        });
+      })
+      .catch(() => {
+        // Keep the saved avatar when temporarily offline; the API handles session expiry.
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id, user?.role]);
+
+  const updateProfilePhoto = async (dataUrl) => {
+    const result = await apiClient.put("/auth/profile-photo", { dataUrl });
+    setUser((current) => {
+      if (!current) return current;
+      const updated = { ...current, profilePhotoUrl: result.profilePhotoUrl };
+      localStorage.setItem("user", JSON.stringify(updated));
+      return updated;
+    });
+    return result;
+  };
+
   const getOnboardingPath = (nextUser) => {
     if (nextUser?.forcePasswordReset) {
       return "/authentication/reset-password";
@@ -307,6 +340,7 @@ export const AuthProvider = ({ children }) => {
     verify2FA,
     logout,
     resetPassword,
+    updateProfilePhoto,
     markConsentAccepted,
     hasPermission,
     isSystemAdmin,

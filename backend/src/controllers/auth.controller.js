@@ -190,7 +190,19 @@ async function updateMfaPolicy(req, res) {
   }
 }
 
+async function updateProfilePhoto(req, res) {
+  try {
+    res.json(await authService.updateProfilePhoto(req.user.userId, req.body.dataUrl));
+  } catch (error) {
+    if (!error.statusCode) console.error("Update profile photo error:", error);
+    res.status(error.statusCode || 500).json({
+      error: error.statusCode ? error.message : "Could not save your photo. Please try again.",
+    });
+  }
+}
+
 module.exports = {
+  updateProfilePhoto,
   login,
   verify2FA,
   logout,

@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_photo_url TEXT;
+
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check
   CHECK (role IN ('system_admin', 'school_admin', 'teacher', 'learner'));
@@ -88,6 +90,16 @@ ALTER TABLE learners ADD COLUMN IF NOT EXISTS graduation_status VARCHAR(20) NOT 
 -- meant every /api/schools call paid for DDL and MySQL rejected outright.
 ALTER TABLE schools ADD COLUMN IF NOT EXISTS grades_config JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE schools ADD COLUMN IF NOT EXISTS streams_config JSONB DEFAULT '[]'::jsonb;
+
+-- Billing is per enrolled learner per term, at a rate the custodian sets per
+-- school. NULL means "not billed through eduClub" rather than "free", so a
+-- school without a rate produces a statement instead of a priced invoice.
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS invoice_rate_per_learner NUMERIC(12, 2);
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS invoice_currency VARCHAR(10) DEFAULT 'KES';
+-- Why a school was suspended, kept so the notice a school admin sees can say
+-- something more useful than "contact support".
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP;
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS suspension_reason TEXT;
 
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;
 
@@ -1095,6 +1107,50 @@ CREATE TABLE IF NOT EXISTS competition_payments (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- One invoice per school per term. The learner count and the rate are frozen
+-- onto the row at issue time: a learner joining next week must not silently
+-- change an invoice that has already been sent.
+CREATE TABLE IF NOT EXISTS school_invoices (
+  id SERIAL PRIMARY KEY,
+  school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  term VARCHAR(50) NOT NULL,
+  academic_year INTEGER NOT NULL,
+  learner_count INTEGER NOT NULL DEFAULT 0,
+  rate_per_learner NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  currency VARCHAR(10) NOT NULL DEFAULT 'KES',
+  status VARCHAR(20) NOT NULL DEFAULT 'issued'
+    CHECK (status IN ('issued', 'paid', 'void')),
+  notes TEXT,
+  issued_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  paid_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (school_id, term, academic_year)
+);
+
+-- The printable document carries a discount, tax and a running paid figure, so
+-- the same row can render an invoice before payment and a receipt after it.
+-- All default to zero: an invoice with nothing set still totals correctly.
+ALTER TABLE school_invoices ADD COLUMN IF NOT EXISTS due_at DATE;
+ALTER TABLE school_invoices ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(5, 2) DEFAULT 0;
+ALTER TABLE school_invoices ADD COLUMN IF NOT EXISTS tax_percent NUMERIC(5, 2) DEFAULT 0;
+ALTER TABLE school_invoices ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12, 2) DEFAULT 0;
+-- Recorded when payment is confirmed so a receipt can name the method and
+-- reference rather than saying only "paid".
+ALTER TABLE school_invoices ADD COLUMN IF NOT EXISTS payment_method VARCHAR(60);
+ALTER TABLE school_invoices ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(120);
+ALTER TABLE school_invoices ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(40);
+
+-- Kenyan tax documents name both parties' PINs. The school's lives here; the
+-- issuer's is one system setting, since eduClub is the same supplier on every
+-- invoice.
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS kra_pin VARCHAR(20);
+-- Frozen onto the invoice at issue time like every other figure: whether VAT
+-- applied is a fact about the document, not a setting that may change later.
+ALTER TABLE school_invoices ADD COLUMN IF NOT EXISTS vat_applied BOOLEAN DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS competition_results (
   id SERIAL PRIMARY KEY,

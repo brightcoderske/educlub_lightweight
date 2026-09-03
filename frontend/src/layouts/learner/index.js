@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import Grid from "@mui/material/Grid";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
@@ -8,20 +8,16 @@ import MDInput from "components/MDInput";
 import Card from "@mui/material/Card";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
 import Chip from "@mui/material/Chip";
 import Icon from "@mui/material/Icon";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import ComplexStatisticsCard from "examples/Cards/StatisticsCards/ComplexStatisticsCard";
-import LearnerFeedbackChat from "components/LearnerFeedbackChat";
+import { LearnerHero, LearningArt, learningTheme } from "components/DashboardIdentity";
+import MDProgress from "components/MDProgress";
+import { getUserDisplayName } from "lib/userDisplay";
+import { useAppPalette } from "lib/appTheme";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
@@ -83,12 +79,17 @@ const LEARNER_DASHBOARD_CACHE_MS = 2 * 60 * 1000;
 
 function LearnerDashboard() {
   const { user, isLearner } = useAuth();
+  const palette = useAppPalette();
   const navigate = useNavigate();
+  const coursesView = useLocation().pathname === "/learner/courses";
+  const [search, setSearch] = useState("");
+  const [courseFilter, setCourseFilter] = useState("all");
   const requestVersion = useRef(0);
   const cached = learnerDashboardCache?.userId === user?.id ? learnerDashboardCache.data : null;
   const [allocations, setAllocations] = useState(cached?.allocations || []);
   const [learner, setLearner] = useState(cached?.learner || null);
   const [loading, setLoading] = useState(!cached);
+  const [courseSummaries, setCourseSummaries] = useState(cached?.courseSummaries || {});
   const [selectedPeriod, setSelectedPeriod] = useState("all");
   const [error, setError] = useState("");
   const [stats, setStats] = useState(
@@ -100,13 +101,20 @@ function LearnerDashboard() {
     }
   );
   const [currentTerm, setCurrentTerm] = useState(cached?.currentTerm || null);
-  const [pastTerms, setPastTerms] = useState(cached?.pastTerms || 0);
   const [featuredCompetition, setFeaturedCompetition] = useState(null);
   const [showFeaturedCompetition, setShowFeaturedCompetition] = useState(false);
   const [badges, setBadges] = useState(cached?.badges || []);
   const [dueItems, setDueItems] = useState(cached?.dueItems || []);
   const [continueLearning, setContinueLearning] = useState(cached?.continueLearning || null);
-  const visibleAllocations = filterAcademicPeriod(allocations, selectedPeriod);
+  const [streak, setStreak] = useState(cached?.streak || null);
+  const visibleAllocations = filterAcademicPeriod(allocations, selectedPeriod).filter(
+    (allocation) =>
+      (allocation.course_name || "").toLowerCase().includes(search.trim().toLowerCase()) &&
+      (courseFilter === "all" ||
+        (courseFilter === "completed"
+          ? allocation.status === "completed"
+          : ["active", "in_progress"].includes(allocation.status)))
+  );
 
   useEffect(() => {
     if (!isLearner()) {
@@ -129,19 +137,17 @@ function LearnerDashboard() {
     };
   }, [user?.role, user?.id]);
 
-  const applyDashboardData = (data, { showFeatured = true } = {}) => {
+  const applyDashboardData = (data) => {
     setLearner(data.learner);
     setAllocations(data.allocations);
     setStats(data.stats);
     setCurrentTerm(data.currentTerm);
-    setPastTerms(data.pastTerms);
     setFeaturedCompetition(data.featuredCompetition);
     setBadges(data.badges || []);
     setDueItems(data.dueItems || []);
     setContinueLearning(data.continueLearning || null);
-    if (showFeatured) {
-      setShowFeaturedCompetition(Boolean(data.featuredCompetition));
-    }
+    setCourseSummaries(data.courseSummaries || {});
+    setStreak(data.streak || null);
   };
 
   const fetchLearnerData = async ({ quiet = false } = {}) => {
@@ -153,7 +159,6 @@ function LearnerDashboard() {
     try {
       const [
         learners,
-        termsRes,
         currentTermRes,
         competitionsRes,
         badgesRes,
@@ -162,7 +167,6 @@ function LearnerDashboard() {
         response,
       ] = await Promise.all([
         apiClient.get("/learners"),
-        apiClient.get("/academic/terms").catch(() => []),
         apiClient.get("/academic/terms/current").catch(() => null),
         apiClient.get("/competitions").catch(() => []),
         apiClient.get("/courses/learner/badges").catch(() => []),
@@ -175,9 +179,6 @@ function LearnerDashboard() {
         competitionsRes.find(
           (competition) => competition.is_featured && competition.enrollment_status !== "enrolled"
         ) || null;
-      const nextPastTerms = Array.isArray(termsRes)
-        ? termsRes.filter((termItem) => new Date(termItem.end_date) < new Date()).length
-        : 0;
       const currentLearner = learners[0];
 
       if (!currentLearner) {
@@ -186,7 +187,6 @@ function LearnerDashboard() {
           allocations: [],
           stats: { total: 0, active: 0, completed: 0, inProgress: 0 },
           currentTerm: currentTermRes,
-          pastTerms: nextPastTerms,
           featuredCompetition: featured,
           badges: badgesRes,
           dueItems: [],
@@ -217,7 +217,6 @@ function LearnerDashboard() {
         allocations: response,
         stats: nextStats,
         currentTerm: currentTermRes,
-        pastTerms: nextPastTerms,
         featuredCompetition: featured,
         badges: badgesRes,
         dueItems: nextDueItems,
@@ -231,6 +230,17 @@ function LearnerDashboard() {
       };
       applyDashboardData(nextData, { showFeatured: !quiet });
       setLoading(false);
+
+      apiClient
+        .get(`/learners/${currentLearner.id}/streak`)
+        .then((value) => {
+          if (version !== requestVersion.current) return;
+          nextData.streak = value;
+          setStreak(value);
+        })
+        .catch(() => {
+          // A streak is encouragement, not information the page needs.
+        });
 
       const queue = currentLearningAllocations(response, currentTermRes);
       const overviews = [];
@@ -252,6 +262,9 @@ function LearnerDashboard() {
       if (version !== requestVersion.current) return;
       const nextContinueLearning = findContinueLearning(overviews);
       nextData.continueLearning = nextContinueLearning;
+      nextData.courseSummaries = Object.fromEntries(
+        overviews.map(({ allocation, overview }) => [allocation.course_id, overview.summary])
+      );
       nextData.dueItems = buildDueThisWeekItems({
         typingTests: typingTestsRes,
         quizTests: quizTestsRes,
@@ -269,36 +282,6 @@ function LearnerDashboard() {
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "completed":
-        return "success";
-      case "active":
-        return "info";
-      case "in_progress":
-        return "warning";
-      case "dropped":
-        return "error";
-      default:
-        return "default";
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case "completed":
-        return "Completed";
-      case "active":
-        return "Active";
-      case "in_progress":
-        return "In Progress";
-      case "dropped":
-        return "Dropped";
-      default:
-        return status;
-    }
-  };
-
   if (!isLearner()) {
     return <MDBox>Access denied. Learner only.</MDBox>;
   }
@@ -306,418 +289,527 @@ function LearnerDashboard() {
   return (
     <DashboardLayout>
       <DashboardNavbar
-        title="My Dashboard"
+        title={coursesView ? "My Courses" : "Home"}
         subtitle={
           learner
-            ? `${learner.grade || "Learner"} ${learner.stream || ""} | ${learner.term || ""} ${
-                learner.academic_year || ""
-              }`
-            : "Your courses and progress will appear after your learner profile is linked."
-        }
-        actions={
-          <>
-            {" "}
-            <MDBox
-              display="flex"
-              flexDirection={{ xs: "column", sm: "row" }}
-              alignItems={{ xs: "stretch", sm: "center" }}
-              gap={1}
-              width={{ xs: "100%", md: "auto" }}
-            >
-              <MDTypography variant="caption" color="text" sx={{ flexGrow: 1, lineHeight: 1.4 }}>
-                Current term: {currentTerm?.name || "None"} | Past terms: {pastTerms}
-              </MDTypography>
-              <MDBox display="flex" flexWrap="wrap" gap={1} width={{ xs: "100%", sm: "auto" }}>
-                {continueLearning && (
-                  <MDButton
-                    variant="gradient"
-                    color="success"
-                    startIcon={<Icon fontSize="small">play_arrow</Icon>}
-                    onClick={() =>
-                      navigate(
-                        activityLearningPath(
-                          continueLearning.courseId,
-                          continueLearning.moduleId,
-                          continueLearning.activityId
-                        )
-                      )
-                    }
-                    sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
-                  >
-                    Continue Learning
-                  </MDButton>
-                )}
-                <MDButton
-                  variant="gradient"
-                  color="info"
-                  startIcon={<Icon fontSize="small">keyboard</Icon>}
-                  onClick={() => navigate("/learner/my-typing-tutor")}
-                  sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
-                >
-                  Typing Tutor
-                </MDButton>
-                <MDButton
-                  variant="gradient"
-                  color="info"
-                  onClick={() => navigate("/learner/profile")}
-                  sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
-                >
-                  My Profile
-                </MDButton>
-                <MDButton
-                  variant="gradient"
-                  color="warning"
-                  startIcon={<Icon fontSize="small">emoji_events</Icon>}
-                  onClick={() => navigate("/learner/competitions")}
-                  sx={{ minWidth: 0, px: 1.5, whiteSpace: "nowrap" }}
-                >
-                  Competitions
-                </MDButton>
-              </MDBox>
-            </MDBox>{" "}
-          </>
+            ? [learner.grade, currentTerm?.name].filter(Boolean).join(" · ")
+            : "Your learning adventure"
         }
       />
-      <MDBox py={{ xs: 2, sm: 3 }}>
-        <Grid container spacing={{ xs: 1.5, sm: 3 }}>
-          <Grid item xs={6} md={6} lg={3}>
-            <MDBox mb={{ xs: 0, sm: 1.5 }} height="100%">
-              <ComplexStatisticsCard
-                color="dark"
-                icon="menu_book"
-                title="Total Courses"
-                count={stats.total}
-                percentage={{
-                  color: "success",
-                  amount: "Enrolled",
-                  label: "courses",
-                }}
-              />
-            </MDBox>
-          </Grid>
-          <Grid item xs={6} md={6} lg={3}>
-            <MDBox mb={{ xs: 0, sm: 1.5 }} height="100%">
-              <ComplexStatisticsCard
-                color="info"
-                icon="play_circle"
-                title="Active"
-                count={stats.active}
-                percentage={{
-                  color: "info",
-                  amount: "Currently",
-                  label: "studying",
-                }}
-              />
-            </MDBox>
-          </Grid>
-          <Grid item xs={6} md={6} lg={3}>
-            <MDBox mb={{ xs: 0, sm: 1.5 }} height="100%">
-              <ComplexStatisticsCard
-                color="warning"
-                icon="trending_up"
-                title="In Progress"
-                count={stats.inProgress}
-                percentage={{
-                  color: "warning",
-                  amount: "Working",
-                  label: "on courses",
-                }}
-              />
-            </MDBox>
-          </Grid>
-          <Grid item xs={6} md={6} lg={3}>
-            <MDBox mb={{ xs: 0, sm: 1.5 }} height="100%">
-              <ComplexStatisticsCard
-                color="success"
-                icon="check_circle"
-                title="Completed"
-                count={stats.completed}
-                percentage={{
-                  color: "success",
-                  amount: "Successfully",
-                  label: "finished",
-                }}
-              />
-            </MDBox>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Card>
-              <MDBox p={{ xs: 1.5, sm: 3 }}>
-                <Grid container spacing={1.5} alignItems="center">
-                  <Grid item xs={12} md={8}>
+      <MDBox py={2}>
+        <LearnerHero
+          eyebrow={coursesView ? "YOUR NEXT DISCOVERY" : "LET’S MAKE SOMETHING GREAT"}
+          title={
+            coursesView
+              ? "A world of things to learn."
+              : `Hey, ${getUserDisplayName(user).split(" ")[0]}! Ready to create?`
+          }
+          description={
+            coursesView
+              ? "Pick a course and turn your ideas into amazing creations."
+              : "Continue your adventure or try a new challenge today."
+          }
+          art={coursesView ? "rocket" : "kid"}
+        >
+          {!coursesView && (
+            <Chip
+              size="small"
+              label={`${stats.total} ${stats.total === 1 ? "course" : "courses"} to explore`}
+              sx={{ bgcolor: palette.chipSurface, color: palette.accentText }}
+            />
+          )}
+          {!coursesView && (
+            <Chip
+              size="small"
+              label={`${badges.length} badges earned`}
+              sx={{
+                bgcolor: palette.dark ? "#4a3a12" : "#fff5cf",
+                color: palette.dark ? "#ffd77a" : "#8b5900",
+              }}
+            />
+          )}
+          {!coursesView && streak?.current > 0 && (
+            <Chip
+              size="small"
+              icon={<Icon sx={{ color: "inherit !important" }}>local_fire_department</Icon>}
+              label={`${streak.current} day streak`}
+              sx={{
+                bgcolor: palette.dark ? "#4d2417" : "#ffe9df",
+                color: palette.dark ? "#ffb08a" : "#a23c11",
+              }}
+            />
+          )}
+        </LearnerHero>
+        {!coursesView && (
+          <>
+            <Grid container spacing={1.5} mb={1.5}>
+              <Grid item xs={12} sm={7} md={8}>
+                <Card sx={{ height: "100%" }}>
+                  <MDBox p={1.75}>
+                    <MDTypography variant="h6" fontWeight="bold" mb={1.25}>
+                      Continue Learning
+                    </MDTypography>
+                    <MDBox display="flex" alignItems="center" gap={1.5}>
+                      <MDBox
+                        sx={{ bgcolor: palette.accentSoft, borderRadius: "16px", flexShrink: 0 }}
+                      >
+                        <LearningArt
+                          kind={learningTheme(continueLearning?.courseName).art}
+                          size={48}
+                        />
+                      </MDBox>
+                      <MDBox flex={1} minWidth={0}>
+                        <MDTypography variant="h6">
+                          {continueLearning?.courseName ||
+                            (loading
+                              ? "Finding your next adventure…"
+                              : "Your next adventure starts here")}
+                        </MDTypography>
+                        <MDTypography variant="caption" color="text" display="block" mb={1.25}>
+                          {continueLearning?.activityTitle || "Choose a course and start creating."}
+                        </MDTypography>
+                        <MDButton
+                          color="info"
+                          variant="contained"
+                          size="small"
+                          endIcon={<Icon>arrow_forward</Icon>}
+                          onClick={() =>
+                            navigate(
+                              continueLearning
+                                ? activityLearningPath(
+                                    continueLearning.courseId,
+                                    continueLearning.moduleId,
+                                    continueLearning.activityId
+                                  )
+                                : "/learner/courses"
+                            )
+                          }
+                        >
+                          {continueLearning ? "Continue Learning" : "Explore Courses"}
+                        </MDButton>
+                      </MDBox>
+                    </MDBox>
+                  </MDBox>
+                </Card>
+              </Grid>
+              <Grid item xs={12} sm={5} md={4}>
+                <Card sx={{ height: "100%" }}>
+                  <MDBox p={1.75}>
                     <MDTypography variant="h6" fontWeight="bold">
-                      My Typing Tutor
+                      Look how far you’ve come
                     </MDTypography>
-                    <MDTypography variant="body2" color="text">
-                      Practise keyboard skills anytime. This is separate from report-card typing
-                      assessments.
-                    </MDTypography>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <MDButton
-                      fullWidth
-                      variant="gradient"
-                      color="dark"
-                      startIcon={<Icon>keyboard</Icon>}
-                      onClick={() => navigate("/learner/my-typing-tutor")}
+                    <MDBox
+                      display="grid"
+                      gridTemplateColumns="repeat(4, minmax(0, 1fr))"
+                      gap={0.5}
+                      mt={1}
                     >
-                      Start Typing Practice
-                    </MDButton>
-                  </Grid>
-                </Grid>
-              </MDBox>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Card>
-              <MDBox p={{ xs: 1.5, sm: 3 }}>
-                <MDTypography variant="h6" fontWeight="bold" mb={2}>
-                  Due This Week
-                </MDTypography>
-                {dueItems.length === 0 ? (
-                  <MDTypography variant="body2" color="text">
-                    No quiz, typing task or active course module is due this week.
-                  </MDTypography>
-                ) : (
-                  <Grid container spacing={1.5}>
-                    {dueItems.map((item) => (
-                      <Grid item xs={12} md={4} key={item.id}>
-                        <MDBox
-                          p={1.5}
-                          border="1px solid #dbeafe"
-                          borderRadius="md"
-                          sx={{ bgcolor: "#eff6ff" }}
-                        >
-                          <MDTypography variant="button" fontWeight="bold">
-                            {item.title}
+                      {[
+                        [stats.active + stats.inProgress, "Learning", "#653bdd"],
+                        [stats.completed, "Completed", "#138653"],
+                        [badges.length, "Badges", "#b17508"],
+                        [streak?.current ?? 0, "Day streak", "#c1521f"],
+                      ].map(([value, label, color]) => (
+                        <MDBox key={label} textAlign="center">
+                          <MDTypography
+                            variant="h4"
+                            sx={{ color, fontWeight: 800, lineHeight: 1.15 }}
+                          >
+                            {loading ? "—" : value}
                           </MDTypography>
-                          <MDTypography variant="caption" color="text" display="block">
-                            {item.subtitle}
+                          <MDTypography variant="caption" color="text">
+                            {label}
                           </MDTypography>
-                          <MDButton
-                            size="small"
-                            color="info"
-                            variant="text"
-                            onClick={() => navigate(item.path)}
-                          >
-                            {item.type === "course" ? "Continue Learning" : "Open Task"}
-                          </MDButton>
-                        </MDBox>
-                      </Grid>
-                    ))}
-                  </Grid>
-                )}
-              </MDBox>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Card>
-              <MDBox p={{ xs: 1.5, sm: 2.5 }}>
-                <MDBox display="flex" justifyContent="space-between" alignItems="center" gap={1}>
-                  <MDBox>
-                    <MDTypography variant="h6" fontWeight="bold">
-                      My Learning Badges
-                    </MDTypography>
-                    <MDTypography variant="caption" color="text">
-                      {badges.length} earned across your learning history
-                    </MDTypography>
-                  </MDBox>
-                  <Icon color="warning">workspace_premium</Icon>
-                </MDBox>
-                <MDBox mt={1.5} display="flex" gap={1} overflow="auto" pb={0.5}>
-                  {badges.length ? (
-                    badges.slice(0, 8).map((badge) => (
-                      <Chip
-                        key={badge.id}
-                        label={`${badge.badge_name || badge.module_title} | ${badge.label}`}
-                        sx={{
-                          bgcolor: badge.color,
-                          color: "#ffffff",
-                          fontWeight: 700,
-                          flexShrink: 0,
-                        }}
-                      />
-                    ))
-                  ) : (
-                    <MDTypography variant="body2" color="text">
-                      Complete a course module or typing assessment to earn your first badge.
-                    </MDTypography>
-                  )}
-                </MDBox>
-              </MDBox>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Card>
-              <MDBox p={{ xs: 1.5, sm: 3 }}>
-                <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <MDTypography variant="h6" fontWeight="bold">
-                    My Courses
-                  </MDTypography>
-                  <MDButton
-                    variant="text"
-                    color="info"
-                    onClick={() => fetchLearnerData({ quiet: true })}
-                  >
-                    Refresh
-                  </MDButton>
-                </MDBox>
-                <MDTypography variant="body2" color="text" mb={1.5}>
-                  Courses from past terms remain available for revision. Your earlier reports and
-                  certificates stay with their original term.
-                </MDTypography>
-                <MDInput
-                  select
-                  label="Course term"
-                  value={selectedPeriod}
-                  onChange={(event) => setSelectedPeriod(event.target.value)}
-                  SelectProps={{ native: true }}
-                  fullWidth
-                  sx={{ mb: 2 }}
-                >
-                  <option value="all">All terms</option>
-                  {academicPeriodOptions(allocations).map((period) => (
-                    <option key={period.key} value={period.key}>
-                      {period.label}
-                    </option>
-                  ))}
-                </MDInput>
-
-                {error && (
-                  <MDBox mb={2} p={2} bgcolor="error.main" borderRadius={1}>
-                    <MDTypography variant="caption" color="white">
-                      {error}
-                    </MDTypography>
-                  </MDBox>
-                )}
-
-                {loading ? (
-                  <MDBox display="flex" justifyContent="center" py={5}>
-                    <MDTypography variant="body2" color="text">
-                      Loading courses...
-                    </MDTypography>
-                  </MDBox>
-                ) : allocations.length === 0 ? (
-                  <MDBox display="flex" flexDirection="column" alignItems="center" py={5}>
-                    <Icon fontSize="large" color="text" sx={{ mb: 2 }}>
-                      school
-                    </Icon>
-                    <MDTypography variant="body2" color="text" fontWeight="medium">
-                      No courses allocated yet
-                    </MDTypography>
-                    <MDTypography variant="caption" color="text" mt={0.5}>
-                      Contact your school administrator to get enrolled in courses
-                    </MDTypography>
-                  </MDBox>
-                ) : (
-                  <>
-                    <MDBox display={{ xs: "flex", sm: "none" }} flexDirection="column" gap={1}>
-                      {visibleAllocations.map((allocation) => (
-                        <MDBox
-                          key={`mobile-${allocation.id}`}
-                          p={1.5}
-                          border="1px solid #e5e7eb"
-                          borderRadius="md"
-                          sx={{ bgcolor: "#ffffff" }}
-                        >
-                          <MDBox
-                            display="flex"
-                            justifyContent="space-between"
-                            alignItems="flex-start"
-                            gap={1}
-                          >
-                            <MDBox minWidth={0}>
-                              <MDTypography variant="button" fontWeight="bold">
-                                {allocation.course_name}
-                              </MDTypography>
-                              <MDTypography variant="caption" color="text" display="block">
-                                {allocation.term} {allocation.academic_year}
-                              </MDTypography>
-                            </MDBox>
-                            <Chip
-                              label={getStatusLabel(allocation.status)}
-                              color={getStatusColor(allocation.status)}
-                              size="small"
-                            />
-                          </MDBox>
-                          <MDButton
-                            variant="gradient"
-                            color="success"
-                            onClick={() => navigate(`/learner/courses/${allocation.course_id}`)}
-                            size="small"
-                            fullWidth
-                            startIcon={<Icon fontSize="small">menu_book</Icon>}
-                            sx={{ mt: 1.25 }}
-                          >
-                            Open Course
-                          </MDButton>
                         </MDBox>
                       ))}
                     </MDBox>
-                    <TableContainer sx={{ display: { xs: "none", sm: "block" } }}>
-                      <Table>
-                        <TableHead sx={{ display: "table-header-group" }}>
-                          <TableRow>
-                            <TableCell>Course Name</TableCell>
-                            <TableCell>Term</TableCell>
-                            <TableCell>Academic Year</TableCell>
-                            <TableCell>Status</TableCell>
-                            <TableCell align="center">Action</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {visibleAllocations.map((allocation) => (
-                            <TableRow key={allocation.id} hover>
-                              <TableCell>
-                                <MDTypography variant="body2" fontWeight="medium">
-                                  {allocation.course_name}
-                                </MDTypography>
-                              </TableCell>
-                              <TableCell>
-                                <MDTypography variant="body2" color="text">
-                                  {allocation.term}
-                                </MDTypography>
-                              </TableCell>
-                              <TableCell>
-                                <MDTypography variant="body2" color="text">
-                                  {allocation.academic_year}
-                                </MDTypography>
-                              </TableCell>
-                              <TableCell>
-                                <Chip
-                                  label={getStatusLabel(allocation.status)}
-                                  color={getStatusColor(allocation.status)}
-                                  size="small"
-                                />
-                              </TableCell>
-                              <TableCell align="center">
-                                <MDButton
-                                  variant="gradient"
-                                  color="success"
-                                  onClick={() =>
-                                    navigate(`/learner/courses/${allocation.course_id}`)
-                                  }
-                                  size="small"
-                                  startIcon={<Icon fontSize="small">menu_book</Icon>}
-                                >
-                                  Open Course
-                                </MDButton>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </>
-                )}
-              </MDBox>
-            </Card>
+                    <MDButton
+                      variant="text"
+                      color="info"
+                      size="small"
+                      sx={{ mt: 1 }}
+                      onClick={() => navigate("/learner/progress")}
+                    >
+                      See my progress <Icon>chevron_right</Icon>
+                    </MDButton>
+                  </MDBox>
+                </Card>
+              </Grid>
+            </Grid>
+            <MDTypography variant="h6" fontWeight="bold" mb={1.25}>
+              What will you discover today?
+            </MDTypography>
+            <MDBox
+              display="grid"
+              gridTemplateColumns={{ xs: "repeat(3,minmax(0,1fr))", md: "repeat(6,minmax(0,1fr))" }}
+              gap={1.25}
+              mb={1.5}
+            >
+              {[
+                ["Learn", "My courses", "rocket", "#3f5fe9", "/learner/courses"],
+                ["Typing", "Practise & play", "keyboard", "#118755", "/learner/my-typing-tutor"],
+                ["Challenges", "Quizzes & tasks", "trophy", "#c97e08", "/learner/typing-quizzes"],
+                ["Compete", "Join the fun", "game", "#bd357e", "/learner/competitions"],
+                ["Progress", "Watch me grow", "python", "#7241c3", "/learner/progress"],
+                ["Awards", "Celebrate wins", "trophy", "#008693", "/learner/certificates"],
+              ].map(([label, subtitle, art, color, path]) => (
+                <MDBox
+                  component="button"
+                  type="button"
+                  key={label}
+                  onClick={() => navigate(path)}
+                  sx={{
+                    cursor: "pointer",
+                    border: 0,
+                    borderRadius: "13px",
+                    py: 0.85,
+                    px: 0.85,
+                    background: `linear-gradient(140deg, ${color}, ${color}dd)`,
+                    boxShadow: `0 5px 0 ${color}22`,
+                    color: "white",
+                    transition: "transform 150ms ease",
+                    "&:hover": { transform: "translateY(-3px)" },
+                  }}
+                >
+                  <LearningArt kind={art} size={40} />
+                  <MDTypography
+                    variant="button"
+                    sx={{ color: "#fff", display: "block", fontWeight: 800 }}
+                  >
+                    {label}
+                  </MDTypography>
+                  <MDTypography variant="caption" sx={{ color: "#fff", fontSize: ".68rem" }}>
+                    {subtitle}
+                  </MDTypography>
+                </MDBox>
+              ))}
+            </MDBox>
+            <Grid container spacing={2.5} mb={3}>
+              <Grid item xs={12} md={7}>
+                <Card sx={{ height: "100%" }}>
+                  <MDBox p={1.75}>
+                    <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                      <MDTypography variant="h6" fontWeight="bold">
+                        Your weekly missions
+                      </MDTypography>
+                      <Chip
+                        size="small"
+                        label={`${dueItems.length} to explore`}
+                        sx={{ bgcolor: palette.accentSoft, color: palette.accentText }}
+                      />
+                    </MDBox>
+                    {dueItems.length ? (
+                      dueItems.map((item) => (
+                        <MDBox
+                          key={item.id}
+                          display="flex"
+                          alignItems="center"
+                          gap={1.25}
+                          py={1}
+                          sx={{ borderBottom: `1px solid ${palette.borderSoft}` }}
+                        >
+                          <Icon
+                            sx={{
+                              color: palette.accentText,
+                              bgcolor: palette.accentSoft,
+                              borderRadius: "9px",
+                              width: 32,
+                              height: 32,
+                              p: 0.75,
+                            }}
+                          >
+                            {item.type === "course" ? "menu_book" : "flag"}
+                          </Icon>
+                          <MDBox flex={1} minWidth={0}>
+                            <MDTypography variant="button" fontWeight="bold">
+                              {item.title}
+                            </MDTypography>
+                            <MDTypography variant="caption" color="text" display="block">
+                              {item.subtitle}
+                            </MDTypography>
+                          </MDBox>
+                          <MDButton
+                            color="info"
+                            variant="text"
+                            size="small"
+                            onClick={() => navigate(item.path)}
+                          >
+                            Start <Icon>arrow_forward</Icon>
+                          </MDButton>
+                        </MDBox>
+                      ))
+                    ) : (
+                      <MDTypography variant="body2" color="text">
+                        You’re all caught up! Explore a course or practise your typing.
+                      </MDTypography>
+                    )}
+                  </MDBox>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={5}>
+                <Card sx={{ height: "100%" }}>
+                  <MDBox p={1.75}>
+                    <MDTypography variant="h6" fontWeight="bold">
+                      Your badge collection
+                    </MDTypography>
+                    <MDBox
+                      display="flex"
+                      alignItems="center"
+                      gap={1.25}
+                      mt={1.25}
+                      sx={{ overflowX: "auto" }}
+                    >
+                      {badges.length ? (
+                        badges.slice(0, 4).map((badge) => (
+                          <MDBox
+                            key={badge.id}
+                            sx={{
+                              minWidth: 82,
+                              textAlign: "center",
+                              bgcolor: palette.surfaceMuted,
+                              borderRadius: "11px",
+                              p: 0.85,
+                            }}
+                          >
+                            <LearningArt kind="trophy" size={52} />
+                            <MDTypography variant="caption" fontWeight="bold" display="block">
+                              {badge.badge_name || badge.module_title}
+                            </MDTypography>
+                            <MDTypography variant="caption" color="text">
+                              {badge.label}
+                            </MDTypography>
+                          </MDBox>
+                        ))
+                      ) : (
+                        <>
+                          <LearningArt kind="trophy" size={64} />
+                          <MDTypography variant="body2" color="text">
+                            Your first badge is waiting. Complete a module or a typing assessment to
+                            earn it!
+                          </MDTypography>
+                        </>
+                      )}
+                    </MDBox>
+                  </MDBox>
+                </Card>
+              </Grid>
+            </Grid>
+          </>
+        )}
+        <MDBox display="flex" justifyContent="space-between" alignItems="center" gap={2} mb={2}>
+          <MDBox>
+            <MDTypography variant="h6" fontWeight="bold">
+              {coursesView ? "Explore your courses" : "My Courses"}
+            </MDTypography>
+          </MDBox>
+          <MDButton
+            color="info"
+            variant="text"
+            onClick={() =>
+              coursesView ? fetchLearnerData({ quiet: true }) : navigate("/learner/courses")
+            }
+          >
+            {coursesView ? "Refresh" : "View all"} <Icon>arrow_forward</Icon>
+          </MDButton>
+        </MDBox>
+        {coursesView && (
+          <>
+            <MDBox display="flex" flexDirection={{ xs: "column", sm: "row" }} gap={2} mb={2}>
+              <MDInput
+                label="Search your courses"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                fullWidth
+                InputProps={{
+                  startAdornment: <Icon sx={{ mr: 1, color: palette.textMuted }}>search</Icon>,
+                }}
+              />
+              <MDInput
+                select
+                label="Course term"
+                value={selectedPeriod}
+                onChange={(event) => setSelectedPeriod(event.target.value)}
+                SelectProps={{ native: true }}
+                sx={{ minWidth: 190 }}
+              >
+                <option value="all">All terms</option>
+                {academicPeriodOptions(allocations).map((period) => (
+                  <option key={period.key} value={period.key}>
+                    {period.label}
+                  </option>
+                ))}
+              </MDInput>
+            </MDBox>
+            <MDBox display="flex" gap={1} mb={2.5} flexWrap="wrap">
+              {[
+                ["all", "All courses"],
+                ["active", "Learning now"],
+                ["completed", "Completed"],
+              ].map(([value, label]) => (
+                <MDButton
+                  key={value}
+                  size="small"
+                  variant={courseFilter === value ? "contained" : "outlined"}
+                  color="info"
+                  aria-pressed={courseFilter === value}
+                  onClick={() => setCourseFilter(value)}
+                >
+                  {label}
+                </MDButton>
+              ))}
+            </MDBox>
+          </>
+        )}
+        {error && (
+          <MDTypography role="alert" variant="body2" color="error" mb={2}>
+            {error}
+          </MDTypography>
+        )}
+        {loading ? (
+          <Card>
+            <MDBox p={2.5} role="status">
+              <MDTypography>Loading your courses…</MDTypography>
+            </MDBox>
+          </Card>
+        ) : visibleAllocations.length === 0 ? (
+          <Card>
+            <MDBox p={2.5} textAlign="center">
+              <LearningArt kind="robot" size={96} />
+              <MDTypography variant="h6">
+                {allocations.length
+                  ? "No courses match just yet"
+                  : "Your adventure is getting ready"}
+              </MDTypography>
+              <MDTypography variant="body2" color="text" mt={1}>
+                {allocations.length
+                  ? "Try another search or choose a different filter."
+                  : "Your teacher will help you join your first course. You can try typing practice while you wait."}
+              </MDTypography>
+              <MDButton
+                color="info"
+                variant="contained"
+                sx={{ mt: 2 }}
+                onClick={() =>
+                  allocations.length
+                    ? (setSearch(""), setCourseFilter("all"), setSelectedPeriod("all"))
+                    : navigate("/learner/my-typing-tutor")
+                }
+              >
+                {allocations.length ? "Clear filters" : "Try Typing"}
+              </MDButton>
+            </MDBox>
+          </Card>
+        ) : (
+          <Grid container spacing={1.5}>
+            {(coursesView ? visibleAllocations : visibleAllocations.slice(0, 3)).map(
+              (allocation) => {
+                const theme = learningTheme(allocation.course_name);
+                const summary = courseSummaries[allocation.course_id];
+                const progress =
+                  summary?.progress_percent ?? (allocation.status === "completed" ? 100 : null);
+                return (
+                  <Grid item xs={12} sm={6} lg={4} key={allocation.id}>
+                    <Card
+                      sx={{
+                        height: "100%",
+                        transition: "transform 150ms ease, box-shadow 150ms ease",
+                        "&:hover": {
+                          transform: "translateY(-3px)",
+                          boxShadow: "0 12px 28px #27164c12",
+                        },
+                      }}
+                    >
+                      <MDBox
+                        sx={{
+                          position: "relative",
+                          background: `linear-gradient(140deg, ${theme.color}55, #13152f 85%)`,
+                          bgcolor: "#151731",
+                          px: 1.5,
+                          pt: 1.25,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <MDTypography
+                          variant="caption"
+                          sx={{
+                            color: "#fff",
+                            letterSpacing: ".08em",
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {theme.label}
+                        </MDTypography>
+                        <MDBox textAlign="center" height={66}>
+                          <LearningArt kind={theme.art} size={78} />
+                        </MDBox>
+                      </MDBox>
+                      <MDBox p={1.5} display="flex" flexDirection="column" flex={1}>
+                        <MDTypography variant="h6" fontWeight="bold">
+                          {allocation.course_name}
+                        </MDTypography>
+                        <MDTypography variant="caption" color="text" mt={0.5}>
+                          {[allocation.term, allocation.academic_year].filter(Boolean).join(" · ")}
+                        </MDTypography>
+                        <MDBox mt={1.25} mb={1.5}>
+                          <MDBox display="flex" justifyContent="space-between" mb={0.5}>
+                            <MDTypography variant="caption" fontWeight="bold">
+                              {allocation.status === "completed" ? "Completed!" : "Your progress"}
+                            </MDTypography>
+                            <MDTypography variant="caption" color="text">
+                              {progress === null ? "Open to explore" : `${Math.round(progress)}%`}
+                            </MDTypography>
+                          </MDBox>
+                          {progress !== null && (
+                            <MDProgress
+                              color="success"
+                              value={Math.max(0, Math.min(100, Number(progress)))}
+                            />
+                          )}
+                        </MDBox>
+                        <MDButton
+                          fullWidth
+                          color="info"
+                          variant="contained"
+                          endIcon={<Icon>arrow_forward</Icon>}
+                          sx={{ mt: "auto" }}
+                          onClick={() => navigate(`/learner/courses/${allocation.course_id}`)}
+                        >
+                          {allocation.status === "completed" ? "Revisit Course" : "Open Course"}
+                        </MDButton>
+                      </MDBox>
+                    </Card>
+                  </Grid>
+                );
+              }
+            )}
           </Grid>
-        </Grid>
+        )}
+        {!coursesView && featuredCompetition && (
+          <Card sx={{ mt: 1.5 }}>
+            <MDBox p={1.75} display="flex" alignItems="center" gap={1.75}>
+              <LearningArt kind="trophy" size={68} />
+              <MDBox flex={1}>
+                <MDTypography variant="caption" color="info" fontWeight="bold">
+                  READY FOR A CHALLENGE?
+                </MDTypography>
+                <MDTypography variant="h6">{featuredCompetition.name}</MDTypography>
+                <MDTypography variant="body2" color="text">
+                  {competitionWindow(featuredCompetition)}
+                </MDTypography>
+                <MDButton
+                  color="info"
+                  variant="contained"
+                  size="small"
+                  sx={{ mt: 1.25 }}
+                  onClick={() => setShowFeaturedCompetition(true)}
+                >
+                  Explore competition
+                </MDButton>
+              </MDBox>
+            </MDBox>
+          </Card>
+        )}
       </MDBox>
       {featuredCompetition && (
         <Dialog
@@ -793,7 +885,6 @@ function LearnerDashboard() {
           </DialogContent>
         </Dialog>
       )}
-      <LearnerFeedbackChat />
       <Footer />
     </DashboardLayout>
   );

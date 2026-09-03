@@ -14,6 +14,7 @@ import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import LinearProgress from "@mui/material/LinearProgress";
 import MDInput from "components/MDInput";
+import { useAppPalette } from "lib/appTheme";
 import PropTypes from "prop-types";
 
 import MDBox from "components/MDBox";
@@ -35,6 +36,7 @@ function average(rows, key) {
 }
 
 function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
+  const palette = useAppPalette();
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
   const [learner, setLearner] = useState(null);
@@ -183,12 +185,40 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
       // A large modal on a phone is mostly margin. Below sm it takes the whole
       // screen instead, so the learner detail is actually readable there.
       fullScreen={isSmallScreen}
-      PaperProps={{ sx: { borderRadius: isSmallScreen ? 0 : 2 } }}
+      PaperProps={{
+        sx: {
+          borderRadius: isSmallScreen ? 0 : "14px",
+          bgcolor: palette.surface,
+          backgroundImage: "none",
+          color: palette.text,
+          "& .MuiTypography-root": { color: palette.text },
+          "& .MuiTypography-caption, & .MuiTypography-body2": { color: palette.textMuted },
+          // One nesting level only: the panels inside are groupings, not extra
+          // raised surfaces.
+          "& .MuiCard-root": {
+            bgcolor: palette.surface,
+            backgroundImage: "none",
+            border: `1px solid ${palette.border}`,
+            boxShadow: "none",
+            borderRadius: "11px",
+          },
+          "& .MuiTableCell-head": {
+            bgcolor: palette.surfaceSunken,
+            color: palette.textMuted,
+            fontWeight: 700,
+          },
+          "& .MuiTableCell-body": { borderColor: palette.borderSoft, color: palette.text },
+          "& .MuiOutlinedInput-root": { bgcolor: palette.surface, color: palette.text },
+          "& .MuiOutlinedInput-notchedOutline": { borderColor: palette.border },
+          "& .MuiInputLabel-root, & .MuiInputBase-input": { color: palette.text },
+          "& .MuiTableContainer-root": { overflowX: "auto" },
+        },
+      }}
     >
       <DialogTitle sx={{ pb: 1 }}>
         <MDBox display="flex" justifyContent="space-between" alignItems="center">
           <MDBox>
-            <MDTypography variant="h5" fontWeight="bold">
+            <MDTypography variant="h6" fontWeight="bold">
               Learner Account
             </MDTypography>
             {learner && (
@@ -213,9 +243,9 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
           </MDBox>
         ) : learner ? (
           <MDBox>
-            <Card sx={{ mb: 2 }}>
+            <Card sx={{ mb: 1.5 }}>
               <MDBox
-                p={3}
+                p={1.75}
                 display="flex"
                 alignItems="center"
                 justifyContent="space-between"
@@ -344,7 +374,7 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
               <Grid container spacing={2}>
                 <Grid item xs={12} md={5}>
                   <Card>
-                    <MDBox p={3}>
+                    <MDBox p={1.75}>
                       <MDTypography variant="h6" fontWeight="bold" mb={2}>
                         Profile
                       </MDTypography>
@@ -368,7 +398,7 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
                 </Grid>
                 <Grid item xs={12} md={7}>
                   <Card>
-                    <MDBox p={3}>
+                    <MDBox p={1.75}>
                       <MDTypography variant="h6" fontWeight="bold" mb={2}>
                         Performance
                       </MDTypography>
@@ -397,7 +427,7 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
 
             {activeTab === "courses" && (
               <Card>
-                <MDBox p={3}>
+                <MDBox p={1.75}>
                   {allocations.length === 0 ? (
                     <MDTypography variant="body2" color="text">
                       No courses allocated yet.
@@ -435,7 +465,7 @@ function LearnerDetailModal({ open, onClose, learnerId, onResetPassword }) {
 
             {activeTab === "certificates" && (
               <Card>
-                <MDBox p={3}>
+                <MDBox p={1.75}>
                   {certificates.length === 0 ? (
                     <MDTypography variant="body2" color="text">
                       No certificates issued yet.

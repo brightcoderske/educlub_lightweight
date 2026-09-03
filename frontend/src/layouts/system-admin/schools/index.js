@@ -7,12 +7,15 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import Chip from "@mui/material/Chip";
+import Icon from "@mui/material/Icon";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
+import SchoolCustodyModal from "components/SchoolCustodyModal";
 import MDInput from "components/MDInput";
 import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
@@ -47,6 +50,10 @@ function cleanText(value) {
 
 function SystemAdminSchools() {
   const [schools, setSchools] = useState([]);
+  const [custodySchool, setCustodySchool] = useState(null);
+  // The register form is the tallest thing on this page and is used far less
+  // often than the list, so it stays folded until it is wanted.
+  const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [selectedSchool, setSelectedSchool] = useState(null);
@@ -167,10 +174,32 @@ function SystemAdminSchools() {
       />
       <MDBox py={2}>
         <Card>
-          <MDBox p={2}>
-            <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
-              Register School
+          <MDBox
+            component="button"
+            type="button"
+            onClick={() => setFormOpen((open) => !open)}
+            aria-expanded={formOpen || Boolean(editingId)}
+            sx={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 1,
+              px: 2,
+              py: 1.25,
+              border: 0,
+              bgcolor: "transparent",
+              font: "inherit",
+              textAlign: "left",
+              cursor: "pointer",
+            }}
+          >
+            <MDTypography variant="button" fontWeight="medium">
+              {editingId ? "Edit School" : "Register School"}
             </MDTypography>
+            <Icon fontSize="small">{formOpen || editingId ? "expand_less" : "expand_more"}</Icon>
+          </MDBox>
+          <MDBox p={2} pt={0} sx={{ display: formOpen || editingId ? "block" : "none" }}>
             <Grid container spacing={2}>
               {[
                 ["name", "School Name"],
@@ -238,16 +267,21 @@ function SystemAdminSchools() {
           </MDBox>
         </Card>
 
-        <Card sx={{ mt: 3 }}>
+        <Card sx={{ mt: 1.5 }}>
           <MDBox p={2}>
-            <MDTypography variant="button" fontWeight="medium" display="block" mb={1}>
+            <MDTypography variant="button" fontWeight="medium" display="block">
               Registered Schools
             </MDTypography>
+            <MDTypography variant="caption" color="text" display="block" mb={1}>
+              Open a school by name for enrolments, invoices, activity and access.
+            </MDTypography>
             {loading ? (
-              <MDTypography variant="body2">Loading...</MDTypography>
+              <MDTypography variant="caption" color="text">
+                Loading schools…
+              </MDTypography>
             ) : (
-              <TableContainer>
-                <Table>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small">
                   <TableHead sx={{ display: "table-header-group" }}>
                     <TableRow>
                       <TableCell>Logo</TableCell>
@@ -256,6 +290,7 @@ function SystemAdminSchools() {
                       <TableCell>Email</TableCell>
                       <TableCell>Contact</TableCell>
                       <TableCell>Learners</TableCell>
+                      <TableCell>Status</TableCell>
                       <TableCell align="center">Manage</TableCell>
                     </TableRow>
                   </TableHead>
@@ -268,8 +303,8 @@ function SystemAdminSchools() {
                               component="img"
                               src={school.logo_url}
                               alt={school.name}
-                              width="42px"
-                              height="42px"
+                              width="30px"
+                              height="30px"
                               borderRadius="8px"
                               sx={{ objectFit: "contain" }}
                             />
@@ -277,7 +312,28 @@ function SystemAdminSchools() {
                             "-"
                           )}
                         </TableCell>
-                        <TableCell>{school.name}</TableCell>
+                        <TableCell>
+                          <MDTypography
+                            component="button"
+                            type="button"
+                            variant="button"
+                            fontWeight="bold"
+                            onClick={() => setCustodySchool(school)}
+                            title={`Open ${school.name}`}
+                            sx={{
+                              background: "none",
+                              border: 0,
+                              p: 0,
+                              cursor: "pointer",
+                              textAlign: "left",
+                              color: "info.main",
+                              textDecoration: "underline",
+                              textUnderlineOffset: "3px",
+                            }}
+                          >
+                            {school.name}
+                          </MDTypography>
+                        </TableCell>
                         <TableCell>{school.code}</TableCell>
                         <TableCell>{school.email || "-"}</TableCell>
                         <TableCell>{school.phone || "-"}</TableCell>
@@ -290,6 +346,13 @@ function SystemAdminSchools() {
                           >
                             {school.learners_count || 0}
                           </MDButton>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            color={school.is_active === false ? "error" : "success"}
+                            label={school.is_active === false ? "Paused" : "Active"}
+                          />
                         </TableCell>
                         <TableCell align="center">
                           <MDButton
@@ -318,6 +381,17 @@ function SystemAdminSchools() {
           </MDBox>
         </Card>
       </MDBox>
+      <SchoolCustodyModal
+        open={Boolean(custodySchool)}
+        school={custodySchool}
+        onClose={() => setCustodySchool(null)}
+        onSchoolChanged={(updated) => {
+          setCustodySchool((current) => ({ ...current, ...updated }));
+          setSchools((current) =>
+            current.map((row) => (row.id === updated.id ? { ...row, ...updated } : row))
+          );
+        }}
+      />
       <Dialog
         open={Boolean(selectedSchool)}
         onClose={() => setSelectedSchool(null)}

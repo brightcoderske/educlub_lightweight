@@ -33,6 +33,7 @@ const MDButton = forwardRef(
       <MDButtonRoot
         {...rest}
         ref={ref}
+        data-color={color}
         color="primary"
         variant={variant === "gradient" ? "contained" : variant}
         size={size}

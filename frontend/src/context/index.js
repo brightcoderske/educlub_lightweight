@@ -23,6 +23,8 @@ import { createContext, useContext, useReducer, useMemo } from "react";
 // prop-types is a library for typechecking of props
 import PropTypes from "prop-types";
 
+import { storedAppTheme } from "lib/appThemeStorage";
+
 // Material Dashboard 2 React main context
 const MaterialUI = createContext();
 
@@ -62,6 +64,13 @@ function reducer(state, action) {
     case "DARKMODE": {
       return { ...state, darkMode: action.value };
     }
+    // Deliberately separate from darkMode. MDTypography and MDBox read darkMode
+    // globally and turn their text white wherever they render, so reusing it for
+    // the learner theme made every teacher and admin page unreadable the moment
+    // a learner picked dark on that device.
+    case "APP_THEME": {
+      return { ...state, appTheme: action.value };
+    }
     default: {
       throw new Error(`Unhandled action type: ${action.type}`);
     }
@@ -81,6 +90,9 @@ function MaterialUIControllerProvider({ children }) {
     direction: "ltr",
     layout: "dashboard",
     darkMode: false,
+    // Restored before the first render so someone who chose dark does not see
+    // the light page flash on every reload.
+    appTheme: storedAppTheme(),
   };
 
   const [controller, dispatch] = useReducer(reducer, initialState);
@@ -119,6 +131,7 @@ const setOpenConfigurator = (dispatch, value) => dispatch({ type: "OPEN_CONFIGUR
 const setDirection = (dispatch, value) => dispatch({ type: "DIRECTION", value });
 const setLayout = (dispatch, value) => dispatch({ type: "LAYOUT", value });
 const setDarkMode = (dispatch, value) => dispatch({ type: "DARKMODE", value });
+const setAppTheme = (dispatch, value) => dispatch({ type: "APP_THEME", value });
 
 export {
   MaterialUIControllerProvider,
@@ -133,4 +146,5 @@ export {
   setDirection,
   setLayout,
   setDarkMode,
+  setAppTheme,
 };

@@ -12,10 +12,11 @@ import AdminFeedbackPanel from "components/AdminFeedbackPanel";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import ComplexStatisticsCard from "examples/Cards/StatisticsCards/ComplexStatisticsCard";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
+import { useAppPalette } from "lib/appTheme";
+import PopulationTrend from "components/PopulationTrend";
 
 function SchoolAdminDashboard() {
   const [loadErrors, setLoadErrors] = useState([]);
@@ -32,6 +33,9 @@ function SchoolAdminDashboard() {
   });
   const [recentActivity, setRecentActivity] = useState([]);
   const [currentTerm, setCurrentTerm] = useState(null);
+  const [population, setPopulation] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const palette = useAppPalette();
   const cacheKey = `school-admin:${user?.schoolId}:dashboard`;
 
   useEffect(() => {
@@ -51,6 +55,8 @@ function SchoolAdminDashboard() {
         setStats(cached.stats || stats);
         setRecentActivity(cached.recentActivity || []);
         setCurrentTerm(cached.currentTerm || null);
+        setPopulation(cached.population || []);
+        setLoading(false);
       }
       try {
         const [learnersRes, allocationsRes, certificatesRes, coursesRes, termsRes] =
@@ -61,6 +67,8 @@ function SchoolAdminDashboard() {
             load("/courses"),
             load("/academic/terms"),
           ]);
+        const populationRes = await apiClient.get("/learners/population").catch(() => []);
+        setPopulation(Array.isArray(populationRes) ? populationRes : []);
         const todayTerm = await apiClient.get("/academic/terms/current").catch(() => null);
         const completionSummary = await apiClient
           .get(
@@ -99,14 +107,17 @@ function SchoolAdminDashboard() {
         };
 
         setStats(nextStats);
-        setRecentActivity(allocationsRes?.slice(0, 5) || []);
+        setRecentActivity(allocationsRes?.slice(0, 4) || []);
         setCachedPage(cacheKey, {
           stats: nextStats,
-          recentActivity: allocationsRes?.slice(0, 5) || [],
+          recentActivity: allocationsRes?.slice(0, 4) || [],
           currentTerm: todayTerm,
+          population: Array.isArray(populationRes) ? populationRes : [],
         });
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -143,70 +154,101 @@ function SchoolAdminDashboard() {
             Some data could not refresh: {[...new Set(loadErrors)].join("; ")}
           </Alert>
         )}
-        <Grid container spacing={2}>
-          <Grid item xs={6} sm={4} lg={2.4}>
-            <MDBox mb={0}>
-              <ComplexStatisticsCard
-                color="dark"
-                icon="school"
-                title="Total Learners"
-                to="/school-admin/learners"
-                count={stats.learners}
-              />
-            </MDBox>
-          </Grid>
-          <Grid item xs={6} sm={4} lg={2.4}>
-            <MDBox mb={0}>
-              <ComplexStatisticsCard
-                icon="assignment_turned_in"
-                title="Allocations"
-                to="/school-admin/allocations"
-                count={stats.allocated}
-              />
-            </MDBox>
-          </Grid>
-          <Grid item xs={6} sm={4} lg={2.4}>
-            <MDBox mb={0}>
-              <ComplexStatisticsCard
-                color="success"
-                icon="check_circle"
-                title="Completed"
-                to="/school-admin/progress"
-                count={stats.completed}
-              />
-            </MDBox>
-          </Grid>
-          <Grid item xs={6} sm={4} lg={2.4}>
-            <MDBox mb={0}>
-              <ComplexStatisticsCard
-                color="primary"
-                icon="card_membership"
-                title="Certificates"
-                to="/school-admin/certificates"
-                count={stats.certificates}
-              />
-            </MDBox>
-          </Grid>
-          <Grid item xs={6} sm={4} lg={2.4}>
-            <MDBox mb={0}>
-              <ComplexStatisticsCard
-                color="warning"
-                icon="menu_book"
-                title="Courses"
-                to="/school-admin/courses"
-                count={stats.courses}
-              />
-            </MDBox>
+        <MDBox
+          display="grid"
+          gridTemplateColumns={{ xs: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" }}
+          gap={1.25}
+          mb={1.5}
+        >
+          {[
+            ["Learners", stats.learners, "school", "/school-admin/learners", "#6944d2", "#efe9ff"],
+            [
+              "Allocations",
+              stats.allocated,
+              "assignment_turned_in",
+              "/school-admin/allocations",
+              "#1f6fb2",
+              "#e6f1fb",
+            ],
+            [
+              "Completed",
+              stats.completed,
+              "check_circle",
+              "/school-admin/progress",
+              "#12855b",
+              "#e4f7ee",
+            ],
+            [
+              "Certificates",
+              stats.certificates,
+              "card_membership",
+              "/school-admin/certificates",
+              "#a3418a",
+              "#fbeaf6",
+            ],
+            ["Courses", stats.courses, "menu_book", "/school-admin/courses", "#bb7115", "#fff3dc"],
+          ].map(([label, value, icon, to, color, tint]) => (
+            <Card key={label}>
+              <MDBox
+                component={Link}
+                to={to}
+                p={1.25}
+                display="flex"
+                alignItems="center"
+                gap={1.25}
+                sx={{ textDecoration: "none" }}
+              >
+                <Icon
+                  fontSize="small"
+                  sx={{
+                    color: palette.dark ? palette.accentText : color,
+                    bgcolor: palette.dark ? palette.accentSoft : tint,
+                    p: 0.75,
+                    width: 32,
+                    height: 32,
+                    borderRadius: "9px",
+                    flexShrink: 0,
+                  }}
+                >
+                  {icon}
+                </Icon>
+                <MDBox minWidth={0}>
+                  <MDTypography
+                    variant="h5"
+                    sx={{
+                      color: palette.dark ? palette.text : color,
+                      fontWeight: 800,
+                      lineHeight: 1.1,
+                    }}
+                  >
+                    {value}
+                  </MDTypography>
+                  <MDTypography
+                    variant="caption"
+                    color="text"
+                    sx={{ display: "block", lineHeight: 1.3 }}
+                  >
+                    {label}
+                  </MDTypography>
+                </MDBox>
+              </MDBox>
+            </Card>
+          ))}
+        </MDBox>
+
+        <Grid container spacing={1.5}>
+          <Grid item xs={12} md={5} lg={4}>
+            <PopulationTrend population={population} loading={loading} />
           </Grid>
 
-          <Grid item xs={12} lg={8}>
-            <Card>
-              <MDBox p={2}>
-                <MDTypography variant="h6" fontWeight="bold" mb={2}>
+          <Grid item xs={12} md={7} lg={4}>
+            <Card sx={{ height: "100%" }}>
+              <MDBox p={1.75}>
+                <MDTypography variant="h6" fontWeight="bold" mb={1}>
                   Recent Activity
                 </MDTypography>
                 {recentActivity.length === 0 ? (
-                  <MDTypography variant="body2" color="text">
+                  <MDTypography variant="caption" color="text">
                     No recent activity
                   </MDTypography>
                 ) : (
@@ -216,29 +258,27 @@ function SchoolAdminDashboard() {
                         key={activity.id || index}
                         display="flex"
                         alignItems="center"
-                        py={1.5}
-                        borderBottom={
-                          index !== recentActivity.length - 1 ? "1px solid #e0e0e0" : "none"
-                        }
+                        gap={1}
+                        py={0.85}
+                        sx={{
+                          borderBottom:
+                            index !== recentActivity.length - 1
+                              ? `1px solid ${palette.borderSoft}`
+                              : "none",
+                        }}
                       >
-                        <MDBox
-                          mr={2}
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                          width="40px"
-                          height="40px"
-                          borderRadius="50%"
-                          bgcolor={activity.status === "completed" ? "success.main" : "info.main"}
-                          color="white"
+                        <Icon
+                          fontSize="small"
+                          sx={{
+                            color: activity.status === "completed" ? "#12855b" : palette.accentText,
+                            flexShrink: 0,
+                          }}
                         >
-                          <Icon fontSize="small">
-                            {activity.status === "completed" ? "verified" : "person_add"}
-                          </Icon>
-                        </MDBox>
-                        <MDBox flex={1}>
-                          <MDTypography variant="body2" fontWeight="medium">
-                            {activity.learner_name} allocated to {activity.course_name}
+                          {activity.status === "completed" ? "verified" : "person_add"}
+                        </Icon>
+                        <MDBox flex={1} minWidth={0}>
+                          <MDTypography variant="caption" fontWeight="bold" display="block" noWrap>
+                            {activity.learner_name} · {activity.course_name}
                           </MDTypography>
                           <MDTypography variant="caption" color="text">
                             {activity.term || "Current term"} {activity.academic_year || ""}
@@ -252,45 +292,37 @@ function SchoolAdminDashboard() {
             </Card>
           </Grid>
 
-          <Grid item xs={12} lg={4}>
-            <Card>
-              <MDBox p={2}>
-                <MDTypography variant="h6" fontWeight="bold" mb={2}>
+          <Grid item xs={12} md={12} lg={4}>
+            <Card sx={{ height: "100%" }}>
+              <MDBox p={1.75}>
+                <MDTypography variant="h6" fontWeight="bold" mb={1}>
                   Quick Stats
                 </MDTypography>
-                <MDBox display="flex" flexDirection="column" gap={2}>
-                  <MDBox display="flex" justifyContent="space-between" alignItems="center">
-                    <MDTypography variant="body2" color="text">
-                      Current Term
-                    </MDTypography>
-                    <MDTypography variant="h6" fontWeight="bold">
-                      {currentTerm?.name || "None"}
-                    </MDTypography>
-                  </MDBox>
-                  <MDBox display="flex" justifyContent="space-between" alignItems="center">
-                    <MDTypography variant="body2" color="text">
-                      Past Terms
-                    </MDTypography>
-                    <MDTypography variant="h6" fontWeight="bold">
-                      {stats.activeTerms}
-                    </MDTypography>
-                  </MDBox>
-                  <MDBox display="flex" justifyContent="space-between" alignItems="center">
-                    <MDTypography variant="body2" color="text">
-                      Completion Rate
-                    </MDTypography>
-                    <MDTypography variant="h6" fontWeight="bold" color="success">
-                      {stats.completionRate}%
-                    </MDTypography>
-                  </MDBox>
-                  <MDBox display="flex" justifyContent="space-between" alignItems="center">
-                    <MDTypography variant="body2" color="text">
-                      Certificates/Learner
-                    </MDTypography>
-                    <MDTypography variant="h6" fontWeight="bold">
-                      {stats.learners > 0 ? (stats.certificates / stats.learners).toFixed(1) : 0}
-                    </MDTypography>
-                  </MDBox>
+                <MDBox display="flex" flexDirection="column" gap={0.85}>
+                  {[
+                    ["Current term", currentTerm?.name || "None"],
+                    ["Past terms", stats.activeTerms],
+                    ["Completion rate", `${stats.completionRate}%`],
+                    [
+                      "Certificates per learner",
+                      stats.learners > 0 ? (stats.certificates / stats.learners).toFixed(1) : 0,
+                    ],
+                  ].map(([label, value]) => (
+                    <MDBox
+                      key={label}
+                      display="flex"
+                      justifyContent="space-between"
+                      alignItems="baseline"
+                      gap={1.5}
+                    >
+                      <MDTypography variant="caption" color="text">
+                        {label}
+                      </MDTypography>
+                      <MDTypography variant="button" fontWeight="bold">
+                        {value}
+                      </MDTypography>
+                    </MDBox>
+                  ))}
                 </MDBox>
               </MDBox>
             </Card>

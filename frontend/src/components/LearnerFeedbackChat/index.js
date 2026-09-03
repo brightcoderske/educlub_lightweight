@@ -106,8 +106,10 @@ function LearnerFeedbackChat() {
     return null;
   }
 
+  // The stack sits below the mobile navigation drawer, which MUI puts at 1200,
+  // so an open menu covers this button rather than it floating over the backdrop.
   return (
-    <MDBox position="fixed" right={18} bottom={18} zIndex={1300}>
+    <MDBox position="fixed" right={{ xs: 12, sm: 18 }} bottom={{ xs: 86, lg: 18 }} zIndex={1199}>
       {open && (
         <Card sx={{ width: { xs: 310, sm: 360 }, mb: 1.5, overflow: "hidden" }}>
           <MDBox
@@ -121,7 +123,13 @@ function LearnerFeedbackChat() {
             <MDTypography variant="button" color="white" fontWeight="bold">
               eduClub Feedback
             </MDTypography>
-            <MDButton variant="text" color="white" size="small" onClick={() => setOpen(false)}>
+            <MDButton
+              aria-label="Close feedback"
+              variant="text"
+              color="white"
+              size="small"
+              onClick={() => setOpen(false)}
+            >
               <Icon fontSize="small">close</Icon>
             </MDButton>
           </MDBox>
@@ -200,6 +208,7 @@ function LearnerFeedbackChat() {
           color="dark"
           size="small"
           onClick={hideButton}
+          aria-label="Hide feedback button"
           sx={{ minWidth: 28, width: 28, height: 28, p: 0, borderRadius: "50%" }}
         >
           <Icon fontSize="small">close</Icon>
@@ -209,6 +218,8 @@ function LearnerFeedbackChat() {
             variant="gradient"
             color="info"
             onClick={() => setOpen((value) => !value)}
+            aria-label={open ? "Close feedback chat" : "Open feedback chat"}
+            aria-expanded={open}
             sx={{ minWidth: 46, width: 46, height: 46, p: 0, borderRadius: "50%" }}
           >
             <Icon>chat</Icon>

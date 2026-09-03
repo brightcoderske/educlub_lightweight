@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Icon from "@mui/material/Icon";
@@ -11,6 +12,7 @@ import TableRow from "@mui/material/TableRow";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDTypography from "components/MDTypography";
+import { LearningArt } from "components/DashboardIdentity";
 
 const panelSx = {
   border: "1px solid #e4eaf2",
@@ -116,9 +118,128 @@ export default function AssessmentLibrary({
   onShowQuizMatrix,
   onShowTypingMatrix,
 }) {
+  const [activityFilter, setActivityFilter] = useState("all");
   const termLabel = activeAcademicTerm
     ? `${activeAcademicTerm.name} · ${activeAcademicTerm.academic_year}`
     : "No current term";
+
+  if (isLearner) {
+    const activities = [
+      ...quizTests.map((test) => ({ ...test, activityKind: "quiz" })),
+      ...typingTests.map((test) => ({ ...test, activityKind: "typing" })),
+    ].filter((test) => activityFilter === "all" || test.activityKind === activityFilter);
+    return (
+      <MDBox>
+        <MDBox display="flex" gap={1} mb={2.5} flexWrap="wrap">
+          {[
+            ["all", "All challenges"],
+            ["quiz", "Quizzes"],
+            ["typing", "Typing tests"],
+          ].map(([value, label]) => (
+            <MDButton
+              key={value}
+              color="info"
+              size="small"
+              variant={activityFilter === value ? "contained" : "outlined"}
+              aria-pressed={activityFilter === value}
+              onClick={() => setActivityFilter(value)}
+            >
+              {label}
+            </MDButton>
+          ))}
+        </MDBox>
+        {loading ? (
+          <EmptyState icon="hourglass_top">Loading your challenges…</EmptyState>
+        ) : !activities.length ? (
+          <Card>
+            <MDBox p={3} textAlign="center">
+              <LearningArt kind="robot" size={130} />
+              <MDTypography variant="h6">New challenges are on their way</MDTypography>
+              <MDTypography variant="body2" color="text">
+                Your teacher’s quizzes and typing tests will appear here.
+              </MDTypography>
+            </MDBox>
+          </Card>
+        ) : (
+          <MDBox
+            display="grid"
+            gridTemplateColumns={{
+              xs: "1fr",
+              sm: "repeat(2,minmax(0,1fr))",
+              xl: "repeat(3,minmax(0,1fr))",
+            }}
+            gap={2.5}
+          >
+            {activities.map((test) => (
+              <Card key={`${test.activityKind}-${test.id}`}>
+                <MDBox
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  px={2.5}
+                  sx={{
+                    background:
+                      test.activityKind === "quiz"
+                        ? "linear-gradient(120deg,#33216b,#6c40cd)"
+                        : "linear-gradient(120deg,#0c3a3c,#14866d)",
+                    minHeight: 140,
+                  }}
+                >
+                  <MDBox>
+                    <Chip
+                      size="small"
+                      label={test.activityKind === "quiz" ? "QUIZ QUEST" : "TYPING CHALLENGE"}
+                      sx={{ bgcolor: "#ffffff22", color: "#fff", fontWeight: 800 }}
+                    />
+                    <MDTypography variant="caption" color="white" display="block" mt={1}>
+                      {test.week_number ? `Week ${test.week_number}` : termLabel}
+                    </MDTypography>
+                  </MDBox>
+                  <LearningArt
+                    kind={test.activityKind === "quiz" ? "trophy" : "keyboard"}
+                    size={125}
+                  />
+                </MDBox>
+                <MDBox p={2.5} display="flex" flexDirection="column" flex={1}>
+                  <MDTypography variant="h6" mb={1}>
+                    {test.name}
+                  </MDTypography>
+                  <MDTypography variant="body2" color="text" mb={2}>
+                    {test.description ||
+                      (test.activityKind === "quiz"
+                        ? "Put your knowledge to the test. Every question is a chance to grow."
+                        : "Find your rhythm and show how your typing skills have grown.")}
+                  </MDTypography>
+                  <MDBox display="flex" alignItems="center" gap={1} mb={2} mt="auto">
+                    <StatusChip open={test.effective_is_open} />
+                    <MDTypography variant="caption" color="text">
+                      {test.duration_seconds
+                        ? `${Math.ceil(test.duration_seconds / 60)} min`
+                        : test.lesson_count
+                        ? `${test.lesson_count} lessons`
+                        : "Learn at your level"}
+                    </MDTypography>
+                  </MDBox>
+                  <MDButton
+                    color="info"
+                    variant="contained"
+                    fullWidth
+                    disabled={!test.effective_is_open}
+                    onClick={() =>
+                      test.activityKind === "quiz" ? onOpenQuiz(test) : onOpenTyping(test)
+                    }
+                    endIcon={<Icon>arrow_forward</Icon>}
+                  >
+                    {test.effective_is_open ? "Let’s Go" : "Not open yet"}
+                  </MDButton>
+                </MDBox>
+              </Card>
+            ))}
+          </MDBox>
+        )}
+      </MDBox>
+    );
+  }
 
   return (
     <MDBox display="flex" flexDirection="column" gap={2.5}>

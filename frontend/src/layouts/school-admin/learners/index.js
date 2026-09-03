@@ -313,23 +313,44 @@ function SchoolAdminLearners() {
             >
               <DialogTitle>Add Learner</DialogTitle>
               <DialogContent dividers>
+                <MDTypography
+                  variant="caption"
+                  fontWeight="bold"
+                  textTransform="uppercase"
+                  display="block"
+                  mb={1}
+                >
+                  Name
+                </MDTypography>
                 <Grid container spacing={2}>
                   {[
                     ["first_name", "First Name"],
                     ["second_name", "Second Name"],
                     ["third_name", "Third Name"],
                   ].map(([name, label]) => (
-                    <Grid item xs={12} key={name}>
+                    <Grid item xs={12} sm={4} key={name}>
                       <MDInput
                         label={label}
                         fullWidth
-                        type={name === "academic_year" ? "number" : "text"}
+                        type="text"
                         value={form[name]}
                         onChange={(event) => handleChange(name, event.target.value)}
                       />
                     </Grid>
                   ))}
-                  <Grid item xs={12}>
+                </Grid>
+                <MDTypography
+                  variant="caption"
+                  fontWeight="bold"
+                  textTransform="uppercase"
+                  display="block"
+                  mt={2}
+                  mb={1}
+                >
+                  Placement
+                </MDTypography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
                     <MDInput
                       select
                       label="Grade"
@@ -346,7 +367,7 @@ function SchoolAdminLearners() {
                       ))}
                     </MDInput>
                   </Grid>
-                  <Grid item xs={12}>
+                  <Grid item xs={12} sm={6}>
                     <MDInput
                       select
                       label="Class / Stream"

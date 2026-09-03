@@ -41,6 +41,9 @@ module.exports = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "1h",
   refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "7d",
   standaloneLmsEnabled: process.env.STANDALONE_LMS_ENABLED !== "false",
+  // Timestamps are stored in UTC; this is the zone a learner's calendar day is
+  // measured in, which is what a daily streak counts.
+  learnerTimezone: process.env.LEARNER_TIMEZONE || "Africa/Nairobi",
   frontendUrl: process.env.FRONTEND_URL,
   corsOrigins: process.env.CORS_ORIGINS.split(",")
     .map((origin) => origin.trim())

@@ -6,12 +6,6 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
 import Chip from "@mui/material/Chip";
 import Icon from "@mui/material/Icon";
 import MDBox from "components/MDBox";
@@ -20,7 +14,9 @@ import MDButton from "components/MDButton";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { LearnerHero, LearningArt, learningTheme } from "components/DashboardIdentity";
 
+import { useAppPalette } from "lib/appTheme";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
@@ -75,7 +71,9 @@ function competitionAccessNote(competition) {
 
 function LearnerCompetitions() {
   const { user, isLearner } = useAuth();
+  const palette = useAppPalette();
   const [searchParams] = useSearchParams();
+  const [competitionFilter, setCompetitionFilter] = useState("all");
   const [competitions, setCompetitions] = useState([]);
   const [selected, setSelected] = useState(null);
   const [performance, setPerformance] = useState(null);
@@ -394,7 +392,30 @@ function LearnerCompetitions() {
           </>
         }
       />
-      <MDBox py={2}>
+      <MDBox py={3}>
+        <LearnerHero
+          eyebrow="BIG IDEAS DESERVE A STAGE"
+          title="Your next challenge awaits."
+          description="Try your best, learn something new, and celebrate what you can do. Explore competitions with learners just like you."
+          art="trophy"
+        />
+        <MDBox display="flex" gap={1} flexWrap="wrap" mb={2.5}>
+          {[
+            ["all", "All competitions"],
+            ["quiz", "Quizzes"],
+            ["typing", "Typing"],
+          ].map(([value, label]) => (
+            <MDButton
+              key={value}
+              color="info"
+              variant={competitionFilter === value ? "contained" : "outlined"}
+              aria-pressed={competitionFilter === value}
+              onClick={() => setCompetitionFilter(value)}
+            >
+              {label}
+            </MDButton>
+          ))}
+        </MDBox>
         {message && (
           <MDTypography variant="caption" color="success" display="block" mb={2}>
             {message}
@@ -415,64 +436,109 @@ function LearnerCompetitions() {
           </MDTypography>
         ) : (
           <Grid container spacing={3} mb={4}>
-            {openCompetitions.map((competition) => (
-              <Grid item xs={12} md={6} lg={4} key={competition.id}>
-                <Card sx={{ minHeight: 300, overflow: "hidden" }}>
-                  {competition.image_url && (
-                    <MDBox
-                      component="img"
-                      src={resolveAssetUrl(competition.image_url)}
-                      alt={`${competition.name} banner`}
-                      height={130}
-                      width="100%"
-                      loading="eager"
-                      sx={{ objectFit: "cover", display: "block" }}
-                    />
-                  )}
-                  <MDBox p={2}>
-                    <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                      <Chip
-                        color="info"
-                        label={competition.competition_type || "quiz"}
-                        size="small"
-                      />
-                      {competition.is_featured && (
-                        <Chip color="warning" label="Featured" size="small" />
-                      )}
-                    </MDBox>
-                    <MDTypography variant="h3" fontWeight="bold" color="info" mb={1}>
-                      {competition.name}
+            {!openCompetitions.some(
+              (competition) =>
+                competitionFilter === "all" ||
+                (competition.competition_type || "quiz") === competitionFilter
+            ) && (
+              <Grid item xs={12}>
+                <Card>
+                  <MDBox p={3} textAlign="center">
+                    <LearningArt kind="robot" size={100} />
+                    <MDTypography variant="h6">More challenges are on their way</MDTypography>
+                    <MDTypography variant="body2" color="text">
+                      Check your joined competitions below, or explore another category.
                     </MDTypography>
-                    <MDTypography variant="caption" color="text" display="block">
-                      {competitionWindow(competition)}
-                    </MDTypography>
-                    <MDTypography variant="caption" color="text" display="block">
-                      {competitionAccessNote(competition)}
-                    </MDTypography>
-                    <MDTypography variant="caption" color="text" display="block">
-                      Level:{" "}
-                      {competition.eligible_grades?.length
-                        ? competition.eligible_grades.join(", ")
-                        : "All grades"}
-                    </MDTypography>
-                    <MDTypography variant="h5" fontWeight="bold" mt={2} mb={2}>
-                      {formatMoney(competition)}
-                    </MDTypography>
-                    <MDButton
-                      variant="gradient"
-                      color="info"
-                      fullWidth
-                      startIcon={
-                        <Icon>{isFreeCompetition(competition) ? "how_to_reg" : "payments"}</Icon>
-                      }
-                      onClick={() => setSelected(competition)}
-                    >
-                      {isFreeCompetition(competition) ? "Enroll Free" : "Enroll"}
-                    </MDButton>
                   </MDBox>
                 </Card>
               </Grid>
-            ))}
+            )}
+            {openCompetitions
+              .filter(
+                (competition) =>
+                  competitionFilter === "all" ||
+                  (competition.competition_type || "quiz") === competitionFilter
+              )
+              .map((competition) => (
+                <Grid item xs={12} md={6} lg={4} key={competition.id}>
+                  <Card sx={{ height: "100%", overflow: "hidden" }}>
+                    {competition.image_url ? (
+                      <MDBox
+                        component="img"
+                        src={resolveAssetUrl(competition.image_url)}
+                        alt={`${competition.name} banner`}
+                        height={130}
+                        width="100%"
+                        loading="lazy"
+                        decoding="async"
+                        sx={{ objectFit: "cover", display: "block" }}
+                      />
+                    ) : (
+                      <MDBox
+                        textAlign="center"
+                        sx={{ height: 170, background: "linear-gradient(125deg,#382075,#142341)" }}
+                      >
+                        <LearningArt
+                          kind={
+                            competition.competition_type === "typing"
+                              ? "keyboard"
+                              : learningTheme(competition.name).art === "rocket"
+                              ? "trophy"
+                              : learningTheme(competition.name).art
+                          }
+                          size={170}
+                        />
+                      </MDBox>
+                    )}
+                    <MDBox p={2.5} display="flex" flexDirection="column" flex={1}>
+                      <MDBox
+                        display="flex"
+                        justifyContent="space-between"
+                        alignItems="center"
+                        mb={1}
+                      >
+                        <Chip
+                          color="info"
+                          label={competition.competition_type || "quiz"}
+                          size="small"
+                        />
+                        {competition.is_featured && (
+                          <Chip color="warning" label="Featured" size="small" />
+                        )}
+                      </MDBox>
+                      <MDTypography variant="h3" fontWeight="bold" color="info" mb={1}>
+                        {competition.name}
+                      </MDTypography>
+                      <MDTypography variant="caption" color="text" display="block">
+                        {competitionWindow(competition)}
+                      </MDTypography>
+                      <MDTypography variant="caption" color="text" display="block">
+                        {competitionAccessNote(competition)}
+                      </MDTypography>
+                      <MDTypography variant="caption" color="text" display="block">
+                        Level:{" "}
+                        {competition.eligible_grades?.length
+                          ? competition.eligible_grades.join(", ")
+                          : "All grades"}
+                      </MDTypography>
+                      <MDTypography variant="h5" fontWeight="bold" mt="auto" pt={2} mb={2}>
+                        {isFreeCompetition(competition) ? "Free to join" : formatMoney(competition)}
+                      </MDTypography>
+                      <MDButton
+                        variant="gradient"
+                        color="info"
+                        fullWidth
+                        startIcon={
+                          <Icon>{isFreeCompetition(competition) ? "how_to_reg" : "payments"}</Icon>
+                        }
+                        onClick={() => setSelected(competition)}
+                      >
+                        {isFreeCompetition(competition) ? "Enroll Free" : "Enroll"}
+                      </MDButton>
+                    </MDBox>
+                  </Card>
+                </Grid>
+              ))}
           </Grid>
         )}
 
@@ -481,52 +547,74 @@ function LearnerCompetitions() {
             <MDTypography variant="h5" fontWeight="bold" mb={2}>
               Enrolled Competitions
             </MDTypography>
-            <TableContainer>
-              <Table>
-                <TableHead sx={{ display: "table-header-group" }}>
-                  <TableRow>
-                    <TableCell>Competition</TableCell>
-                    <TableCell>Dates</TableCell>
-                    <TableCell>Score</TableCell>
-                    <TableCell>Position</TableCell>
-                    <TableCell align="center">Action</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {enrolledCompetitions.map((competition) => (
-                    <TableRow key={competition.id} hover>
-                      <TableCell>{competition.name}</TableCell>
-                      <TableCell>
-                        {competitionWindow(competition).replace("Open from ", "")}
-                      </TableCell>
-                      <TableCell>{competition.total_score ?? "-"}</TableCell>
-                      <TableCell>
-                        {competition.rank ? `#${competition.rank}` : "-"}
-                        {competition.participant_count ? ` / ${competition.participant_count}` : ""}
-                      </TableCell>
-                      <TableCell align="center">
-                        <MDButton
-                          variant="text"
-                          color="info"
-                          size="small"
-                          onClick={() => openPerformance(competition)}
-                        >
-                          Performance
-                        </MDButton>
-                        <MDButton
-                          variant="text"
-                          color="success"
-                          size="small"
-                          onClick={() => launchCompetition(competition)}
-                        >
-                          Open
-                        </MDButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <MDBox
+              display="grid"
+              gridTemplateColumns={{ xs: "1fr", md: "repeat(2,minmax(0,1fr))" }}
+              gap={2}
+            >
+              {enrolledCompetitions.length === 0 ? (
+                <MDTypography variant="body2" color="text">
+                  Choose a competition above and start your next adventure. Your entries and results
+                  will appear here.
+                </MDTypography>
+              ) : (
+                enrolledCompetitions.map((competition) => (
+                  <MDBox
+                    key={competition.id}
+                    p={2}
+                    sx={{
+                      border: `1px solid ${palette.border}`,
+                      borderRadius: "16px",
+                      bgcolor: palette.surfaceMuted,
+                    }}
+                  >
+                    <MDBox display="flex" alignItems="center" gap={1.5}>
+                      <LearningArt kind="trophy" size={75} />
+                      <MDBox>
+                        <MDTypography variant="h6">{competition.name}</MDTypography>
+                        <MDTypography variant="caption" color="text">
+                          {competitionWindow(competition)}
+                        </MDTypography>
+                      </MDBox>
+                    </MDBox>
+                    <MDBox display="flex" gap={1} my={2}>
+                      <Chip
+                        size="small"
+                        label={`Score: ${competition.total_score ?? "Not yet recorded"}`}
+                      />
+                      <Chip
+                        size="small"
+                        label={
+                          competition.rank
+                            ? `Rank #${competition.rank}${
+                                competition.participant_count
+                                  ? " / " + competition.participant_count
+                                  : ""
+                              }`
+                            : "Your next chance to shine"
+                        }
+                      />
+                    </MDBox>
+                    <MDBox display="flex" gap={1}>
+                      <MDButton
+                        variant="contained"
+                        color="info"
+                        onClick={() => launchCompetition(competition)}
+                      >
+                        Open Competition
+                      </MDButton>
+                      <MDButton
+                        variant="text"
+                        color="info"
+                        onClick={() => openPerformance(competition)}
+                      >
+                        Performance
+                      </MDButton>
+                    </MDBox>
+                  </MDBox>
+                ))
+              )}
+            </MDBox>
           </MDBox>
         </Card>
       </MDBox>
@@ -535,7 +623,7 @@ function LearnerCompetitions() {
         <DialogTitle>Enroll in Competition</DialogTitle>
         <DialogContent>
           <MDTypography variant="h5" fontWeight="bold" mb={1}>
-            {selected?.name}
+            {selected?.name || "Competition"}
           </MDTypography>
           <MDTypography variant="body2" color="text" mb={2}>
             {isFreeCompetition(selected)
@@ -571,7 +659,7 @@ function LearnerCompetitions() {
         <DialogTitle>Competition Performance</DialogTitle>
         <DialogContent>
           <MDTypography variant="h5" fontWeight="bold" mb={1}>
-            {performance?.name}
+            {performance?.name || "Your performance"}
           </MDTypography>
           <MDTypography variant="body2" color="text" display="block">
             Grade: {performance?.grade || "-"} | Stage: {performance?.result_stage || "final"}
@@ -629,12 +717,12 @@ function LearnerCompetitions() {
                   <MDBox
                     p={2}
                     borderRadius="md"
-                    sx={{ backgroundColor: "#f8fafc", lineHeight: 1.9, fontSize: 18 }}
+                    sx={{ backgroundColor: palette.surfaceMuted, lineHeight: 1.9, fontSize: 18 }}
                   >
                     {(currentLesson().passage || "").split("").map((char, index) => {
                       const typed = typedText[index];
                       const color =
-                        typed === undefined ? "#344767" : typed === char ? "#16a34a" : "#dc2626";
+                        typed === undefined ? palette.text : typed === char ? "#16a34a" : "#dc2626";
                       return (
                         <span key={`${char}-${index}`} style={{ color }}>
                           {char}
@@ -659,7 +747,7 @@ function LearnerCompetitions() {
                       width: "100%",
                       minHeight: 180,
                       borderRadius: "8px",
-                      border: "1px solid #d1d5db",
+                      border: `1px solid ${palette.border}`,
                       padding: "14px",
                       fontSize: 16,
                       fontFamily: "inherit",

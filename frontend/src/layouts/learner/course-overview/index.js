@@ -14,6 +14,8 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { LearnerHero, LearningArt, learningTheme } from "components/DashboardIdentity";
+import { useAppPalette } from "lib/appTheme";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { activityLearningPath } from "../learningNavigation";
@@ -80,6 +82,7 @@ function CourseOverview() {
   const { pathname } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const palette = useAppPalette();
   const previewMode = pathname.includes("/preview");
   const templatePreviewMode = previewMode && pathname.startsWith("/system-admin");
   const entityId = templatePreviewMode ? templateId : courseId;
@@ -104,7 +107,9 @@ function CourseOverview() {
           : `/courses/${entityId}/learning-overview`
       );
       setOverview(response);
-      const firstOpen = response.modules?.[0]?.id;
+      const firstOpen =
+        response.modules?.find((module) => module.is_unlocked && !module.is_done)?.id ||
+        response.modules?.[0]?.id;
       setOpenModules(firstOpen ? { [firstOpen]: true } : {});
     } catch (err) {
       setError(err.message || "Failed to load course");
@@ -219,12 +224,19 @@ function CourseOverview() {
 
   const independentPrice = Number(overview?.course?.independent_price_amount || 0);
   const independentCurrency = overview?.course?.independent_currency || "KES";
+  const nextModule =
+    overview?.modules?.find((module) => module.is_unlocked && !module.is_done) ||
+    overview?.modules?.find((module) => module.is_unlocked);
+  const nextActivity =
+    nextModule?.activities?.find(
+      (activity) => activity.is_unlocked && !["completed", "graded"].includes(activity.status)
+    ) || nextModule?.activities?.find((activity) => activity.is_unlocked);
 
   return (
     <DashboardLayout>
       <DashboardNavbar
         title={overview?.course?.name || "Course"}
-        subtitle={overview?.course?.description || "Your modules and activities"}
+        subtitle="Your learning adventure, one step at a time"
         actions={
           <>
             {" "}
@@ -237,7 +249,7 @@ function CourseOverview() {
                     ? `/system-admin/courses/${entityId}/builder`
                     : previewMode
                     ? `/school-admin/courses/${entityId}/builder`
-                    : "/learner"
+                    : "/learner/courses"
                 )
               }
             >
@@ -363,10 +375,77 @@ function CourseOverview() {
           </Card>
         ) : (
           <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <LearnerHero
+                eyebrow="LEARN · PRACTISE · CREATE"
+                title={overview.course.name}
+                description={
+                  overview.course.description ||
+                  "Bring your ideas to life. Each module takes you one step closer to something amazing."
+                }
+                art={learningTheme(overview.course.name).art}
+              >
+                <Chip
+                  label={`${overview.summary.total_modules} modules`}
+                  size="small"
+                  sx={{ bgcolor: "#fff" }}
+                />
+                <Chip
+                  label={`${overview.summary.total_activities} activities`}
+                  size="small"
+                  sx={{ bgcolor: "#fff" }}
+                />
+                {nextModule && (
+                  <MDButton
+                    color="info"
+                    variant="contained"
+                    endIcon={<Icon>arrow_forward</Icon>}
+                    onClick={() =>
+                      navigate(
+                        moduleLearningPath(
+                          overview.course.id,
+                          nextModule.id,
+                          nextActivity?.id,
+                          previewMode,
+                          templatePreviewMode
+                        )
+                      )
+                    }
+                  >
+                    {overview.summary.progress_percent > 0 ? "Continue Learning" : "Start Learning"}
+                  </MDButton>
+                )}
+              </LearnerHero>
+              <MDBox display="flex" alignItems="center" gap={2} mt={-1} mb={1}>
+                <MDTypography variant="caption" fontWeight="bold" sx={{ flexShrink: 0 }}>
+                  Your adventure
+                </MDTypography>
+                <MDBox flex={1}>
+                  <MDProgress value={overview.summary.progress_percent} color="success" />
+                </MDBox>
+                <MDTypography variant="caption" fontWeight="bold">
+                  {overview.summary.progress_percent}%
+                </MDTypography>
+              </MDBox>
+            </Grid>
             <Grid item xs={12} lg={8}>
+              <MDTypography variant="h5" fontWeight="bold" mb={2}>
+                Your learning path
+              </MDTypography>
               <MDBox display="flex" flexDirection="column" gap={2}>
                 {overview.modules.map((courseModule, index) => (
-                  <Card key={courseModule.id}>
+                  <Card
+                    key={courseModule.id}
+                    sx={{
+                      borderLeft: `4px solid ${
+                        courseModule.is_done
+                          ? "#21b578"
+                          : courseModule.is_unlocked
+                          ? "#8556ec"
+                          : palette.track
+                      } !important`,
+                    }}
+                  >
                     <MDBox p={2.5}>
                       <MDBox
                         display="flex"
@@ -423,7 +502,8 @@ function CourseOverview() {
                           )}
                           <IconButton
                             size="small"
-                            aria-label="Toggle activities"
+                            aria-label={`Toggle activities for ${courseModule.title}`}
+                            aria-expanded={Boolean(openModules[courseModule.id])}
                             onClick={() => toggleModule(courseModule.id)}
                           >
                             <Icon>
@@ -434,7 +514,7 @@ function CourseOverview() {
                       </MDBox>
 
                       <Collapse in={Boolean(openModules[courseModule.id])}>
-                        <MDBox mt={2} borderTop="1px solid #e5e7eb" pt={1.5}>
+                        <MDBox mt={2} borderTop={`1px solid ${palette.border}`} pt={1.5}>
                           {courseModule.activities.length === 0 ? (
                             <MDTypography variant="caption" color="text">
                               No activities have been added yet.
@@ -481,12 +561,12 @@ function CourseOverview() {
                                   );
                                 }}
                                 sx={{
-                                  borderBottom: "1px solid #f1f3f4",
+                                  borderBottom: `1px solid ${palette.borderSoft}`,
                                   bgcolor: "transparent",
                                   cursor: activity.is_unlocked ? "pointer" : "not-allowed",
                                   opacity: activity.is_unlocked ? 1 : 0.58,
                                   "&:hover": activity.is_unlocked
-                                    ? { bgcolor: "#f8fafc" }
+                                    ? { bgcolor: palette.surfaceMuted }
                                     : undefined,
                                 }}
                               >
@@ -549,10 +629,13 @@ function CourseOverview() {
             </Grid>
 
             <Grid item xs={12} lg={4}>
-              <Card>
+              <Card sx={{ position: { lg: "sticky" }, top: 95 }}>
                 <MDBox p={3}>
+                  <MDBox textAlign="center">
+                    <LearningArt kind={overview.summary.is_done ? "trophy" : "kid"} size={150} />
+                  </MDBox>
                   <MDTypography variant="h6" fontWeight="bold">
-                    Course Progress
+                    {overview.summary.is_done ? "You did it!" : "Every step counts"}
                   </MDTypography>
                   <MDBox my={2}>
                     <MDProgress
@@ -566,7 +649,7 @@ function CourseOverview() {
                     activities complete.
                   </MDTypography>
                   <MDBox display="grid" gridTemplateColumns="1fr 1fr" gap={1.5} mt={2}>
-                    <MDBox p={1.5} border="1px solid #e5e7eb" borderRadius="md">
+                    <MDBox p={1.5} border={`1px solid ${palette.border}`} borderRadius="md">
                       <MDTypography variant="caption" color="text">
                         Modules
                       </MDTypography>

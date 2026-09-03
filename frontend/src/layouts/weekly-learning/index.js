@@ -15,6 +15,9 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { LearnerHero, LearningArt } from "components/DashboardIdentity";
+import { useAppPalette } from "lib/appTheme";
+import MDProgress from "components/MDProgress";
 import { apiClient } from "lib/api";
 import { useAuth } from "context/AuthContext";
 import { normalizeAcceptableAnswers } from "./quizAnswerUtils";
@@ -43,6 +46,7 @@ const MyWeeklyProgress = lazy(() => import("components/MyWeeklyProgress"));
 
 function WeeklyLearning() {
   const { user, isSystemAdmin, isSchoolAdmin, isLearner } = useAuth();
+  const palette = useAppPalette();
   // Weekly typing and quizzes belong to the school that runs them: its own
   // staff author, publish, review and delete them for their own learners. The
   // system console keeps the two genuinely cross-school things - competitions
@@ -101,6 +105,7 @@ function WeeklyLearning() {
   const [completionSummary, setCompletionSummary] = useState(null);
   const [editingTypingId, setEditingTypingId] = useState(null);
   const [editingQuizId, setEditingQuizId] = useState(null);
+  const [quizStep, setQuizStep] = useState(0);
   const [activeQuiz, setActiveQuiz] = useState(null);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizMatchingChoices, setQuizMatchingChoices] = useState({});
@@ -897,6 +902,7 @@ function WeeklyLearning() {
     try {
       const quiz = await apiClient.get(`/quiz-tests/tests/${test.id}`);
       setActiveQuiz(quiz);
+      setQuizStep(0);
       setQuizMissing([]);
       setQuizRemaining(Number(quiz.duration_seconds || 600));
       quizStartedAtRef.current = Date.now();
@@ -941,11 +947,11 @@ function WeeklyLearning() {
     if (!activeQuiz || quizSubmitting) return;
     const missing = findMissingQuizQuestions();
     if (!force && missing.length > 0) {
+      // Jumping the pager is the whole navigation now: only the current step is
+      // rendered, so scrolling to a question that is still display:none did
+      // nothing.
       setQuizMissing(missing);
-      document.getElementById(`quiz-question-${missing[0].id}`)?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+      setQuizStep(activeQuiz.questions.findIndex((question) => question.id === missing[0].id));
       return;
     }
     setError("");
@@ -1223,8 +1229,16 @@ function WeeklyLearning() {
 
   return (
     <DashboardLayout>
-      <DashboardNavbar title="Typing & Quizzes" />
+      <DashboardNavbar title={isLearner() ? "Challenges" : "Typing & Quizzes"} />
       <MDBox py={2} display="flex" flexDirection="column" gap={2}>
+        {isLearner() && (
+          <LearnerHero
+            eyebrow="CHALLENGE YOUR CURIOSITY"
+            title="Ready to surprise yourself?"
+            description="Take a quiz, put your typing skills to the test, and discover how much you’ve learned. Your next challenge starts here."
+            art="trophy"
+          />
+        )}
         {!isLearner() && termOptions.length > 0 && (
           <MDInput
             select
@@ -1403,7 +1417,7 @@ function WeeklyLearning() {
         {performancePanel && !isLearner() && (
           <Card
             sx={{
-              border: "1px solid #e4eaf2",
+              border: `1px solid ${palette.border}`,
               borderRadius: "16px",
               boxShadow: "0 10px 28px rgba(52, 71, 103, 0.05)",
               overflow: "hidden",
@@ -1415,7 +1429,10 @@ function WeeklyLearning() {
               display="flex"
               alignItems="center"
               justifyContent="space-between"
-              sx={{ borderBottom: "1px solid #edf1f6", bgcolor: "#fbfcfe" }}
+              sx={{
+                borderBottom: `1px solid ${palette.borderSoft}`,
+                bgcolor: palette.surfaceMuted,
+              }}
             >
               <MDBox>
                 <MDTypography variant="h6" color="dark" fontWeight="bold">
@@ -1480,7 +1497,7 @@ function WeeklyLearning() {
         maxWidth="lg"
         fullWidth
       >
-        <DialogContent sx={{ bgcolor: "#f8fafc" }}>
+        <DialogContent sx={{ bgcolor: palette.page }}>
           <MDBox display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
             <MDBox>
               <MDTypography variant="h5" fontWeight="bold">
@@ -1718,12 +1735,12 @@ function WeeklyLearning() {
                   <MDBox
                     p={2}
                     borderRadius="md"
-                    sx={{ backgroundColor: "#f8fafc", lineHeight: 1.9, fontSize: 18 }}
+                    sx={{ backgroundColor: palette.surfaceMuted, lineHeight: 1.9, fontSize: 18 }}
                   >
                     {(currentLesson().passage || "").split("").map((char, index) => {
                       const typed = typedText[index];
                       const color =
-                        typed === undefined ? "#344767" : typed === char ? "#16a34a" : "#dc2626";
+                        typed === undefined ? palette.text : typed === char ? "#16a34a" : "#dc2626";
                       return (
                         <span key={`${char}-${index}`} style={{ color }}>
                           {char}
@@ -1776,6 +1793,20 @@ function WeeklyLearning() {
       </Dialog>
       <Dialog
         open={Boolean(activeQuiz)}
+        aria-labelledby="learner-quiz-title"
+        PaperProps={{
+          sx: {
+            borderRadius: "22px",
+            background: palette.surfaceMuted,
+            m: { xs: 1, sm: 3 },
+            width: { xs: "calc(100% - 16px)", sm: "calc(100% - 48px)" },
+            maxHeight: "calc(100dvh - 32px)",
+            "& .MuiButton-root": { borderRadius: "11px", textTransform: "none", minHeight: 44 },
+            '& .MuiButton-contained[data-color="info"]:not(.Mui-disabled)': {
+              background: "linear-gradient(110deg,#7750f8,#5730df)",
+            },
+          },
+        }}
         onClose={quizSubmitting ? undefined : closeQuizTest}
         maxWidth="md"
         fullWidth
@@ -1786,7 +1817,7 @@ function WeeklyLearning() {
               <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                 <MDBox>
                   <MDTypography variant="h4" fontWeight="bold">
-                    {activeQuiz.name}
+                    <span id="learner-quiz-title">{activeQuiz.name}</span>
                   </MDTypography>
                   <MDTypography variant="body2" color="text">
                     {activeQuiz.description || "Answer all questions before submitting."}
@@ -1808,6 +1839,15 @@ function WeeklyLearning() {
               </MDBox>
               {quizResult ? (
                 <MDBox py={4} textAlign="center">
+                  <LearningArt
+                    kind={Number(quizResult.score) >= 80 ? "trophy" : "robot"}
+                    size={170}
+                  />
+                  <MDTypography variant="h5" mb={1}>
+                    {Number(quizResult.score) >= 80
+                      ? "Brilliant work!"
+                      : "Keep that curiosity going!"}
+                  </MDTypography>
                   <MDTypography variant="h4" fontWeight="bold">
                     Score: {quizResult.score}%
                   </MDTypography>
@@ -1817,6 +1857,50 @@ function WeeklyLearning() {
                 </MDBox>
               ) : (
                 <>
+                  {error && (
+                    <MDTypography role="alert" variant="body2" color="error" mb={2}>
+                      {error}
+                    </MDTypography>
+                  )}
+                  <MDBox mb={2.5} p={2} sx={{ bgcolor: palette.accentSoft, borderRadius: "14px" }}>
+                    <MDBox display="flex" justifyContent="space-between" gap={1} mb={1}>
+                      <MDTypography
+                        variant="button"
+                        fontWeight="bold"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        Question {quizStep + 1} of {activeQuiz.questions.length}
+                      </MDTypography>
+                      <MDTypography variant="caption" color="text">
+                        {activeQuiz.questions.length - findMissingQuizQuestions().length} answered
+                      </MDTypography>
+                    </MDBox>
+                    <MDProgress
+                      color="info"
+                      value={
+                        ((activeQuiz.questions.length - findMissingQuizQuestions().length) /
+                          Math.max(1, activeQuiz.questions.length)) *
+                        100
+                      }
+                    />
+                    <MDBox display="flex" gap={0.75} flexWrap="wrap" mt={1.5}>
+                      {activeQuiz.questions.map((question, index) => (
+                        <MDButton
+                          key={question.id}
+                          size="small"
+                          color="info"
+                          variant={quizStep === index ? "contained" : "outlined"}
+                          aria-label={`Go to question ${index + 1}`}
+                          aria-pressed={quizStep === index}
+                          onClick={() => setQuizStep(index)}
+                          sx={{ minWidth: 36, px: 1 }}
+                        >
+                          {index + 1}
+                        </MDButton>
+                      ))}
+                    </MDBox>
+                  </MDBox>
                   {quizMissing.length > 0 && (
                     <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#fff7ed" }}>
                       <MDTypography variant="body2" color="warning" fontWeight="bold">
@@ -1833,11 +1917,7 @@ function WeeklyLearning() {
                               key={question.id}
                               label={`Go to Question ${questionIndex + 1}`}
                               color="warning"
-                              onClick={() =>
-                                document
-                                  .getElementById(`quiz-question-${question.id}`)
-                                  ?.scrollIntoView({ behavior: "smooth", block: "center" })
-                              }
+                              onClick={() => setQuizStep(questionIndex)}
                             />
                           );
                         })}
@@ -1851,12 +1931,11 @@ function WeeklyLearning() {
                         key={question.id || index}
                         variant="outlined"
                         sx={{
-                          bgcolor: ["#eff6ff", "#f0fdf4", "#fff7ed", "#faf5ff", "#fef2f2"][
-                            index % 5
-                          ],
-                          borderColor: ["#bfdbfe", "#bbf7d0", "#fed7aa", "#e9d5ff", "#fecaca"][
-                            index % 5
-                          ],
+                          display: index === quizStep ? "block" : "none",
+                          bgcolor: palette.surface,
+                          borderColor: palette.border,
+                          borderRadius: "16px",
+                          boxShadow: "none",
                         }}
                       >
                         <MDBox p={2}>
@@ -1982,6 +2061,21 @@ function WeeklyLearning() {
                                 return (
                                   <MDButton
                                     key={option}
+                                    aria-pressed={active}
+                                    sx={{
+                                      justifyContent: "flex-start",
+                                      textAlign: "left",
+                                      py: 1.5,
+                                      px: 2,
+                                      fontSize: ".9rem",
+                                      borderColor: active ? palette.accent : palette.border,
+                                      bgcolor: active ? palette.accentSoft : palette.surface,
+                                    }}
+                                    startIcon={
+                                      <Icon>
+                                        {active ? "check_circle" : "radio_button_unchecked"}
+                                      </Icon>
+                                    }
                                     variant={active ? "gradient" : "outlined"}
                                     color={active ? "info" : "dark"}
                                     onClick={() => {
@@ -2007,15 +2101,34 @@ function WeeklyLearning() {
                       </Card>
                     ))}
                   </MDBox>
-                  <MDBox mt={2} display="flex" justifyContent="flex-end">
+                  <MDBox mt={2} display="flex" justifyContent="space-between" gap={1}>
                     <MDButton
-                      variant="gradient"
-                      color="success"
-                      disabled={quizSubmitting}
-                      onClick={() => submitQuizTest(false)}
+                      variant="outlined"
+                      color="dark"
+                      disabled={quizStep === 0 || quizSubmitting}
+                      onClick={() => setQuizStep((step) => step - 1)}
                     >
-                      {quizSubmitting ? "Submitting..." : "Submit Quiz"}
+                      Previous
                     </MDButton>
+                    {quizStep < activeQuiz.questions.length - 1 ? (
+                      <MDButton
+                        color="info"
+                        variant="contained"
+                        endIcon={<Icon>arrow_forward</Icon>}
+                        onClick={() => setQuizStep((step) => step + 1)}
+                      >
+                        Next Question
+                      </MDButton>
+                    ) : (
+                      <MDButton
+                        variant="gradient"
+                        color="success"
+                        disabled={quizSubmitting}
+                        onClick={() => submitQuizTest(false)}
+                      >
+                        {quizSubmitting ? "Submitting..." : "Submit Quiz"}
+                      </MDButton>
+                    )}
                   </MDBox>
                 </>
               )}

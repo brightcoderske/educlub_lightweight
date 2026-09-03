@@ -13,6 +13,10 @@ import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDInput from "components/MDInput";
 import MDButton from "components/MDButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import IconButton from "@mui/material/IconButton";
+import Icon from "@mui/material/Icon";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -31,6 +35,12 @@ function formatCell(value) {
 
 function renderCell(item, column, navigate) {
   const value = item[column.key];
+
+  // A column can render itself when one cell is really two fields - a price and
+  // its currency, say - so the table does not need a column for each.
+  if (typeof column.render === "function") {
+    return column.render(item);
+  }
 
   if (column.type === "internalLink" && value) {
     return (
@@ -89,6 +99,9 @@ function AdminResourcePage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Several actions per row grew every row to three lines. Edit stays visible;
+  // the rest live behind this menu.
+  const [rowMenu, setRowMenu] = useState({ anchor: null, item: null });
 
   const cacheKey = `system-admin-resource:${endpoint}`;
 
@@ -250,13 +263,15 @@ function AdminResourcePage({
               </MDTypography>
             )}
             {loading ? (
-              <MDTypography variant="body2">Loading...</MDTypography>
+              <MDTypography variant="caption" color="text">
+                Loading…
+              </MDTypography>
             ) : items.length === 0 ? (
-              <MDTypography variant="body2" color="text">
+              <MDTypography variant="caption" color="text">
                 No records yet.
               </MDTypography>
             ) : (
-              <TableContainer>
+              <TableContainer sx={{ overflowX: "auto" }}>
                 <Table size="small">
                   <TableHead sx={{ display: "table-header-group" }}>
                     <TableRow>
@@ -266,7 +281,7 @@ function AdminResourcePage({
                         </TableCell>
                       ))}
                       {(actions.length > 0 || formFields.length > 0) && (
-                        <TableCell align="center">Actions</TableCell>
+                        <TableCell align="right">Actions</TableCell>
                       )}
                     </TableRow>
                   </TableHead>
@@ -279,11 +294,17 @@ function AdminResourcePage({
                           </TableCell>
                         ))}
                         {(actions.length > 0 || formFields.length > 0) && (
-                          <TableCell align="center">
-                            <MDBox display="flex" gap={1} justifyContent="center" flexWrap="wrap">
+                          <TableCell align="right">
+                            <MDBox
+                              display="flex"
+                              gap={0.5}
+                              justifyContent="flex-end"
+                              alignItems="center"
+                              flexWrap="nowrap"
+                            >
                               {formFields.length > 0 && (
                                 <MDButton
-                                  variant="outlined"
+                                  variant="text"
                                   color="info"
                                   size="small"
                                   onClick={() => startEdit(item)}
@@ -291,17 +312,17 @@ function AdminResourcePage({
                                   Edit
                                 </MDButton>
                               )}
-                              {actions.map((action) => (
-                                <MDButton
-                                  key={action.label}
-                                  variant={action.variant || "outlined"}
-                                  color={action.color || "info"}
+                              {actions.length > 0 && (
+                                <IconButton
                                   size="small"
-                                  onClick={() => navigate(action.path(item))}
+                                  aria-label="More actions"
+                                  onClick={(event) =>
+                                    setRowMenu({ anchor: event.currentTarget, item })
+                                  }
                                 >
-                                  {action.label}
-                                </MDButton>
-                              ))}
+                                  <Icon fontSize="small">more_vert</Icon>
+                                </IconButton>
+                              )}
                             </MDBox>
                           </TableCell>
                         )}
@@ -314,6 +335,25 @@ function AdminResourcePage({
           </MDBox>
         </Card>
       </MDBox>
+      <Menu
+        anchorEl={rowMenu.anchor}
+        open={Boolean(rowMenu.anchor)}
+        onClose={() => setRowMenu({ anchor: null, item: null })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        {actions.map((action) => (
+          <MenuItem
+            key={action.label}
+            onClick={() => {
+              navigate(action.path(rowMenu.item));
+              setRowMenu({ anchor: null, item: null });
+            }}
+          >
+            {action.label}
+          </MenuItem>
+        ))}
+      </Menu>
       <Footer />
     </DashboardLayout>
   );

@@ -1,11 +1,72 @@
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 const jwt = require("jsonwebtoken");
+const { withTransaction } = require("../database/transaction");
 const { query, runWithDbContext } = require("../config");
 const env = require("../config/env");
 const { sendMFACode, sendPasswordResetLinkEmail } = require("../utils/email");
 const privacyService = require("./privacy.service");
 const sessionService = require("./session.service");
+
+const profilePhotoDirectory = path.join(__dirname, "../../uploads/profile-photos");
+const profilePhotoPathPattern = /^\/uploads\/profile-photos\/[a-f0-9-]{36}\.(?:jpg|png)$/;
+
+function decodeProfilePhoto(dataUrl) {
+  if (dataUrl === null) return null;
+  if (typeof dataUrl !== "string" || dataUrl.length > 350000) {
+    throw Object.assign(new Error("Choose a photo smaller than 256 KB after resizing."), { statusCode: 400 });
+  }
+  const match = dataUrl.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match) throw Object.assign(new Error("Choose a JPG or PNG photo."), { statusCode: 400 });
+  const buffer = Buffer.from(match[2], "base64");
+  const png = buffer.length >= 33 && buffer.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")) &&
+    buffer.toString("ascii", 12, 16) === "IHDR" && buffer.readUInt32BE(16) > 0 &&
+    buffer.readUInt32BE(20) > 0 && buffer.readUInt32BE(16) <= 2048 && buffer.readUInt32BE(20) <= 2048;
+  const jpeg = buffer.length >= 20 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff &&
+    buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+  if (buffer.length > 256 * 1024 || buffer.toString("base64") !== match[2] ||
+      !(match[1] === "png" ? png : jpeg)) {
+    throw Object.assign(new Error("That photo is invalid or too large. Choose another JPG or PNG."), { statusCode: 400 });
+  }
+  return { buffer, extension: match[1] === "png" ? "png" : "jpg" };
+}
+
+async function removeProfilePhotoFile(photoPath) {
+  if (typeof photoPath !== "string" || !profilePhotoPathPattern.test(photoPath)) return;
+  await fs.unlink(path.join(profilePhotoDirectory, path.basename(photoPath))).catch((error) => {
+    if (error.code !== "ENOENT") console.error("Profile photo cleanup failed:", error.code);
+  });
+}
+
+async function updateProfilePhoto(userId, dataUrl) {
+  const photo = decodeProfilePhoto(dataUrl);
+  let photoPath = null;
+  if (photo) {
+    await fs.mkdir(profilePhotoDirectory, { recursive: true });
+    const fileName = `${crypto.randomUUID()}.${photo.extension}`;
+    await fs.writeFile(path.join(profilePhotoDirectory, fileName), photo.buffer, { flag: "wx" });
+    photoPath = `/uploads/profile-photos/${fileName}`;
+  }
+  let previousPath;
+  try {
+    previousPath = await withTransaction(async (client) => {
+      const result = await client.query(
+        "SELECT profile_photo_url FROM users WHERE id = $1 AND role = 'learner' AND is_active = true FOR UPDATE",
+        [userId],
+      );
+      if (!result.rows[0]) throw Object.assign(new Error("Learner account not found."), { statusCode: 404 });
+      await client.query("UPDATE users SET profile_photo_url = $1, updated_at = NOW() WHERE id = $2", [photoPath, userId]);
+      return result.rows[0].profile_photo_url;
+    });
+  } catch (error) {
+    await removeProfilePhotoFile(photoPath);
+    throw error;
+  }
+  await removeProfilePhotoFile(previousPath);
+  return { profilePhotoUrl: photoPath };
+}
 
 function validatePasswordPolicy(password) {
   const failures = [];
@@ -99,6 +160,7 @@ async function buildAuthResponse(user, extra = {}) {
       username: user.username,
       schoolName: school?.name || null,
       schoolLogoUrl: school?.logo_url || null,
+      profilePhotoUrl: user.profile_photo_url || null,
       forcePasswordReset: user.force_password_reset,
       consentRequired,
     },
@@ -118,6 +180,9 @@ async function refreshSession(userId) {
   if (!user) {
     throw new Error("User account is no longer active.");
   }
+  // The third way into a session. Without this a teacher holding a live refresh
+  // token would renew indefinitely and never notice the suspension.
+  await assertSchoolNotSuspended(user);
   return buildAuthResponse(user);
 }
 
@@ -367,6 +432,36 @@ async function confirmPasswordReset(token, newPassword) {
   return { message: "Password updated successfully. You can now sign in." };
 }
 
+/**
+ * A suspended school keeps its own administrator: they are the person who has
+ * to read the notice and settle whatever caused the suspension, so locking them
+ * out would leave nobody able to fix it. Learners and teachers are refused.
+ *
+ * Checked after the password, so the message cannot be used to discover which
+ * schools are suspended without valid credentials.
+ */
+async function assertSchoolNotSuspended(user) {
+  if (!user.school_id || user.role === "system_admin" || user.role === "school_admin") {
+    return;
+  }
+
+  const result = await query(
+    "SELECT is_active, suspension_reason FROM schools WHERE id = $1",
+    [user.school_id],
+  );
+  const school = result.rows[0];
+
+  if (school && school.is_active === false) {
+    const error = new Error(
+      school.suspension_reason
+        ? `Your school's eduClub access is paused: ${school.suspension_reason}. Please ask your school administrator.`
+        : "Your school's eduClub access is paused. Please ask your school administrator.",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
 async function login(email, password, trustedDeviceToken) {
   const result = await query(
     "SELECT * FROM users WHERE (LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($1)) AND is_active = true",
@@ -377,6 +472,8 @@ async function login(email, password, trustedDeviceToken) {
   if (!user || !(await bcrypt.compare(password, user.password))) {
     throw new Error("Invalid credentials");
   }
+
+  await assertSchoolNotSuspended(user);
 
   if (await isMfaRequiredForUser(user)) {
     if (await isTrustedMfaDevice(user.id, trustedDeviceToken)) {
@@ -429,6 +526,11 @@ async function verify2FA(
     throw new Error("User not found");
   }
 
+  // The second leg of MFA is its own way into a session, so it carries the same
+  // guard as the first. Without it a suspension applied mid-login would be
+  // bypassed by simply finishing the code entry.
+  await assertSchoolNotSuspended(user);
+
   if (!user.mfa_code_hash || new Date() > new Date(user.mfa_code_expires_at)) {
     throw new Error("MFA code has expired");
   }
@@ -465,7 +567,7 @@ async function getCurrentUser(userId) {
   const result = await query(
     `SELECT u.id, u.email, u.role, u.full_name, u.school_id, u.username,
             u.force_password_reset, s.name AS school_name,
-            s.logo_url AS school_logo_url
+            s.logo_url AS school_logo_url, u.profile_photo_url
      FROM users u
      LEFT JOIN schools s ON s.id = u.school_id
      WHERE u.id = $1`,
@@ -478,6 +580,7 @@ async function getCurrentUser(userId) {
 
   return {
     ...user,
+    profilePhotoUrl: user.profile_photo_url || null,
     consentRequired: !(await privacyService.hasCurrentConsent(userId)),
   };
 }
@@ -545,6 +648,9 @@ function generateMFACode() {
 }
 
 module.exports = {
+  assertSchoolNotSuspended,
+  decodeProfilePhoto,
+  updateProfilePhoto,
   login,
   refreshSession,
   verify2FA,

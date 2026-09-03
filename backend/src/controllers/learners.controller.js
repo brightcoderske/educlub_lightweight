@@ -8,6 +8,8 @@ const { generateRandomPassword, hashPassword } = require("../utils/password");
 const teacherAssignmentsService = require("../services/teacherAssignments.service");
 const academicService = require("../services/academic.service");
 const { normalizeGrade } = require("../utils/grade");
+const streakService = require("../services/streak.service");
+const { getSchoolPopulation } = require("../services/schoolPopulation.service");
 
 function canManageLearner(user, learner) {
   if (user.role === "system_admin") {
@@ -280,6 +282,49 @@ async function getLearnerById(req, res) {
   }
 }
 
+async function getPopulation(req, res) {
+  try {
+    // A system administrator can ask about any school; everyone else is pinned
+    // to their own, so the query parameter cannot be used to read across a
+    // tenant boundary.
+    const schoolId =
+      req.user.role === "system_admin"
+        ? req.query.school_id || req.user.schoolId
+        : req.user.schoolId;
+
+    if (!schoolId) {
+      return res.json([]);
+    }
+
+    res.json(await getSchoolPopulation(schoolId));
+  } catch (error) {
+    console.error("Get school population error:", error);
+    res.status(500).json({ error: "Failed to load school population" });
+  }
+}
+
+async function getLearnerStreak(req, res) {
+  try {
+    const result = await query("SELECT * FROM learners WHERE id = $1", [
+      req.params.id,
+    ]);
+    const learner = result.rows[0];
+
+    if (!learner) {
+      return res.status(404).json({ error: "Learner not found" });
+    }
+
+    if (!canManageLearner(req.user, learner)) {
+      return res.status(403).json({ error: "Learner is outside your access" });
+    }
+
+    res.json(await streakService.getLearnerStreak(learner.id));
+  } catch (error) {
+    console.error("Get learner streak error:", error);
+    res.status(500).json({ error: "Failed to load streak" });
+  }
+}
+
 async function updateLearner(req, res) {
   try {
     const {
@@ -316,6 +361,24 @@ async function updateLearner(req, res) {
         ? existingLearner.full_name
         : full_name || existingLearner.full_name;
 
+    // A learner owns exactly one field on their own record: the grade they are
+    // in. Stream, term, academic year and email are placement data an operator
+    // sets - they drive allocations, report cards and promotion, so a child
+    // typing into them would silently move themselves out of their own class.
+    // The profile screen renders those read-only; this is what makes that true
+    // rather than decorative.
+    const selfEdit = req.user.role === "learner";
+    let nextGrade = existingLearner.grade;
+
+    if (grade !== undefined) {
+      nextGrade = normalizeGrade(grade);
+      if (selfEdit && !nextGrade) {
+        return res
+          .status(400)
+          .json({ error: "Choose a grade between Grade 1 and Grade 12." });
+      }
+    }
+
     const result = await query(
       `UPDATE learners
        SET school_id = $1, full_name = $2, email = $3, grade = $4, term = $5,
@@ -325,17 +388,15 @@ async function updateLearner(req, res) {
       [
         nextSchoolId,
         nextFullName,
-        email !== undefined ? email : existingLearner.email,
-        grade !== undefined ? normalizeGrade(grade) : existingLearner.grade,
-        term !== undefined ? term : existingLearner.term,
-        academic_year !== undefined
+        !selfEdit && email !== undefined ? email : existingLearner.email,
+        nextGrade,
+        !selfEdit && term !== undefined ? term : existingLearner.term,
+        !selfEdit && academic_year !== undefined
           ? academic_year
           : existingLearner.academic_year,
-        stream !== undefined ? stream : existingLearner.stream,
-        req.user.role === "learner"
-          ? existingLearner.next_grade
-          : normalizeGrade(next_grade),
-        req.user.role === "learner" ? existingLearner.next_term : next_term,
+        !selfEdit && stream !== undefined ? stream : existingLearner.stream,
+        selfEdit ? existingLearner.next_grade : normalizeGrade(next_grade),
+        selfEdit ? existingLearner.next_term : next_term,
         req.params.id,
       ]
     );
@@ -651,6 +712,8 @@ async function downloadCredentialCards(req, res) {
 
 module.exports = {
   getAllLearners,
+  getLearnerStreak,
+  getPopulation,
   createLearner,
   bulkCreateLearners,
   getLearnerById,

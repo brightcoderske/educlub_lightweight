@@ -49,7 +49,10 @@ export function fingerForKey(key) {
   const lower = String(key || "").toLowerCase();
   if (lower === " ") return "either thumb on the space bar";
   if (!lower) return "";
-  if (lower !== key) return `${HOME_ROW_FINGERS[lower] || REACH_FINGERS[lower] || "the nearest finger"}, with the opposite Shift`;
+  if (lower !== key)
+    return `${
+      HOME_ROW_FINGERS[lower] || REACH_FINGERS[lower] || "the nearest finger"
+    }, with the opposite Shift`;
   return HOME_ROW_FINGERS[lower] || REACH_FINGERS[lower] || "the nearest comfortable finger";
 }
 
@@ -160,7 +163,11 @@ const beginnerLevels = [
       "first",
       "artist",
     ],
-    phrases: ["the tidy artist likes stars", "try that first drill", "they said the truth is steady"],
+    phrases: [
+      "the tidy artist likes stars",
+      "try that first drill",
+      "they said the truth is steady",
+    ],
   },
   {
     newKeys: "o w",
@@ -252,7 +259,11 @@ const intermediateLevels = [
     teaches:
       "Q and Z are the least used letters, both on your left little finger. Meet them once and move on.",
     words: ["quiz", "quick", "zebra", "zone", "quiet", "squeeze", "prize", "amazing", "puzzle"],
-    phrases: ["a quick zebra wins the quiz prize", "squeeze into the quiet zone", "an amazing puzzle"],
+    phrases: [
+      "a quick zebra wins the quiz prize",
+      "squeeze into the quiet zone",
+      "an amazing puzzle",
+    ],
   },
   {
     newKeys: "x",
@@ -431,7 +442,20 @@ const speedLevels = [
     focus: "The commonest words",
     teaches:
       "These words make up a quarter of everything you will ever type. Learn them as shapes, not letters.",
-    words: ["the", "and", "for", "you", "that", "with", "this", "have", "from", "they", "what", "when"],
+    words: [
+      "the",
+      "and",
+      "for",
+      "you",
+      "that",
+      "with",
+      "this",
+      "have",
+      "from",
+      "they",
+      "what",
+      "when",
+    ],
     phrases: [],
   },
   {
@@ -456,7 +480,8 @@ const speedLevels = [
   {
     newKeys: "",
     focus: "Common word endings",
-    teaches: "Endings like -ing and -tion repeat constantly. Drill them until they feel like one key.",
+    teaches:
+      "Endings like -ing and -tion repeat constantly. Drill them until they feel like one key.",
     words: ["running", "reading", "writing", "action", "station", "question", "quickly", "slowly"],
     phrases: [],
   },
@@ -498,7 +523,8 @@ const speedLevels = [
   {
     newKeys: "",
     focus: "Paragraph pace",
-    teaches: "A full paragraph at speed. Read ahead so your fingers are never waiting for your eyes.",
+    teaches:
+      "A full paragraph at speed. Read ahead so your fingers are never waiting for your eyes.",
     words: [],
     phrases: [
       "Every skill worth having starts out feeling clumsy. The trick is to keep going long enough for the clumsy part to end, because it always does, usually sooner than you expect.",
@@ -521,7 +547,8 @@ const accuracyLevels = [
   {
     newKeys: "",
     focus: "Letters that swap",
-    teaches: "B and D, P and Q look alike and feel alike. Say each one in your head as you press it.",
+    teaches:
+      "B and D, P and Q look alike and feel alike. Say each one in your head as you press it.",
     words: ["bad", "dab", "pad", "bap", "quid", "bead", "dead", "deep", "beep"],
     phrases: [],
   },
@@ -566,7 +593,8 @@ const accuracyLevels = [
   {
     newKeys: "",
     focus: "Careful sentences",
-    teaches: "Speed is not being measured here. Aim for a clean run from the first key to the last.",
+    teaches:
+      "Speed is not being measured here. Aim for a clean run from the first key to the last.",
     words: [],
     phrases: [
       "The committee definitely believes it is necessary to separate the two addresses before Friday.",
@@ -644,7 +672,8 @@ const trackDefinitions = [
   {
     key: "accuracy-master",
     title: "Accuracy Master",
-    description: "Slow down just enough to remove every error, then hold that standard on long passages.",
+    description:
+      "Slow down just enough to remove every error, then hold that standard on long passages.",
     baseGoalWpm: 22,
     levels: accuracyLevels,
     showKeyboard: false,

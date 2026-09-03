@@ -30,9 +30,16 @@ import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import { useMaterialUIController, setMiniSidenav } from "context";
 import { useAuth } from "context/AuthContext";
+import { LearningArt } from "components/DashboardIdentity";
+import { useAppPalette } from "lib/appTheme";
 
 function Sidenav({ brand, brandName, routes }) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const palette = useAppPalette();
+  const learnerView = user?.role === "learner";
+  // The rail is dark for the learner area by design, and follows the theme
+  // everywhere else so a teacher's night view is not a white column.
+  const railDark = learnerView || palette.dark;
   const [controller, dispatch] = useMaterialUIController();
   const desktop = useMediaQuery((theme) => theme.breakpoints.up("lg"));
   const { pathname } = useLocation();
@@ -65,8 +72,8 @@ function Sidenav({ brand, brandName, routes }) {
           height: "100dvh",
           m: 0,
           borderRadius: 0,
-          background: "#ffffff",
-          borderRight: "1px solid #e2e8f0",
+          background: railDark ? "linear-gradient(170deg, #111331, #07152a)" : "#ffffff",
+          borderRight: railDark ? "1px solid #21213c" : "1px solid #e2e8f0",
           boxShadow: desktop ? "none" : "8px 0 30px rgba(15,23,42,0.12)",
           overflowX: "hidden",
           transition: "width 180ms ease",
@@ -80,11 +87,11 @@ function Sidenav({ brand, brandName, routes }) {
         px={2}
         height={72}
         flexShrink={0}
-        borderBottom="1px solid #edf1f5"
+        borderBottom={railDark ? "1px solid #2a2843" : "1px solid #edf1f5"}
       >
         <MDBox
           component={NavLink}
-          to="/"
+          to={learnerView ? "/learner" : "/"}
           display="flex"
           alignItems="center"
           gap={1.25}
@@ -106,7 +113,8 @@ function Sidenav({ brand, brandName, routes }) {
               variant="button"
               fontWeight="bold"
               sx={{
-                color: "#172b46",
+                color: railDark ? "#ffffff" : "#172b46",
+                fontSize: learnerView ? "1.35rem" : undefined,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -120,7 +128,7 @@ function Sidenav({ brand, brandName, routes }) {
           <IconButton
             aria-label="Close navigation"
             onClick={close}
-            sx={{ ml: "auto", color: "#475569" }}
+            sx={{ ml: "auto", color: railDark ? "#ddd6ff" : "#475569" }}
           >
             <Icon>close</Icon>
           </IconButton>
@@ -143,13 +151,16 @@ function Sidenav({ brand, brandName, routes }) {
                     if (!desktop) close();
                   }}
                   sx={{
-                    minHeight: 42,
+                    minHeight: learnerView ? 46 : 42,
                     px: collapsed ? 1.25 : 1.5,
                     borderRadius: "8px",
-                    color: "#475569",
-                    "&.Mui-selected": { bgcolor: "#eaf2ff", color: "#175cd3" },
-                    "&:hover": { bgcolor: "#f1f5f9" },
-                    "&.Mui-selected:hover": { bgcolor: "#deebff" },
+                    color: railDark ? "#c4c6dc" : "#475569",
+                    "&.Mui-selected": {
+                      bgcolor: railDark ? "#5636bb" : "#eaf2ff",
+                      color: railDark ? "#fff" : "#175cd3",
+                    },
+                    "&:hover": { bgcolor: railDark ? "#252244" : "#f1f5f9" },
+                    "&.Mui-selected:hover": { bgcolor: railDark ? "#6644cf" : "#deebff" },
                     "&:focus-visible": { outline: "2px solid #2563eb", outlineOffset: 1 },
                   }}
                 >
@@ -176,7 +187,33 @@ function Sidenav({ brand, brandName, routes }) {
             </ListItem>
           ))}
       </List>
-      <MDBox p={1.25} borderTop="1px solid #edf1f5" flexShrink={0}>
+      {learnerView && !collapsed && (
+        <MDBox
+          mx={2}
+          mb={2}
+          p={2}
+          borderRadius="16px"
+          sx={{
+            textAlign: "center",
+            background: "linear-gradient(135deg,#282053,#162440)",
+            border: "1px solid #453665",
+            "@media (max-height: 720px)": { display: "none" },
+          }}
+        >
+          <LearningArt kind="rocket" size={64} />
+          <MDTypography variant="button" sx={{ color: "#fff", display: "block", fontWeight: 700 }}>
+            Small steps. Big ideas.
+          </MDTypography>
+          <MDTypography variant="caption" sx={{ color: "#c6bfdf", display: "block", mt: 0.5 }}>
+            Your next discovery is waiting.
+          </MDTypography>
+        </MDBox>
+      )}
+      <MDBox
+        p={1.25}
+        borderTop={railDark ? "1px solid #2a2843" : "1px solid #edf1f5"}
+        flexShrink={0}
+      >
         <Tooltip title={collapsed ? "Log out" : ""} placement="right">
           <ListItemButton
             component="button"
@@ -187,8 +224,8 @@ function Sidenav({ brand, brandName, routes }) {
               minHeight: 44,
               px: 1.5,
               borderRadius: "8px",
-              color: "#475569",
-              "&:hover": { bgcolor: "#f1f5f9" },
+              color: railDark ? "#c4c6dc" : "#475569",
+              "&:hover": { bgcolor: railDark ? "#252244" : "#f1f5f9" },
             }}
           >
             <ListItemIcon sx={{ minWidth: collapsed ? 28 : 34, color: "inherit" }}>

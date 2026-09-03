@@ -13,6 +13,7 @@ router.post("/logout", authController.logout);
 router.post("/logout-all", authenticateToken, authController.logoutAll);
 router.post("/refresh", validate({ body: authValidation.refresh }), authController.refreshSession);
 router.get("/me", authenticateToken, authController.getCurrentUser);
+router.put("/profile-photo", authenticateToken, requireRole("learner"), authController.updateProfilePhoto);
 router.get(
   "/mfa-policy",
   authenticateToken,

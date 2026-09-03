@@ -78,129 +78,16 @@ async function saveReportCardSettings(user, schoolId, settings) {
   return normalizeReportCardSettings(result.rows[0].report_card_settings);
 }
 
-async function ensureReportFeedbackTable() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS report_feedback (
-      id SERIAL PRIMARY KEY,
-      learner_id INTEGER REFERENCES learners(id) ON DELETE CASCADE,
-      school_id INTEGER REFERENCES schools(id) ON DELETE CASCADE,
-      term VARCHAR(50) NOT NULL,
-      academic_year INTEGER NOT NULL,
-      comment_text TEXT NOT NULL,
-      created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      updated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(learner_id, term, academic_year)
-    )
-  `);
-  await query(
-    "CREATE INDEX IF NOT EXISTS idx_report_feedback_period ON report_feedback(school_id, academic_year, term)"
-  );
-  await query("ALTER TABLE report_feedback ENABLE ROW LEVEL SECURITY");
-  await query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public'
-          AND tablename = 'report_feedback'
-          AND policyname = 'report_feedback_role_access'
-      ) THEN
-        CREATE POLICY report_feedback_role_access ON report_feedback
-          FOR SELECT
-          USING (
-            (SELECT public.educlub_role()) = 'system_admin'
-            OR EXISTS (
-              SELECT 1 FROM learners l
-              WHERE l.id = learner_id
-                AND (
-                  (
-                    (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
-                    AND l.school_id = (SELECT public.educlub_school_id())
-                  )
-                  OR (
-                    (SELECT public.educlub_role()) = 'learner'
-                    AND l.user_id = (SELECT public.educlub_user_id())
-                  )
-                )
-            )
-          );
-      END IF;
-
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public'
-          AND tablename = 'report_feedback'
-          AND policyname = 'report_feedback_staff_insert'
-      ) THEN
-        CREATE POLICY report_feedback_staff_insert ON report_feedback
-          FOR INSERT
-          WITH CHECK (
-            (SELECT public.educlub_role()) = 'system_admin'
-            OR EXISTS (
-              SELECT 1 FROM learners l
-              WHERE l.id = learner_id
-                AND l.school_id = school_id
-                AND (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
-                AND l.school_id = (SELECT public.educlub_school_id())
-            )
-          );
-      END IF;
-
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public'
-          AND tablename = 'report_feedback'
-          AND policyname = 'report_feedback_staff_update'
-      ) THEN
-        CREATE POLICY report_feedback_staff_update ON report_feedback
-          FOR UPDATE
-          USING (
-            (SELECT public.educlub_role()) = 'system_admin'
-            OR EXISTS (
-              SELECT 1 FROM learners l
-              WHERE l.id = learner_id
-                AND l.school_id = school_id
-                AND (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
-                AND l.school_id = (SELECT public.educlub_school_id())
-            )
-          )
-          WITH CHECK (
-            (SELECT public.educlub_role()) = 'system_admin'
-            OR EXISTS (
-              SELECT 1 FROM learners l
-              WHERE l.id = learner_id
-                AND l.school_id = school_id
-                AND (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
-                AND l.school_id = (SELECT public.educlub_school_id())
-            )
-          );
-      END IF;
-
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE schemaname = 'public'
-          AND tablename = 'report_feedback'
-          AND policyname = 'report_feedback_staff_delete'
-      ) THEN
-        CREATE POLICY report_feedback_staff_delete ON report_feedback
-          FOR DELETE
-          USING (
-            (SELECT public.educlub_role()) = 'system_admin'
-            OR EXISTS (
-              SELECT 1 FROM learners l
-              WHERE l.id = learner_id
-                AND l.school_id = school_id
-                AND (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
-                AND l.school_id = (SELECT public.educlub_school_id())
-            )
-          );
-      END IF;
-    END
-    $$;
-  `);
-}
+// report_feedback, its index and its row level security policies all live in
+// schema.sql and are created by the migration, which translates them for the
+// MariaDB the application runs on in production.
+//
+// This file used to re-create them lazily on every report read. That duplicate
+// was written in PostgreSQL-only syntax - CREATE INDEX IF NOT EXISTS, ENABLE
+// ROW LEVEL SECURITY, and a DO $$ block over pg_policies - none of which
+// MariaDB accepts, so generating a learner report failed there outright. It
+// also issued DDL on a read path. The migration is the one place that owns
+// schema.
 
 async function getAllReports() {
   const result = await query("SELECT * FROM reports ORDER BY created_at DESC");
@@ -907,7 +794,6 @@ async function hasReportPeriodData(learnerId, term, academicYear) {
 }
 
 async function getReportFeedback(learnerId, term, academicYear) {
-  await ensureReportFeedbackTable();
   const result = await query(
     `SELECT rf.*, u.full_name AS updated_by_name
      FROM report_feedback rf
@@ -926,7 +812,6 @@ async function saveReportFeedback(
   academicYear,
   commentText
 ) {
-  await ensureReportFeedbackTable();
   const learnerResult = await query(
     "SELECT id, school_id, full_name FROM learners WHERE id = $1 LIMIT 1",
     [learnerId]

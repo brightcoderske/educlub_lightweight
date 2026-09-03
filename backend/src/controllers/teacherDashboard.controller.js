@@ -1,9 +1,10 @@
 const { query } = require("../config");
+const { getSchoolPopulation } = require("../services/schoolPopulation.service");
 
 async function getDashboard(req, res) {
   try {
     const params = [req.user.userId, req.user.schoolId];
-    const [courses, summary, submissions, schedule] = await Promise.all([
+    const [courses, summary, submissions, schedule, population] = await Promise.all([
       query(
         `SELECT c.id, c.name, c.description, c.template_version,
                 c.school_version, c.is_active,
@@ -69,6 +70,7 @@ async function getDashboard(req, res) {
          LIMIT 8`,
         params,
       ),
+      getSchoolPopulation(req.user.schoolId),
     ]);
 
     res.json({
@@ -76,6 +78,7 @@ async function getDashboard(req, res) {
       courses: courses.rows,
       recentSubmissions: submissions.rows,
       currentSchedule: schedule.rows,
+      population,
     });
   } catch (error) {
     console.error("Teacher dashboard error:", error);

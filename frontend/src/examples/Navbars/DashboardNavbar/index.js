@@ -16,7 +16,7 @@ Coded by www.creative-tim.com
 import { useState, useEffect } from "react";
 
 // react-router components
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 // prop-types is a library for typechecking of props.
 import PropTypes from "prop-types";
@@ -34,6 +34,7 @@ import MenuItem from "@mui/material/MenuItem";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDAvatar from "components/MDAvatar";
+import { LearningArt } from "components/DashboardIdentity";
 
 // Material Dashboard 2 React example components
 import Breadcrumbs from "examples/Breadcrumbs";
@@ -47,10 +48,17 @@ import {
 } from "examples/Navbars/DashboardNavbar/styles";
 
 // Material Dashboard 2 React context
-import { useMaterialUIController, setMiniSidenav } from "context";
+import { useMaterialUIController, setMiniSidenav, setAppTheme } from "context";
+import { storeAppTheme } from "lib/appThemeStorage";
+import { appPalette } from "lib/appTheme";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
-import { getRoleLabel, getUserDisplayName, getUserInitials } from "lib/userDisplay";
+import {
+  getRoleLabel,
+  getUserDisplayName,
+  getUserInitials,
+  getUserPhotoUrl,
+} from "lib/userDisplay";
 
 function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, subtitle, actions }) {
   const [hiddenOnScroll, setHiddenOnScroll] = useState(false);
@@ -58,7 +66,7 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, sub
   const [feedbackUnread, setFeedbackUnread] = useState(0);
   const [notificationAnchor, setNotificationAnchor] = useState(null);
   const [controller, dispatch] = useMaterialUIController();
-  const { miniSidenav, transparentNavbar, fixedNavbar, darkMode } = controller;
+  const { miniSidenav, transparentNavbar, fixedNavbar, darkMode, appTheme } = controller;
   const { user, logout } = useAuth();
   const route = useLocation().pathname.split("/").slice(1);
   const unreadCount = notifications.filter((item) => !item.is_read).length;
@@ -80,6 +88,22 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, sub
   }, [autoHideOnScroll]);
 
   const handleMiniSidenav = () => setMiniSidenav(dispatch, !miniSidenav);
+
+  // Saved on the device rather than the account: it is a comfort setting
+  // someone flips for the room they are sitting in, and persisting it here
+  // costs no request and survives a reload.
+  // The dashboards that carry themed surfaces. Offering the switch anywhere
+  // else would change the icon without changing the page.
+  const themedDashboard = ["learner", "teacher", "school_admin", "system_admin"].includes(
+    user?.role
+  );
+  const palette = appPalette(appTheme);
+  const themeIsDark = palette.dark;
+  const toggleAppTheme = () => {
+    const next = themeIsDark ? "light" : "dark";
+    setAppTheme(dispatch, next);
+    storeAppTheme(next);
+  };
 
   useEffect(() => {
     let active = true;
@@ -152,9 +176,12 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, sub
     }
   };
 
-  // Styles for the navbar icons
+  // Styles for the navbar icons. A themed dashboard takes its icon colour from
+  // the surface it sits on; everything else keeps the template's behaviour.
   const iconsStyle = ({ palette: { dark, white, text }, functions: { rgba } }) => ({
     color: () => {
+      if (themedDashboard) return palette.text;
+
       let colorValue = light || darkMode ? white.main : dark.main;
 
       if (transparentNavbar && !light) {
@@ -173,8 +200,8 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, sub
       color="inherit"
       sx={(theme) => ({
         ...navbar(theme, { transparentNavbar, absolute, light, darkMode }),
-        backgroundColor: "#ffffff !important",
-        border: "1px solid #e2e8f0",
+        backgroundColor: `${themedDashboard ? palette.surface : "#ffffff"} !important`,
+        border: `1px solid ${themedDashboard ? palette.border : "#e2e8f0"}`,
         borderRadius: "10px",
         boxShadow: "none",
         minHeight: 60,
@@ -204,8 +231,8 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, sub
               width: 40,
               height: 40,
               borderRadius: "8px",
-              color: "#334155",
-              bgcolor: "#f1f5f9",
+              color: themedDashboard ? palette.text : "#334155",
+              bgcolor: themedDashboard ? palette.surfaceSunken : "#f1f5f9",
               flexShrink: 0,
             }}
           >
@@ -220,7 +247,12 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, sub
                 color="text"
                 noWrap
                 title={typeof subtitle === "string" ? subtitle : undefined}
-                sx={{ display: "block", fontSize: "0.72rem", lineHeight: 1.5 }}
+                sx={{
+                  display: "block",
+                  fontSize: "0.72rem",
+                  lineHeight: 1.5,
+                  ...(themedDashboard && { color: `${palette.textMuted} !important` }),
+                }}
               >
                 {subtitle}
               </MDTypography>
@@ -259,15 +291,37 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, sub
               mr={{ xs: 0.5, sm: 1.5 }}
               minWidth={0}
             >
-              <MDAvatar
-                src={user?.schoolLogoUrl || undefined}
-                alt={user?.schoolName || getUserDisplayName(user)}
-                bgColor="info"
-                size="sm"
-                shadow="sm"
+              <MDBox
+                component={user?.role === "learner" ? Link : "span"}
+                to={user?.role === "learner" ? "/learner/profile" : undefined}
+                aria-label={user?.role === "learner" ? "Open my profile" : undefined}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 40,
+                  minHeight: 40,
+                  borderRadius: "50%",
+                }}
               >
-                {getUserInitials(user)}
-              </MDAvatar>
+                <MDAvatar
+                  src={
+                    user?.role === "learner"
+                      ? getUserPhotoUrl(user)
+                      : user?.schoolLogoUrl || undefined
+                  }
+                  alt={getUserDisplayName(user)}
+                  bgColor="info"
+                  size="sm"
+                  shadow="sm"
+                >
+                  {user?.role === "learner" ? (
+                    <LearningArt kind="kid" size={44} />
+                  ) : (
+                    getUserInitials(user)
+                  )}
+                </MDAvatar>
+              </MDBox>
               <MDBox lineHeight={1} minWidth={0} display={{ xs: "none", xl: "block" }}>
                 <MDTypography
                   variant="button"
@@ -298,6 +352,20 @@ function DashboardNavbar({ absolute, light, isMini, autoHideOnScroll, title, sub
               alignItems="center"
               flexShrink={0}
             >
+              {themedDashboard && (
+                <IconButton
+                  size="small"
+                  aria-label={themeIsDark ? "Switch to day theme" : "Switch to night theme"}
+                  aria-pressed={themeIsDark}
+                  title={themeIsDark ? "Day theme" : "Night theme"}
+                  disableRipple
+                  color="inherit"
+                  sx={navbarIconButton}
+                  onClick={toggleAppTheme}
+                >
+                  <Icon sx={iconsStyle}>{themeIsDark ? "light_mode" : "dark_mode"}</Icon>
+                </IconButton>
+              )}
               {user?.role === "learner" && (
                 <IconButton
                   size="small"

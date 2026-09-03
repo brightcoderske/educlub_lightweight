@@ -1,3 +1,12 @@
+import API_BASE_URL from "lib/apiBase";
+
+export function getUserPhotoUrl(user) {
+  const photo = user?.profilePhotoUrl || user?.profile_photo_url;
+  return typeof photo === "string" && photo.startsWith("/uploads/profile-photos/")
+    ? `${API_BASE_URL.replace(/\/api$/, "")}${photo}`
+    : undefined;
+}
+
 export function getUserDisplayName(user) {
   return user?.fullName || user?.full_name || user?.username || user?.email || "eduClub User";
 }

@@ -10,6 +10,8 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { LearnerHero } from "components/DashboardIdentity";
+import { useAppPalette } from "lib/appTheme";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { buildTypingPracticePath, fingerForKey, progressKey } from "./practicePath";
@@ -58,6 +60,7 @@ function firstAvailableActivity(track, progressMap) {
 
 function MyTypingTutor() {
   const { user, isLearner } = useAuth();
+  const palette = useAppPalette();
   const inputRef = useRef(null);
   const submitting = useRef(false);
   const pendingAttempt = useRef(null);
@@ -310,9 +313,29 @@ function MyTypingTutor() {
       <DashboardNavbar
         autoHideOnScroll
         title="My Typing Tutor"
-        subtitle="Self-paced keyboard practice. It is separate from report-card typing assessments."
+        subtitle="Build speed and confidence, one key at a time."
       />
-      <MDBox py={{ xs: 1.25, sm: 1.5 }} sx={{ bgcolor: "#f7fbf7", minHeight: "100vh" }}>
+      <MDBox py={3}>
+        {!practiceReady && !startedAt && (
+          <LearnerHero
+            eyebrow="READY, SET, TYPE!"
+            title="Little fingers. Big possibilities."
+            description="Find your home keys, follow the adventure path, and unlock new skills. A little practice makes a big difference."
+            art="keyboard"
+          >
+            <Chip
+              label={`${progressRows.filter((row) => row.passed).length} activities mastered`}
+              sx={{ bgcolor: palette.chipSurface, color: palette.accentText }}
+            />
+            <Chip
+              label={`Best: ${Math.max(
+                0,
+                ...progressRows.map((row) => Number(row.best_net_wpm) || 0)
+              ).toFixed(0)} WPM`}
+              sx={{ bgcolor: "#e2f8eb", color: "#157249" }}
+            />
+          </LearnerHero>
+        )}
         {error && (
           <MDTypography variant="caption" color="error" display="block" mb={1}>
             {error}
@@ -343,24 +366,40 @@ function MyTypingTutor() {
                 <MDTypography variant="h6" fontWeight="bold">
                   Adventure Path
                 </MDTypography>
-                <MDBox mt={1} display="flex" flexDirection="column" gap={0.75}>
+                <MDBox
+                  mt={1}
+                  display="flex"
+                  flexDirection={{ xs: "row", lg: "column" }}
+                  gap={0.75}
+                  sx={{ overflowX: "auto", pb: 0.5 }}
+                >
                   {tracks.map((track, trackIndex) => {
                     const completed = completedInTrack(track);
                     const total = track.levels.length * track.levels[0].activities.length;
                     const unlocked = trackUnlocked(trackIndex);
                     return (
                       <MDBox
+                        component="button"
+                        type="button"
+                        disabled={!unlocked || saving || saveFailed}
+                        aria-pressed={track.key === selectedTrack.key}
                         key={track.key}
                         p={1.1}
-                        border="1px solid #e5e7eb"
+                        border={`1px solid ${palette.border}`}
                         borderRadius="md"
                         onClick={() => {
                           if (unlocked) selectTrack(track);
                         }}
                         sx={{
+                          width: "100%",
+                          minWidth: { xs: 175, lg: 0 },
+                          flexShrink: 0,
+                          textAlign: "left",
+                          font: "inherit",
                           cursor: unlocked ? "pointer" : "not-allowed",
                           opacity: unlocked ? 1 : 0.64,
-                          bgcolor: track.key === selectedTrack.key ? "#eff6ff" : "#ffffff",
+                          bgcolor:
+                            track.key === selectedTrack.key ? palette.accentSoft : palette.surface,
                         }}
                       >
                         <MDTypography variant="button" fontWeight="bold">
@@ -371,12 +410,17 @@ function MyTypingTutor() {
                             ? `${completed}/${total} activities`
                             : "Locked until previous path is complete"}
                         </MDTypography>
-                        <MDBox mt={0.75} height={7} borderRadius={8} sx={{ bgcolor: "#e5e7eb" }}>
+                        <MDBox
+                          mt={0.75}
+                          height={7}
+                          borderRadius="8px"
+                          sx={{ bgcolor: palette.track }}
+                        >
                           <MDBox
                             height="100%"
-                            borderRadius={8}
+                            borderRadius="8px"
                             sx={{
-                              bgcolor: "#1e88e5",
+                              bgcolor: "#8050df",
                               width: `${Math.round((completed / total) * 100)}%`,
                             }}
                           />
@@ -407,6 +451,16 @@ function MyTypingTutor() {
                           size="small"
                           variant={level.number === selectedLevel.number ? "gradient" : "outlined"}
                           color="info"
+                          aria-label={`Level ${level.number}`}
+                          aria-pressed={level.number === selectedLevel.number}
+                          disabled={
+                            saving ||
+                            saveFailed ||
+                            !level.activities.some((activity, index) =>
+                              activityUnlocked(level.number - 1, index)
+                            )
+                          }
+                          sx={{ minWidth: 38, px: 1 }}
                           onClick={() => {
                             const firstUnlocked = level.activities.find((activity, index) =>
                               activityUnlocked(level.number - 1, index)
@@ -434,8 +488,12 @@ function MyTypingTutor() {
                       ];
                     const unlocked = activityUnlocked(selectedLevel.number - 1, index);
                     return (
-                      <Grid item xs={12} md={2.4} key={activity.key}>
+                      <Grid item xs={6} sm={4} md={2.4} key={activity.key}>
                         <MDBox
+                          component="button"
+                          type="button"
+                          disabled={!unlocked || saving || saveFailed}
+                          aria-pressed={activity.key === selectedActivity.key}
                           p={1.25}
                           borderRadius="md"
                           onClick={() => {
@@ -444,6 +502,11 @@ function MyTypingTutor() {
                             setSelectedActivityKey(activity.key);
                           }}
                           sx={{
+                            width: "100%",
+                            border: 0,
+                            textAlign: "left",
+                            font: "inherit",
+                            borderRadius: "12px",
                             minHeight: { xs: 70, md: 82 },
                             cursor: unlocked ? "pointer" : "not-allowed",
                             color: "#ffffff",
@@ -453,7 +516,7 @@ function MyTypingTutor() {
                                 : row?.passed
                                 ? "#22a06b"
                                 : unlocked
-                                ? "#1e88e5"
+                                ? "#7748d8"
                                 : "#94a3b8",
                           }}
                         >

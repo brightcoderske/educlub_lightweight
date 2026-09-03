@@ -17,9 +17,18 @@ function SystemAdminCourses() {
         { key: "target_level", label: "Level" },
         { key: "estimated_weeks", label: "Weeks" },
         { key: "course_category", label: "Category" },
-        { key: "independent_price_amount", label: "Independent Price" },
-        { key: "independent_currency", label: "Currency" },
-        { key: "version", label: "Version" },
+        // Price and currency are one fact, not two columns.
+        {
+          key: "independent_price_amount",
+          label: "Price",
+          render: (course) =>
+            Number(course.independent_price_amount) > 0
+              ? `${course.independent_currency || "KES"} ${Number(
+                  course.independent_price_amount
+                ).toLocaleString("en-KE")}`
+              : "Free",
+        },
+        { key: "version", label: "Ver." },
         { key: "is_active", label: "Active" },
       ]}
       actions={[

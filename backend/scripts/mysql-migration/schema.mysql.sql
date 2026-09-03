@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS users (
   FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE SET NULL
 );
 
+ALTER TABLE users ADD COLUMN profile_photo_url TEXT;
+
 ALTER TABLE users DROP CONSTRAINT users_role_check;
 
 ALTER TABLE users ADD CONSTRAINT users_role_check
@@ -99,6 +101,14 @@ ALTER TABLE learners ADD COLUMN graduation_status VARCHAR(20) NOT NULL DEFAULT '
 ALTER TABLE schools ADD COLUMN grades_config JSON DEFAULT ('[]');
 
 ALTER TABLE schools ADD COLUMN streams_config JSON DEFAULT ('[]');
+
+ALTER TABLE schools ADD COLUMN invoice_rate_per_learner DECIMAL(12, 2);
+
+ALTER TABLE schools ADD COLUMN invoice_currency VARCHAR(10) DEFAULT 'KES';
+
+ALTER TABLE schools ADD COLUMN suspended_at DATETIME;
+
+ALTER TABLE schools ADD COLUMN suspension_reason TEXT;
 
 ALTER TABLE audit_logs ADD COLUMN user_agent TEXT;
 
@@ -1246,6 +1256,46 @@ CREATE TABLE IF NOT EXISTS competition_payments (
   FOREIGN KEY (learner_id) REFERENCES learners(id) ON DELETE CASCADE,
   FOREIGN KEY (enrollment_id) REFERENCES competition_enrollments(id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS school_invoices (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  school_id INT NOT NULL,
+  term VARCHAR(50) NOT NULL,
+  academic_year INT NOT NULL,
+  learner_count INT NOT NULL DEFAULT 0,
+  rate_per_learner DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  currency VARCHAR(10) NOT NULL DEFAULT 'KES',
+  status VARCHAR(20) NOT NULL DEFAULT 'issued'
+    CHECK (status IN ('issued', 'paid', 'void')),
+  notes TEXT,
+  issued_by INT,
+  issued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  paid_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (school_id, term, academic_year),
+  FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE,
+  FOREIGN KEY (issued_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+ALTER TABLE school_invoices ADD COLUMN due_at DATE;
+
+ALTER TABLE school_invoices ADD COLUMN discount_percent DECIMAL(5, 2) DEFAULT 0;
+
+ALTER TABLE school_invoices ADD COLUMN tax_percent DECIMAL(5, 2) DEFAULT 0;
+
+ALTER TABLE school_invoices ADD COLUMN amount_paid DECIMAL(12, 2) DEFAULT 0;
+
+ALTER TABLE school_invoices ADD COLUMN payment_method VARCHAR(60);
+
+ALTER TABLE school_invoices ADD COLUMN payment_reference VARCHAR(120);
+
+ALTER TABLE school_invoices ADD COLUMN receipt_number VARCHAR(40);
+
+ALTER TABLE schools ADD COLUMN kra_pin VARCHAR(20);
+
+ALTER TABLE school_invoices ADD COLUMN vat_applied TINYINT(1) DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS competition_results (
   id INT AUTO_INCREMENT PRIMARY KEY,

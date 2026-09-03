@@ -24,6 +24,7 @@ backend/uploads/reports/*
 backend/uploads/learner-files/*
 backend/uploads/report-cards/*
 backend/uploads/school-logos/*
+backend/uploads/profile-photos/
 backend/uploads/competition-banners/*
 !backend/uploads/reports/.gitkeep
 !backend/uploads/learner-files/.gitkeep
