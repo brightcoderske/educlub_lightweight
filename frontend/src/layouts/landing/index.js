@@ -13,7 +13,18 @@ import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
 import eduClubLogo from "assets/images/brand/educlub-logo.png";
+import HeroShowcase from "./HeroShowcase";
+// The wide render has its headline painted into the artwork, so it cannot sit
+// behind this page's own headline. The registration hero keeps the plain cover
+// and shows the learners as a cut-out beside the copy instead.
 import heroImage from "assets/images/bg-sign-up-cover.jpeg";
+
+const HERO_IMAGE = heroImage;
+const HERO_IMAGE_SMALL = heroImage;
+const HERO_SHOWCASE = "/hero-learners-1200.webp";
+// The social card is a public URL, so it has to be a file in public/ rather
+// than a hashed bundle asset.
+const SOCIAL_IMAGE = "/hero-learners-1200.webp";
 import { apiClient } from "lib/api";
 import { passwordIssues, registrationIssues } from "./registrationValidation";
 
@@ -133,6 +144,24 @@ function upsertMeta(selector, attributes) {
   });
 }
 
+// Mirrors the hero's CSS media query so the browser preloads exactly the
+// rendition it will paint, rather than a second copy at another width.
+function upsertPreloadImage(wide, small) {
+  const id = "educlub-hero-preload";
+  document.getElementById(id)?.remove();
+
+  const link = document.createElement("link");
+  link.id = id;
+  link.rel = "preload";
+  link.as = "image";
+  link.type = "image/webp";
+  link.href = small;
+  link.setAttribute("imagesrcset", `${small} 800w, ${wide} 1600w`);
+  link.setAttribute("imagesizes", "100vw");
+  link.setAttribute("fetchpriority", "high");
+  document.head.appendChild(link);
+}
+
 function upsertLink(rel, href) {
   let element = document.querySelector(`link[rel='${rel}']`);
   if (!element) {
@@ -196,15 +225,32 @@ function RegistrationLanding() {
     });
     upsertMeta("meta[property='og:image']", {
       property: "og:image",
-      content: `${window.location.origin}/educlub-logo.png`,
+      content: `${window.location.origin}${SOCIAL_IMAGE}`,
+    });
+    upsertMeta("meta[property='og:image:width']", {
+      property: "og:image:width",
+      content: "1200",
+    });
+    upsertMeta("meta[property='og:image:height']", {
+      property: "og:image:height",
+      content: "963",
     });
     upsertMeta("meta[property='og:image:alt']", {
       property: "og:image:alt",
-      content: "eduClub LMS logo",
+      content: "Kenyan school children celebrating at a laptop during an eduClub lesson",
     });
+    upsertMeta("meta[property='og:site_name']", {
+      property: "og:site_name",
+      content: "eduClub",
+    });
+    upsertMeta("meta[property='og:locale']", {
+      property: "og:locale",
+      content: "en_KE",
+    });
+    // A wide card, now that the image is a photograph rather than a logo.
     upsertMeta("meta[name='twitter:card']", {
       name: "twitter:card",
-      content: "summary",
+      content: "summary_large_image",
     });
     upsertMeta("meta[name='twitter:title']", {
       name: "twitter:title",
@@ -216,8 +262,16 @@ function RegistrationLanding() {
     });
     upsertMeta("meta[name='twitter:image']", {
       name: "twitter:image",
-      content: `${window.location.origin}/educlub-logo.png`,
+      content: `${window.location.origin}${SOCIAL_IMAGE}`,
     });
+    upsertMeta("meta[name='twitter:image:alt']", {
+      name: "twitter:image:alt",
+      content: "Kenyan school children celebrating at a laptop during an eduClub lesson",
+    });
+    // The hero background is the largest contentful paint. A preload that
+    // mirrors the CSS media query starts the fetch during head parsing instead
+    // of after the stylesheet resolves.
+    upsertPreloadImage(HERO_SHOWCASE, "/hero-learners-800.webp");
     upsertLink("canonical", canonicalUrl);
     updateStructuredData(window.location.origin);
 
@@ -595,9 +649,15 @@ function RegistrationLanding() {
       <MDBox
         minHeight={{ xs: "auto", lg: "88vh" }}
         sx={{
-          backgroundImage: `linear-gradient(90deg, rgba(10,20,35,0.9), rgba(10,20,35,0.48)), url(${heroImage})`,
+          backgroundColor: "#0a0f2c",
+          backgroundImage: `linear-gradient(90deg, rgba(8,12,40,0.96) 0%, rgba(8,12,40,0.86) 34%, rgba(8,12,40,0.30) 100%), url(${HERO_IMAGE_SMALL})`,
           backgroundSize: "cover",
-          backgroundPosition: "center",
+          backgroundPosition: "center right",
+          backgroundRepeat: "no-repeat",
+          // The wide rendition is only fetched where it can actually be seen.
+          "@media (min-width: 820px)": {
+            backgroundImage: `linear-gradient(90deg, rgba(8,12,40,0.96) 0%, rgba(8,12,40,0.84) 38%, rgba(8,12,40,0.28) 100%), url(${HERO_IMAGE})`,
+          },
         }}
       >
         <MDBox px={{ xs: 2, md: 6 }} py={3} display="flex" justifyContent="space-between">
@@ -635,13 +695,26 @@ function RegistrationLanding() {
             </MDTypography>
             <MDTypography
               variant="h5"
+              fontWeight="bold"
+              mt={1.5}
+              sx={{
+                background: "linear-gradient(90deg,#4cc9f0,#a78bfa,#f0abfc)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+              }}
+            >
+              Learn. Build. Practise. Compete.
+            </MDTypography>
+            <MDTypography
+              variant="h5"
               color="white"
               mt={2.5}
               lineHeight={1.5}
               sx={{ maxWidth: 760 }}
             >
-              Typing practice, digital skills courses and monthly competitions - in one safe
-              dashboard built for schools.
+              Coding, AI, typing, digital skills and STEM challenges that turn curious learners into
+              confident creators.
             </MDTypography>
             <MDBox display="flex" flexWrap="wrap" gap={1.2} mt={3}>
               {[
@@ -688,6 +761,13 @@ function RegistrationLanding() {
           </Grid>
 
           <Grid item xs={12} lg={5}>
+            <HeroShowcase
+              image={HERO_SHOWCASE}
+              alt="eduClub learners working together at a laptop"
+            />
+          </Grid>
+
+          <Grid item xs={12} sx={{ display: "none" }}>
             <MDBox
               p={{ xs: 2, md: 3 }}
               borderRadius="lg"

@@ -47,7 +47,12 @@ test("public catalogue provides substantial unique pages for every search path",
     expect(page.h1.length).toBeGreaterThan(20);
     expect(page.description.length).toBeGreaterThan(90);
     expect(page.intro.length).toBeGreaterThan(100);
-    expect(page.sections.length).toBeGreaterThanOrEqual(2);
+    // The home page's body content lives in HomeSections.js rather than in this
+    // data, so it is checked separately below. Every other indexed page must
+    // still carry at least two written sections or it is a thin page.
+    if (path !== "/") {
+      expect(page.sections.length).toBeGreaterThanOrEqual(2);
+    }
     expect(page.primaryCta.label).toBeTruthy();
     expect(page.primaryCta.path).toMatch(/^(\/|mailto:|https:\/\/)/);
     expect(page.keywords.length).toBeGreaterThanOrEqual(4);
@@ -139,12 +144,34 @@ test("SEO data uses production canonicals and page-specific educational schema",
   expect(JSON.stringify(schemas)).not.toContain("/apple-icon.png");
 });
 
+test("the home page carries its body content in HomeSections", () => {
+  const source = readFileSync(resolve(__dirname, "../layouts/public-site/HomeSections.js"), "utf8");
+
+  // The equivalent of the ">= 2 sections" rule the data-driven pages obey: the
+  // home page must keep real, crawlable copy, not just a hero and a photograph.
+  for (const heading of [
+    "What will you become?",
+    "One platform. Many ways to grow.",
+    "Explore eduClub",
+    "Turn your computer lab into a",
+    "Every child can create with technology.",
+  ]) {
+    expect(source).toContain(heading);
+  }
+
+  // Each discovery band has to keep its full set of entries.
+  expect(source.match(/"\/courses"|"\/typing"|"\/quizzes"/g).length).toBeGreaterThanOrEqual(6);
+  expect(source).toContain("Fast Typist");
+  expect(source).toContain("Holiday Bootcamps");
+});
+
 test("public pages size brand images and use accessible muted text", () => {
-  const source = readFileSync(
-    resolve(__dirname, "../layouts/public-site/index.js"),
-    "utf8"
-  );
-  expect(source).toContain('height="42"');
+  const source = readFileSync(resolve(__dirname, "../layouts/public-site/index.js"), "utf8");
+  // The point is that the brand image carries explicit dimensions so it cannot
+  // shift the header as it loads - not that it is any particular size. Both
+  // attributes are required, where this previously checked only the height.
+  expect(source).toMatch(/<img[^>]*\swidth="\d+"/);
+  expect(source).toMatch(/<img[^>]*\sheight="\d+"/);
   expect(source).toContain('component="span"');
   expect(source).toContain("#455a64");
 });
@@ -162,19 +189,16 @@ test("routes expose public content, login, registration and a real not-found pag
 });
 
 test("direct registration URLs open the learner registration dialog", () => {
-  const landingSource = readFileSync(
-    resolve(__dirname, "../layouts/landing/index.js"),
-    "utf8"
-  );
+  const landingSource = readFileSync(resolve(__dirname, "../layouts/landing/index.js"), "utf8");
   expect(landingSource).toContain('pathname === "/register"');
   expect(landingSource).toContain("setRegistrationOpen(true)");
-  expect(landingSource).toContain('InputLabelProps={{ shrink: true }}');
+  expect(landingSource).toContain("InputLabelProps={{ shrink: true }}");
 });
 
 test("SEO generator creates hidden crawlable snapshots and a production sitemap", () => {
   const page = PUBLIC_PAGES["/courses/python-programming"];
   const html = buildSnapshotHtml(
-    "<html><head><title>Old</title></head><body><div id=\"app\"></div></body></html>",
+    '<html><head><title>Old</title></head><body><div id="app"></div></body></html>',
     "/courses/python-programming",
     page
   );
@@ -183,7 +207,9 @@ test("SEO generator creates hidden crawlable snapshots and a production sitemap"
   expect(html).toContain("data-seo-snapshot");
   expect(html).toContain('style="visibility:hidden"');
   expect(html).toContain("educlub-first-paint");
-  expect(html).toContain('rel="canonical" href="https://www.educlub.co.ke/courses/python-programming"');
+  expect(html).toContain(
+    'rel="canonical" href="https://www.educlub.co.ke/courses/python-programming"'
+  );
   expect(html).not.toContain(">Old</title>");
 
   const sitemap = buildSitemap(PUBLIC_PAGE_PATHS);
@@ -194,7 +220,7 @@ test("SEO generator creates hidden crawlable snapshots and a production sitemap"
 
 test("React boot clears hidden SEO snapshots before rendering", () => {
   const source = readFileSync(resolve(__dirname, "../index.js"), "utf8");
-  expect(source).toContain('container.dataset.seoSnapshot');
+  expect(source).toContain("container.dataset.seoSnapshot");
   expect(source).toContain('container.innerHTML = ""');
   expect(source).toContain('container.style.visibility = ""');
 });

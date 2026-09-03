@@ -78,6 +78,9 @@ function SchoolCustodyModal({ open, onClose, school, onSchoolChanged }) {
   const [paying, setPaying] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("M-Pesa");
   const [paymentReference, setPaymentReference] = useState("");
+  // What the invoice would say, fetched before anything is written. It is the
+  // only thing that tells a custodian why "Issue invoice" is unavailable.
+  const [preview, setPreview] = useState(null);
 
   const schoolId = school?.id;
 
@@ -120,6 +123,31 @@ function SchoolCustodyModal({ open, onClose, school, onSchoolChanged }) {
       load();
     }
   }, [open, schoolId, load]);
+
+  // Re-read the preview on every change of school, term or year. Without this
+  // the only feedback on a missing rate arrived after pressing a button, and a
+  // disabled button gave no feedback at all.
+  useEffect(() => {
+    if (!open || !schoolId || !term || !academicYear) {
+      setPreview(null);
+      return undefined;
+    }
+    let active = true;
+    apiClient
+      .get(
+        `/schools/${schoolId}/invoices/preview?term=${encodeURIComponent(term)}` +
+          `&academic_year=${encodeURIComponent(academicYear)}`
+      )
+      .then((value) => {
+        if (active) setPreview(value);
+      })
+      .catch(() => {
+        if (active) setPreview(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, schoolId, term, academicYear, invoices.length]);
 
   const run = async (work, successMessage) => {
     setBusy(true);
@@ -216,6 +244,24 @@ function SchoolCustodyModal({ open, onClose, school, onSchoolChanged }) {
   };
 
   const suspended = school?.is_active === false;
+  const period = term && academicYear ? `${term}|${academicYear}` : "";
+
+  // Every reason issuing is unavailable, said in words rather than expressed as
+  // a greyed-out button.
+  const blockedReason = (() => {
+    if (enrollments.length === 0) {
+      return "No terms with enrolled learners yet, so there is nothing to bill.";
+    }
+    if (!term || !academicYear) return "Choose the term to bill.";
+    if (preview && !preview.billable) {
+      return "Set a rate per learner above before issuing an invoice.";
+    }
+    if (preview && preview.learner_count === 0) {
+      return "No learners were enrolled in that term, so the invoice would be zero.";
+    }
+    return "";
+  })();
+  const canIssue = !blockedReason;
 
   return (
     <Dialog
@@ -402,32 +448,61 @@ function SchoolCustodyModal({ open, onClose, school, onSchoolChanged }) {
               </MDBox>
             )}
 
-            <MDBox display="flex" gap={1} flexWrap="wrap" alignItems="center" mb={1.5}>
+            <MDBox display="flex" gap={1} flexWrap="wrap" alignItems="center" mb={1}>
               <MDInput
-                label="Term"
+                select
+                label="Term to bill"
                 size="small"
-                value={term}
-                onChange={(event) => setTerm(event.target.value)}
-                sx={{ maxWidth: 150 }}
-              />
-              <MDInput
-                label="Year"
-                type="number"
-                size="small"
-                value={academicYear}
-                onChange={(event) => setAcademicYear(event.target.value)}
-                sx={{ maxWidth: 120 }}
-              />
+                value={period}
+                onChange={(event) => {
+                  const [nextTerm, nextYear] = event.target.value.split("|");
+                  setTerm(nextTerm || "");
+                  setAcademicYear(nextYear || "");
+                }}
+                SelectProps={{ native: true }}
+                sx={{ minWidth: 210 }}
+                disabled={enrollments.length === 0}
+              >
+                {enrollments.length === 0 && <option value="">No terms recorded</option>}
+                {enrollments.map((row) => (
+                  <option
+                    key={`${row.academic_year}-${row.term}`}
+                    value={`${row.term}|${row.academic_year}`}
+                  >
+                    {row.term} {row.academic_year} - {row.learner_count} learner
+                    {row.learner_count === 1 ? "" : "s"}
+                  </option>
+                ))}
+              </MDInput>
               <MDButton
                 size="small"
                 color="info"
                 variant="contained"
-                disabled={busy || !term || !academicYear}
+                disabled={busy || !canIssue}
                 onClick={issueInvoice}
               >
                 Issue invoice
               </MDButton>
             </MDBox>
+
+            {/* A disabled button with no explanation was the whole problem:
+                pressing it did nothing and said nothing. */}
+            <MDTypography
+              variant="caption"
+              color={canIssue ? "text" : "error"}
+              display="block"
+              mb={1.5}
+            >
+              {blockedReason ||
+                (preview
+                  ? `${preview.learner_count} learner${
+                      preview.learner_count === 1 ? "" : "s"
+                    } x ${formatMoney(preview.rate_per_learner, preview.currency)} = ` +
+                    `${formatMoney(preview.total ?? preview.amount, preview.currency)}${
+                      preview.vat_applied ? ` (incl. ${preview.tax_percent}% VAT)` : ""
+                    }`
+                  : "Choose a term to see what the invoice will say.")}
+            </MDTypography>
 
             <TableContainer sx={{ maxHeight: 300, overflowX: "auto" }}>
               <Table size="small" stickyHeader>

@@ -101,40 +101,12 @@ export const PUBLIC_PAGES = {
     primaryCta: coursesCta,
     secondaryCta: registerCta,
     tertiaryCta: schoolsCta,
-    sections: [
-      section(
-        "Future skills children can use",
-        "Pathways cover creative coding, programming, digital literacy, AI knowledge, data thinking, communication and independent learning.",
-        [
-          "Scratch, Python, web and mobile app development",
-          "Artificial intelligence and responsible prompt engineering",
-          "Free typing tutor, computer literacy, online safety and productivity",
-          "Data analysis, computational thinking and learning-to-learn",
-        ]
-      ),
-      section(
-        "Designed for active learning",
-        "Learners do more than watch. Modules combine projects, discussions, quizzes, challenges, reflection and optional Try More activities.",
-        [
-          "Progressive pathways for beginners and growing creators",
-          "Project-based STEM and STEAM learning",
-          "School visibility, learner progress and competitions",
-        ]
-      ),
-    ],
+    // The written detail that used to sit here now lives on /about. The home
+    // page is the hero plus the discovery bands; anyone wanting the full
+    // explanation follows "About us".
+    sections: [],
     related: ["/courses", "/typing", "/competitions", "/holiday-bootcamps", "/for-schools"],
-    faqs: [
-      {
-        question: "Who can use eduClub?",
-        answer:
-          "eduClub supports learners, parents, schools and academies. Learners can register directly, while schools control access to their allocated courses.",
-      },
-      {
-        question: "What can children learn?",
-        answer:
-          "Learning pathways include Scratch, Python, web development, mobile apps, data analysis, AI literacy, prompt engineering, typing, digital literacy and learning-to-learn.",
-      },
-    ],
+    faqs: [],
   },
   "/courses": {
     type: "catalogue",
@@ -657,6 +629,25 @@ export const PUBLIC_PAGES = {
     secondaryCta: { label: "Contact eduClub", path: "/contact" },
     sections: [
       section(
+        "Future skills children can use",
+        "Pathways cover creative coding, programming, digital literacy, AI knowledge, data thinking, communication and independent learning.",
+        [
+          "Scratch, Python, web and mobile app development",
+          "Artificial intelligence and responsible prompt engineering",
+          "Free typing tutor, computer literacy, online safety and productivity",
+          "Data analysis, computational thinking and learning-to-learn",
+        ]
+      ),
+      section(
+        "Designed for active learning",
+        "Learners do more than watch. Modules combine projects, discussions, quizzes, challenges, reflection and optional Try More activities.",
+        [
+          "Progressive pathways for beginners and growing creators",
+          "Project-based STEM and STEAM learning",
+          "School visibility, learner progress and competitions",
+        ]
+      ),
+      section(
         "Our learning approach",
         "Content combines progressive instruction with learner choice and real projects.",
         ["STEM and STEAM thinking", "Projects and challenges", "Reflection and feedback"]
@@ -667,8 +658,19 @@ export const PUBLIC_PAGES = {
         ["Parent consent", "AI literacy", "Digital citizenship"]
       ),
     ],
-    related: ["/courses", "/for-schools", "/contact"],
-    faqs: [],
+    related: ["/courses", "/typing", "/competitions", "/holiday-bootcamps", "/for-schools"],
+    faqs: [
+      {
+        question: "Who can use eduClub?",
+        answer:
+          "eduClub supports learners, parents, schools and academies. Learners can register directly, while schools control access to their allocated courses.",
+      },
+      {
+        question: "What can children learn?",
+        answer:
+          "Learning pathways include Scratch, Python, web development, mobile apps, data analysis, AI literacy, prompt engineering, typing, digital literacy and learning-to-learn.",
+      },
+    ],
   },
   "/contact": {
     type: "contact",

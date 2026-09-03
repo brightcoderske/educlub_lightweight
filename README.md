@@ -73,6 +73,78 @@ Tenant separation is enforced in the request path: every handler scopes its quer
 
 Consent records are stored in `user_consents`. Each record stores the user, policy version, policy title, consent timestamp, IP address, user agent, and a JSON snapshot of the exact agreement text accepted by the user.
 
+## Deployment
+
+The frontend and the backend deploy by different routes, and a push only moves
+one of them.
+
+| | How it ships | Triggered by |
+| --- | --- | --- |
+| Frontend (React) | Vercel builds from `main` | the push itself |
+| Backend (Node/Passenger) | `scripts/deploy-cpanel-git.sh` on cPanel | a manual deploy step |
+
+**Deploy the backend before the frontend needs it.** A push ships the UI
+immediately while the API waits for the step below, so any release whose
+frontend calls a new endpoint has a window where those calls return 404. Keep it
+short.
+
+### From cPanel
+
+Git Version Control -> **Update from Remote** -> **Deploy HEAD Commit**.
+`.cpanel.yml` checks the commit out and runs the deploy script.
+
+### From the cPanel shell
+
+```bash
+bash /home/codecham/domains/learn.educlub.co.ke/educlub-source/scripts/deploy-from-ssh.sh
+```
+
+Use **`deploy-from-ssh.sh`**, not `deploy-cpanel-git.sh`.
+
+`deploy-cpanel-git.sh` deploys whatever is already checked out in the source
+directory - it performs no fetch, because cPanel normally does that first. Run
+it directly over SSH and it will succeed, print `DEPLOYMENT SUCCEEDED`, and
+redeploy the commit the server already had. The giveaway is `commit : unknown`
+in the banner. `deploy-from-ssh.sh` does the `main:main` fetch first, then hands
+over to the same script, and prints `branch main: <before> -> <after>` so the
+commit is visibly moving.
+
+Two paths are easy to confuse:
+
+- `/home/codecham/educlub-backend` - the application root. Receives copied files
+  only; it has no `scripts/` directory, so running the deploy from here fails
+  with `No such file or directory`.
+- `/home/codecham/domains/learn.educlub.co.ke/educlub-source` - the git checkout,
+  where the deploy scripts live.
+
+### What the deploy does
+
+Backs up the current release to `/home/codecham/educlub-backups/<timestamp>`
+(keeps five), copies `backend/src`, `backend/scripts` and the manifests into the
+application root, installs production dependencies, runs `npm run db:migrate`,
+touches `tmp/restart.txt` for Passenger, and polls `/health` for up to 60
+seconds. Any failure restores the backup automatically - **code only**. Applied
+migrations are never reverted, because MySQL commits DDL implicitly.
+
+Migrations run as part of the deploy. There is no separate migration step.
+
+### Verifying the deploy
+
+Do not trust the success banner alone; it reports that the script ran, not which
+commit it ran on. Probe a route that only exists in the release:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" https://learn.educlub.co.ke/api/schools/1/enrollments; echo
+```
+
+`401` means the new backend is live - the route exists and is asking for a
+token. `404` means it is not.
+
+Pick a path with **two segments** (`/api/schools/1/enrollments`), never one
+(`/api/schools/billing-identity`). A single-segment path also matches the older
+`/:id` route with the id being the literal word, so it answers `401` whether or
+not the new code is deployed, and tells you nothing.
+
 ## Roles
 
 - `system_admin`
