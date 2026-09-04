@@ -5,6 +5,7 @@ import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
+import GlobalStyles from "@mui/material/GlobalStyles";
 import DialogContent from "@mui/material/DialogContent";
 import Grid from "@mui/material/Grid";
 import Icon from "@mui/material/Icon";
@@ -375,8 +376,142 @@ function ExecutableRichContent({ html, storageScope }) {
           "& iframe": { maxWidth: "100%" },
           "& table": { width: "100%", borderCollapse: "collapse" },
           "& td, & th": { border: "1px solid #d1d5db", padding: "6px" },
+
+          // Interactive lesson widgets. The behaviour has always been here -
+          // flip a card, reveal a hint, mark a quiz option, reorder a list -
+          // but the styling never shipped, so every one of them toggled a
+          // class that meant nothing on screen. Scoped under this container so
+          // authored lesson content cannot restyle the rest of the app.
+          "& [data-hint-panel]": { display: "none" },
+          "& [data-hint-panel].show": {
+            display: "block",
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: "10px",
+            padding: "10px 12px",
+            marginTop: "8px",
+          },
+          "& [data-hint-toggle]": {
+            cursor: "pointer",
+            background: "#dbeafe",
+            border: "1px solid #93c5fd",
+            borderRadius: "8px",
+            padding: "6px 12px",
+            font: "inherit",
+            color: "#1e3a8a",
+          },
+
+          "& [data-flashcard]": {
+            cursor: "pointer",
+            border: "2px solid #c4b5fd",
+            borderRadius: "12px",
+            padding: "14px",
+            background: "#faf5ff",
+            marginBottom: "8px",
+          },
+          "& [data-flashcard] .sc-back": { display: "none" },
+          "& [data-flashcard].is-flipped .sc-front": { display: "none" },
+          "& [data-flashcard].is-flipped .sc-back": { display: "block" },
+
+          "& [data-quiz-option]": {
+            display: "block",
+            width: "100%",
+            textAlign: "left",
+            cursor: "pointer",
+            background: "#fff",
+            border: "2px solid #cbd5e1",
+            borderRadius: "10px",
+            padding: "10px 12px",
+            margin: "6px 0",
+            font: "inherit",
+          },
+          "& [data-quiz-option].correct": { background: "#dcfce7", borderColor: "#22c55e" },
+          "& [data-quiz-option].wrong": { background: "#fee2e2", borderColor: "#ef4444" },
+          "& [data-quiz-feedback]": { marginTop: "6px", fontWeight: 700 },
+
+          "& .sc-sorter-list": { listStyle: "none", padding: 0, margin: "10px 0" },
+          "& .sc-sorter-list [data-sort-index]": {
+            cursor: "grab",
+            background: "#fff",
+            border: "2px solid #cbd5e1",
+            borderRadius: "10px",
+            padding: "10px 12px",
+            marginBottom: "6px",
+          },
+          "& .sc-sorter-list [data-sort-index].dragging": { opacity: 0.45 },
+          "& [data-sorter].answered .sc-sorter-list [data-sort-index]": {
+            borderColor: "#22c55e",
+            background: "#f0fdf4",
+          },
+          "& [data-sort-check], & [data-sort-reset]": {
+            cursor: "pointer",
+            border: 0,
+            borderRadius: "8px",
+            padding: "8px 14px",
+            marginRight: "6px",
+            font: "inherit",
+            color: "#fff",
+            background: "#0284c7",
+          },
+          "& [data-sort-reset]": { background: "#94a3b8" },
+
+          "& [data-rich-reflection]": {
+            width: "100%",
+            minHeight: "90px",
+            border: "2px solid #cbd5e1",
+            borderRadius: "10px",
+            padding: "10px",
+            font: "inherit",
+          },
+
+          "& [data-rich-progress]": {
+            background: "#e2e8f0",
+            borderRadius: "999px",
+            height: "14px",
+            overflow: "hidden",
+            margin: "10px 0 4px",
+          },
+          "& [data-rich-progress-fill]": {
+            display: "block",
+            height: "100%",
+            width: 0,
+            background: "linear-gradient(90deg,#22c55e,#0ea5e9)",
+            transition: "width .35s ease",
+          },
+
+          "& [data-celebrate]": {
+            cursor: "pointer",
+            border: 0,
+            borderRadius: "10px",
+            padding: "10px 16px",
+            font: "inherit",
+            color: "#7c2d12",
+            background: "linear-gradient(135deg,#fef08a,#fdba74)",
+          },
         }}
         dangerouslySetInnerHTML={{ __html: html }}
+      />
+      <GlobalStyles
+        styles={{
+          ".sc-confetti": {
+            position: "fixed",
+            inset: 0,
+            pointerEvents: "none",
+            overflow: "hidden",
+            zIndex: 2000,
+          },
+          ".sc-confetti .sc-star": {
+            position: "absolute",
+            top: "-5%",
+            fontSize: "22px",
+            color: "#f59e0b",
+            animation: "scStarFall 1.6s linear forwards",
+          },
+          "@keyframes scStarFall": {
+            "0%": { transform: "translateY(0) rotate(0deg)", opacity: 1 },
+            "100%": { transform: "translateY(105vh) rotate(360deg)", opacity: 0 },
+          },
+        }}
       />
       <Dialog open={Boolean(previewImage)} onClose={() => setPreviewImage("")} maxWidth="lg">
         <DialogContent>
