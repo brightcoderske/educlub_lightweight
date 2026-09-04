@@ -40,3 +40,8 @@ output/pdf/*
 .worktrees/
 backend\.env
 .env.example
+
+# Course-content SQL generated for direct database import. These are run by
+# hand against the database, never committed or deployed.
+db-imports/
+*-content.sql
