@@ -19,7 +19,9 @@ import MDTypography from "components/MDTypography";
 import { LearningArt } from "components/DashboardIdentity";
 import { apiClient } from "lib/api";
 import {
+  attachPreviewAutoHeight,
   hasCodeWorkspace,
+  PREVIEW_MIN_HEIGHT,
   scriptsAllowed,
   selectActivityContent,
   starterCode,
@@ -148,7 +150,8 @@ function ExecutableRichContent({ html, storageScope }) {
       frame.title = "Executable lesson output";
       frame.sandbox = "allow-scripts";
       frame.style.cssText =
-        "display:none;width:100%;height:260px;margin-top:10px;border:1px solid #d1d5db;border-radius:6px;background:white";
+        "display:none;width:100%;height:320px;margin-top:10px;border:1px solid #d1d5db;border-radius:6px;background:white;resize:vertical;overflow:auto";
+      cleanups.push(attachPreviewAutoHeight(frame));
       const run = () => {
         try {
           const source = JSON.parse(decodeURIComponent(block.dataset.executableCode || ""));
@@ -482,9 +485,17 @@ function ActivityBody({
   onSubmitQuiz,
 }) {
   const [previewImage, setPreviewImage] = useState("");
+  const previewFrameRef = useRef(null);
   const content = activity?.content || {};
   const [questionIndex, setQuestionIndex] = useState(0);
   useEffect(() => setQuestionIndex(0), [activity.id]);
+  useEffect(() => attachPreviewAutoHeight(previewFrameRef.current), [codePreviewHtml]);
+  useEffect(() => {
+    // Each run starts from the floor; the frame reports its real height back.
+    if (previewFrameRef.current) {
+      previewFrameRef.current.style.height = `${PREVIEW_MIN_HEIGHT}px`;
+    }
+  }, [codePreviewHtml]);
   const learnerContent = selectActivityContent(content, quizResult || {});
   const description = content.description || "";
   const body = content.body || content.text || content.instructions || "";
@@ -1113,15 +1124,23 @@ function ActivityBody({
           {codePreviewHtml && (
             <MDBox
               component="iframe"
+              ref={previewFrameRef}
               title="Code preview"
               srcDoc={codePreviewHtml}
-              sandbox={
-                scriptsAllowed(content) ? "allow-scripts" : ""
-              }
+              sandbox={scriptsAllowed(content) ? "allow-scripts" : ""}
               mt={1.5}
               width="100%"
-              height="320"
-              sx={{ bgcolor: "#ffffff", border: "1px solid #d8dee9", borderRadius: "8px" }}
+              sx={{
+                bgcolor: "#ffffff",
+                border: "1px solid #d8dee9",
+                borderRadius: "8px",
+                display: "block",
+                // Grows to fit via attachPreviewAutoHeight; the learner can
+                // still drag it taller or shorter if they want to.
+                height: `${PREVIEW_MIN_HEIGHT}px`,
+                resize: "vertical",
+                overflow: "auto",
+              }}
             />
           )}
         </MDBox>
