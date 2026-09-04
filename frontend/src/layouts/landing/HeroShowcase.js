@@ -124,10 +124,18 @@ function HeroShowcase({ image, alt }) {
       <MDBox
         component="img"
         src={image}
+        // A phone has no business downloading the 1200px file. The browser picks
+        // a rendition from these; sizes says the art is about half the viewport
+        // on a wide screen and the full width once the hero stacks.
+        srcSet={`${image.replace("-1200", "-480")} 480w, ${image.replace(
+          "-1200",
+          "-800"
+        )} 800w, ${image} 1200w`}
+        sizes="(min-width: 1200px) 46vw, (min-width: 900px) 50vw, 92vw"
         alt={alt}
         // Fixed intrinsic size so the row does not jump once the photo lands.
         width="1200"
-        height="963"
+        height="813"
         loading="eager"
         fetchpriority="high"
         decoding="async"

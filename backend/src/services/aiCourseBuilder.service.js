@@ -1,4 +1,8 @@
 const { query } = require("../config");
+const {
+  QUIZ_QUESTION_SCHEMA,
+  buildMarkableQuestions,
+} = require("./aiQuizQuestions");
 const courseTemplatesService = require("./courseTemplates.service");
 const coursesService = require("./courses.service");
 const {
@@ -133,7 +137,9 @@ const ACTIVITY_OUTPUT_SCHEMA = `Return JSON only with this shape:
     "validation_checks": [],
     "questions": []
   }
-}`;
+}
+
+${QUIZ_QUESTION_SCHEMA}`;
 
 function normalizeCompletionRule(rule, activityType) {
   if (activityType === "quiz") return "score_at_least";
@@ -219,40 +225,6 @@ async function parseJsonDraftWithRepair(text, repairText) {
   }
 }
 
-function normalizeQuestion(question = {}, index = 0) {
-  const type = question.question_type || question.type || "multiple_choice";
-  const options = Array.isArray(question.options)
-    ? question.options.map((option) => String(option).trim()).filter(Boolean)
-    : [];
-  return {
-    id: question.id || `ai-q-${Date.now()}-${index + 1}`,
-    question_type: [
-      "multiple_choice",
-      "true_false",
-      "short_answer",
-      "matching",
-      "ordering",
-    ].includes(type)
-      ? type
-      : "multiple_choice",
-    prompt: String(question.prompt || question.question || "").trim(),
-    options,
-    correct_answer: question.correct_answer ?? question.answer ?? "",
-    acceptable_answers: Array.isArray(question.acceptable_answers)
-      ? question.acceptable_answers
-      : [],
-    pairs: Array.isArray(question.pairs) ? question.pairs : [],
-    correct_order: Array.isArray(question.correct_order)
-      ? question.correct_order
-      : [],
-    points: clampNumber(question.points, 1, 1, 20),
-    position: index + 1,
-    hint: String(question.hint || "").trim(),
-    explanation: String(question.explanation || "").trim(),
-    image_url: String(question.image_url || "").trim(),
-  };
-}
-
 function normalizeActivity(activity = {}, index = 0) {
   const activityType = ALLOWED_ACTIVITY_TYPES.has(activity.activity_type)
     ? activity.activity_type
@@ -262,11 +234,20 @@ function normalizeActivity(activity = {}, index = 0) {
     activityType
   );
   const content = sanitizeActivityContent(activity.content || {});
-  const questions = Array.isArray(content.questions)
-    ? content.questions
-        .map(normalizeQuestion)
-        .filter((question) => question.prompt)
-    : [];
+  // Anything the grader cannot mark is dropped here rather than saved. A
+  // question with an unselectable or missing correct answer awards nobody any
+  // marks, and it is far better for a teacher to see four solid questions than
+  // seven of which three silently never score.
+  const { questions, rejected } = buildMarkableQuestions(content.questions, {
+    activityId: String(activity.id || activity.title || "ai").slice(0, 24),
+  });
+  if (rejected.length) {
+    console.warn(
+      "AI quiz: discarded %d unmarkable question(s): %s",
+      rejected.length,
+      rejected.map((item) => `${item.prompt} (${item.reason})`).join("; "),
+    );
+  }
   const normalizedContent = {
     ...content,
     body:
@@ -537,7 +518,8 @@ EduClub Master Prompt for this one activity:
 EduClub Knowledge Check rules when the activity is a quiz or Generation mode is quiz_builder:
 - Generate a complete EduClub Knowledge Check.
 - Measure understanding rather than memorisation.
-- Use a balanced mix of multiple choice, drag-and-match, true/false, identify the mistake, complete the code, predict the output, debugging questions, and short practical coding tasks where suitable.
+- Use a balanced mix of the six supported question_type values: multiple_choice,
+  multi_select, true_false, short_answer, matching and ordering.
 - Every answer should include immediate feedback explaining why it is correct or incorrect.
 - Difficulty should gradually increase.
 - Celebrate progress and encourage another attempt when needed.
@@ -550,7 +532,13 @@ Requirements:
 - Align this activity with its position in the module: earlier activities should introduce and build confidence; later activities should apply, debug, create, improve, and reflect.
 - If Generation mode is explain_activity, deeply explain and improve the existing activity without changing its intent.
 - If Generation mode is improve_activity, enrich the current content with clearer scaffolding, interactivity, hints, and teacher notes.
-- If Generation mode is quiz_builder, produce a strong knowledge check with mixed question styles and explanations.
+- If Generation mode is quiz_builder, the questions array IS the deliverable. Put every
+  question there, fully specified, using the question schema below. rich_html for a quiz
+  is a short warm-up and instructions only - never the questions themselves, and never
+  data-rich-quiz buttons, because those record nothing and mark nothing.
+- A quiz_builder response with an empty questions array is a failed response. Produce at
+  least five markable questions covering the module name and description given above,
+  progressing from recall to application.
 - If Generation mode is coding_helper, produce editable browser-safe starter HTML/CSS/JavaScript and validation checks where relevant.
 - Follow the EduClub teaching flow exactly where useful: Explain -> Show -> Practice Together -> Practice Independently -> Create -> Improve -> Reflect.
 - Use rich_html for learner-facing content.
@@ -563,7 +551,10 @@ Requirements:
 - Include a clear activity-level objective in content.purpose.
 - Include a short learner-facing overview in content.description.
 - completion_rule must be one of manual, viewed, scrolled, submitted, graded, score_at_least. Use score_at_least for quizzes.
-- For quiz activities, include questions with points, correct answers, hints, explanations, true/false, matching, ordering, identify-the-mistake, complete-the-code, and predict-the-output where suitable.
+- For quiz activities, every question goes in content.questions using the question schema
+  below. Styles such as identify-the-mistake, complete-the-code and predict-the-output are
+  written as multiple_choice or short_answer questions with the code inside the prompt -
+  they are not separate question_type values, and any other value is discarded.
 - For discussion activities, include a discussion_prompt.
 - For coding activities, include starter_html, starter_css, starter_js, validation_checks, and clear instructions. Code execution belongs in starter fields, not in rich_html scripts.
 - Include teacher_notes, friendly_hints, common mistakes, quick recap, mini challenge, checkpoints, and reflection.
