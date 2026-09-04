@@ -18,7 +18,14 @@ import MDProgress from "components/MDProgress";
 import MDTypography from "components/MDTypography";
 import { LearningArt } from "components/DashboardIdentity";
 import { apiClient } from "lib/api";
-import { selectActivityContent, starterCode, starterParts, webPreview } from "./activityContent";
+import {
+  hasCodeWorkspace,
+  scriptsAllowed,
+  selectActivityContent,
+  starterCode,
+  starterParts,
+  webPreview,
+} from "./activityContent";
 import { findActivityNavigation, resolveInitialActivity } from "../learningNavigation";
 import { courseOverviewPath, moduleLearningPath } from "../previewNavigation";
 
@@ -997,7 +1004,7 @@ function ActivityBody({
           <MDTypography variant="button" fontWeight="bold">
             Code Workspace
           </MDTypography>
-          {["html_css", "html_css_js"].includes((content.language || "").toLowerCase()) ? (
+          {hasCodeWorkspace(content) ? (
             <Grid container spacing={1.5} mt={0.25}>
               <Grid item xs={12} md={6}>
                 <MDInput
@@ -1037,7 +1044,7 @@ function ActivityBody({
                   }}
                 />
               </Grid>
-              {(content.language || "").toLowerCase() === "html_css_js" && (
+              {scriptsAllowed(content) && (
                 <Grid item xs={12}>
                   <MDInput
                     label="JavaScript"
@@ -1109,7 +1116,7 @@ function ActivityBody({
               title="Code preview"
               srcDoc={codePreviewHtml}
               sandbox={
-                (content.language || "").toLowerCase() === "html_css_js" ? "allow-scripts" : ""
+                scriptsAllowed(content) ? "allow-scripts" : ""
               }
               mt={1.5}
               width="100%"
@@ -2096,7 +2103,7 @@ function ModuleLearn() {
         htmlDraft || codeDraft,
         cssDraft,
         jsDraft,
-        language.toLowerCase() === "html_css_js"
+        scriptsAllowed(activeActivity.content || {})
       );
       // Only the preview frame gets the generated document. Writing it back into
       // codeDraft overwrote the learner's own source in the single-editor

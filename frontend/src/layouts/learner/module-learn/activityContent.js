@@ -54,6 +54,31 @@ export function starterParts(content = {}) {
   };
 }
 
+/**
+ * Whether an activity's code workspace should run JavaScript.
+ *
+ * `language` and `starter_js` come from the same authored content blob, written
+ * by the same staff member through the same sanitizer, so neither is more
+ * trusted than the other. Requiring both to agree bought no safety and silently
+ * broke activities: content carrying starter_js under language "html_css" ran
+ * with the script dropped, so the learner met dead buttons and no explanation.
+ * Treating either signal as the author's intent removes that trap.
+ *
+ * The sandbox itself is unchanged - still `allow-scripts` with no
+ * `allow-same-origin`, under the CSP webPreview writes - so scripts stay walled
+ * off from the app's origin, storage and network.
+ */
+export function scriptsAllowed(content = {}) {
+  if ((content.language || "").toLowerCase() === "html_css_js") return true;
+  return typeof content.starter_js === "string" && content.starter_js.trim() !== "";
+}
+
+/** Languages whose activities get the HTML/CSS editor panels. */
+export function hasCodeWorkspace(content = {}) {
+  const language = (content.language || "").toLowerCase();
+  return ["html_css", "html_css_js"].includes(language);
+}
+
 export function webPreview(html = "", css = "", js = "", allowJavaScript = false) {
   if (typeof js === "boolean") {
     allowJavaScript = js;
