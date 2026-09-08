@@ -627,6 +627,7 @@ function ActivityBody({
   const [previewImage, setPreviewImage] = useState("");
   const previewFrameRef = useRef(null);
   const content = activity?.content || {};
+  const pythonActivity = isPythonActivity(content);
   const [questionIndex, setQuestionIndex] = useState(0);
   useEffect(() => setQuestionIndex(0), [activity.id]);
   useEffect(() => attachPreviewAutoHeight(previewFrameRef.current), [codePreviewHtml]);
@@ -1153,8 +1154,13 @@ function ActivityBody({
       {activity.activity_type === "coding" && (
         <MDBox mt={3}>
           <MDTypography variant="button" fontWeight="bold">
-            Code Workspace
+            {pythonActivity ? "Python Workspace" : "Code Workspace"}
           </MDTypography>
+          {pythonActivity && (
+            <MDTypography variant="caption" color="text" display="block" mt={0.5} mb={1}>
+              Write your complete Python program in this single editor, then run it below.
+            </MDTypography>
+          )}
           {hasCodeWorkspace(content) ? (
             <Grid container spacing={1.5} mt={0.25}>
               <Grid item xs={12} md={6}>
@@ -1219,8 +1225,10 @@ function ActivityBody({
             </Grid>
           ) : (
             <MDInput
+              label={pythonActivity ? "Python code" : "Code"}
+              placeholder={pythonActivity ? "Write your Python program here…" : undefined}
               multiline
-              rows={10}
+              rows={pythonActivity ? 14 : 10}
               fullWidth
               value={codeDraft}
               onChange={(event) => onCodeChange(event.target.value)}
@@ -1236,9 +1244,10 @@ function ActivityBody({
               }}
             />
           )}
-          {isPythonActivity(content) && (
+          {pythonActivity && (
             <MDInput
-              label="Program input (one answer per line, optional)"
+              label="Program input (optional)"
+              placeholder="One input() answer per line"
               multiline
               rows={3}
               fullWidth
@@ -1256,7 +1265,7 @@ function ActivityBody({
             >
               {codeRunning
                 ? "Running Python…"
-                : isPythonActivity(content)
+                : pythonActivity
                 ? "Run Python"
                 : "Run Code"}
             </MDButton>
@@ -1264,9 +1273,11 @@ function ActivityBody({
               Submit Code
             </MDButton>
           </MDBox>
+          <MDTypography variant="caption" color="text" display="block" mt={1.5} mb={0.5}>
+            {pythonActivity ? "Program output" : "Output"}
+          </MDTypography>
           <MDBox
             component="pre"
-            mt={1.5}
             p={2}
             borderRadius="md"
             sx={{
@@ -1279,7 +1290,10 @@ function ActivityBody({
               lineHeight: 1.6,
             }}
           >
-            {codeOutput || "Select Run Code to reveal the output."}
+            {codeOutput ||
+              (pythonActivity
+                ? "Select Run Python to see your program output."
+                : "Select Run Code to reveal the output.")}
           </MDBox>
           {codePreviewHtml && (
             <MDBox

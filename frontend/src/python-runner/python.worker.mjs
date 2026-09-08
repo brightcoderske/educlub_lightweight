@@ -3,6 +3,7 @@ import { loadPyodide } from "pyodide";
 import {
   boundedPythonText,
   isPythonRunnerMessage,
+  learnerFacingError,
   PYTHON_MAX_SOURCE_LENGTH,
   pythonRunnerMessage,
 } from "./protocol";
@@ -106,7 +107,11 @@ self.addEventListener("message", async (event) => {
       pythonRunnerMessage("result", {
         id: message.id,
         ok: false,
-        error: boundedPythonText(error?.message || "Python could not run this program."),
+        // Pyodide's own frames sit above the learner's; strip them so the
+        // message a beginner reads starts at their own code.
+        error: boundedPythonText(
+          learnerFacingError(error?.message) || "Python could not run this program."
+        ),
         durationMs: Math.round(performance.now() - startedAt),
       })
     );
