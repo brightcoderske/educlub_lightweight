@@ -19,9 +19,11 @@ import MDProgress from "components/MDProgress";
 import MDTypography from "components/MDTypography";
 import { LearningArt } from "components/DashboardIdentity";
 import { apiClient } from "lib/api";
+import { cancelPythonExecution, runPythonInBrowser } from "lib/pythonRunnerClient";
 import {
   attachPreviewAutoHeight,
   hasCodeWorkspace,
+  isPythonActivity,
   PREVIEW_MIN_HEIGHT,
   scriptsAllowed,
   selectActivityContent,
@@ -597,6 +599,8 @@ function ActivityBody({
   submissionText,
   submissionFile,
   codeDraft,
+  codeInput,
+  codeRunning,
   htmlDraft,
   cssDraft,
   jsDraft,
@@ -607,6 +611,7 @@ function ActivityBody({
   saving,
   onAnswerChange,
   onCodeChange,
+  onCodeInputChange,
   onHtmlChange,
   onCssChange,
   onJsChange,
@@ -1231,9 +1236,29 @@ function ActivityBody({
               }}
             />
           )}
+          {isPythonActivity(content) && (
+            <MDInput
+              label="Program input (one answer per line, optional)"
+              multiline
+              rows={3}
+              fullWidth
+              value={codeInput}
+              onChange={(event) => onCodeInputChange(event.target.value)}
+              sx={{ mt: 1.5 }}
+            />
+          )}
           <MDBox mt={1.5} display="flex" gap={1} flexWrap="wrap">
-            <MDButton variant="gradient" color="info" disabled={saving} onClick={onRunCode}>
-              Run Code
+            <MDButton
+              variant="gradient"
+              color="info"
+              disabled={saving || codeRunning}
+              onClick={onRunCode}
+            >
+              {codeRunning
+                ? "Running Python…"
+                : isPythonActivity(content)
+                ? "Run Python"
+                : "Run Code"}
             </MDButton>
             <MDButton variant="outlined" color="success" disabled={saving} onClick={onSubmitWork}>
               Submit Code
@@ -1340,12 +1365,15 @@ ActivityBody.propTypes = {
   discussion: PropTypes.object,
   discussionReply: PropTypes.string.isRequired,
   codeDraft: PropTypes.string.isRequired,
+  codeInput: PropTypes.string.isRequired,
+  codeRunning: PropTypes.bool.isRequired,
   htmlDraft: PropTypes.string.isRequired,
   cssDraft: PropTypes.string.isRequired,
   jsDraft: PropTypes.string.isRequired,
   codeOutput: PropTypes.string.isRequired,
   codePreviewHtml: PropTypes.string.isRequired,
   onCodeChange: PropTypes.func.isRequired,
+  onCodeInputChange: PropTypes.func.isRequired,
   onHtmlChange: PropTypes.func.isRequired,
   onCssChange: PropTypes.func.isRequired,
   onJsChange: PropTypes.func.isRequired,
@@ -1869,6 +1897,7 @@ function ModuleLearn() {
   const entityId = templatePreviewMode ? templateId : courseId;
   const contentTopRef = useRef(null);
   const completionRef = useRef(null);
+  const pythonRunSequenceRef = useRef(0);
   const [data, setData] = useState(null);
   const [activeActivityId, setActiveActivityId] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -1879,6 +1908,8 @@ function ModuleLearn() {
   const [submissionText, setSubmissionText] = useState("");
   const [submissionFile, setSubmissionFile] = useState(null);
   const [codeDraft, setCodeDraft] = useState("");
+  const [codeInput, setCodeInput] = useState("");
+  const [codeRunning, setCodeRunning] = useState(false);
   const [htmlDraft, setHtmlDraft] = useState("");
   const [cssDraft, setCssDraft] = useState("");
   const [jsDraft, setJsDraft] = useState("");
@@ -2061,6 +2092,12 @@ function ModuleLearn() {
     setSubmissionText("");
     setSubmissionFile(null);
     setCodeDraft(starterCode(activeActivity?.content || {}));
+    const initialInput =
+      activeActivity?.content?.sample_input || activeActivity?.content?.stdin || "";
+    setCodeInput(Array.isArray(initialInput) ? initialInput.join("\n") : String(initialInput));
+    pythonRunSequenceRef.current += 1;
+    cancelPythonExecution();
+    setCodeRunning(false);
     const parts = starterParts(activeActivity?.content || {});
     setHtmlDraft(parts.html);
     setCssDraft(parts.css);
@@ -2248,7 +2285,7 @@ function ModuleLearn() {
     }
   };
 
-  const runCode = () => {
+  const runCode = async () => {
     if (!activeActivity) return;
     const language = activeActivity.content?.language || "javascript";
     setCodePreviewHtml("");
@@ -2264,6 +2301,27 @@ function ModuleLearn() {
       // languages, so running twice buried their work under the wrapper markup.
       setCodePreviewHtml(preview);
       setCodeOutput("Rendered browser preview below.");
+      return;
+    }
+    if (isPythonActivity(activeActivity.content || {})) {
+      const runSequence = ++pythonRunSequenceRef.current;
+      setCodeRunning(true);
+      setCodeOutput("Preparing Python—this first load happens only once…");
+      try {
+        const result = await runPythonInBrowser(codeDraft, {
+          inputs: codeInput.split(/\r?\n/),
+          onStatus: (status) => {
+            if (pythonRunSequenceRef.current === runSequence) setCodeOutput(status);
+          },
+        });
+        if (pythonRunSequenceRef.current === runSequence) setCodeOutput(result.output);
+      } catch (runError) {
+        if (pythonRunSequenceRef.current === runSequence) {
+          setCodeOutput(runError?.message || "Python could not run this program.");
+        }
+      } finally {
+        if (pythonRunSequenceRef.current === runSequence) setCodeRunning(false);
+      }
       return;
     }
     setCodeOutput(`${language} remains teacher-reviewed in this release.`);
@@ -2660,6 +2718,8 @@ function ModuleLearn() {
                       submissionText={submissionText}
                       submissionFile={submissionFile}
                       codeDraft={codeDraft}
+                      codeInput={codeInput}
+                      codeRunning={codeRunning}
                       htmlDraft={htmlDraft}
                       cssDraft={cssDraft}
                       jsDraft={jsDraft}
@@ -2668,6 +2728,7 @@ function ModuleLearn() {
                       replyTarget={replyTarget}
                       onAnswerChange={updateAnswer}
                       onCodeChange={setCodeDraft}
+                      onCodeInputChange={setCodeInput}
                       onHtmlChange={setHtmlDraft}
                       onCssChange={setCssDraft}
                       onJsChange={setJsDraft}

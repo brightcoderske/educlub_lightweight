@@ -1,4 +1,19 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "source": "/python-runner.html",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors https://educlub.co.ke https://www.educlub.co.ke https://*.vercel.app; script-src 'self' https://cdn.jsdelivr.net; worker-src 'self' blob:; connect-src https://cdn.jsdelivr.net; style-src 'self'"
+        },
+        { "key": "Referrer-Policy", "value": "strict-origin" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

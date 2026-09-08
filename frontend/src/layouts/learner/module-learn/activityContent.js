@@ -79,6 +79,10 @@ export function hasCodeWorkspace(content = {}) {
   return ["html_css", "html_css_js"].includes(language);
 }
 
+export function isPythonActivity(content = {}) {
+  return (content.language || "").trim().toLowerCase() === "python";
+}
+
 export const PREVIEW_MIN_HEIGHT = 320;
 export const PREVIEW_MAX_HEIGHT = 2000;
 
@@ -121,7 +125,10 @@ const AUTO_HEIGHT_REPORTER = `
  * `event.source` identity is the check that actually means something here.
  * Returns a cleanup function.
  */
-export function attachPreviewAutoHeight(frame, { min = PREVIEW_MIN_HEIGHT, max = PREVIEW_MAX_HEIGHT } = {}) {
+export function attachPreviewAutoHeight(
+  frame,
+  { min = PREVIEW_MIN_HEIGHT, max = PREVIEW_MAX_HEIGHT } = {}
+) {
   // Take the view from the frame itself rather than a global, so this works in
   // any document the frame happens to live in.
   const view = frame && frame.ownerDocument && frame.ownerDocument.defaultView;

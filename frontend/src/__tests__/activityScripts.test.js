@@ -1,6 +1,7 @@
 import {
   attachPreviewAutoHeight,
   hasCodeWorkspace,
+  isPythonActivity,
   PREVIEW_MAX_HEIGHT,
   PREVIEW_MIN_HEIGHT,
   scriptsAllowed,
@@ -41,6 +42,15 @@ describe("hasCodeWorkspace", () => {
     expect(hasCodeWorkspace({ language: "html_css_js" })).toBe(true);
     expect(hasCodeWorkspace({ language: "python" })).toBe(false);
     expect(hasCodeWorkspace({})).toBe(false);
+  });
+});
+
+describe("isPythonActivity", () => {
+  test("recognises Python without treating other single-editor languages as Python", () => {
+    expect(isPythonActivity({ language: "python" })).toBe(true);
+    expect(isPythonActivity({ language: " PYTHON " })).toBe(true);
+    expect(isPythonActivity({ language: "javascript" })).toBe(false);
+    expect(isPythonActivity({})).toBe(false);
   });
 });
 
@@ -121,7 +131,9 @@ describe("preview auto-height", () => {
     const frame = makeFrame();
     attachPreviewAutoHeight(frame);
     report(frame, "tall", frame.contentWindow);
-    const event = new window.MessageEvent("message", { data: { source: "somewhere-else", height: 900 } });
+    const event = new window.MessageEvent("message", {
+      data: { source: "somewhere-else", height: 900 },
+    });
     Object.defineProperty(event, "source", { value: frame.contentWindow, configurable: true });
     window.dispatchEvent(event);
     expect(frame.style.height).toBe("");

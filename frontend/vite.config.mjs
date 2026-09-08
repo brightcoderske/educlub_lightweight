@@ -37,6 +37,13 @@ function dashboardDependencies(directory) {
 
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), "");
+  const pythonParentOrigins = (
+    environment.VITE_PYTHON_PARENT_ORIGINS ||
+    "https://educlub.co.ke,https://www.educlub.co.ke,http://localhost:3000,http://127.0.0.1:3000"
+  )
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   return {
     plugins: [
       {
@@ -64,12 +71,23 @@ export default defineConfig(({ mode }) => {
       "globalThis.__EDUCLUB_API_URL__": JSON.stringify(
         environment.VITE_API_URL || environment.REACT_APP_API_URL || "http://localhost:4000"
       ),
+      "globalThis.__EDUCLUB_PYTHON_RUNNER_URL__": JSON.stringify(
+        environment.VITE_PYTHON_RUNNER_URL ||
+          (mode === "production" ? "https://runner.educlub.co.ke/python-runner.html" : "")
+      ),
+      "globalThis.__EDUCLUB_PYTHON_PARENT_ORIGINS__": JSON.stringify(pythonParentOrigins),
     },
     build: {
       outDir: "build",
       emptyOutDir: true,
       sourcemap: false,
       chunkSizeWarningLimit: 750,
+      rollupOptions: {
+        input: {
+          app: path.resolve(process.cwd(), "index.html"),
+          "python-runner": path.resolve(process.cwd(), "python-runner.html"),
+        },
+      },
     },
   };
 });
