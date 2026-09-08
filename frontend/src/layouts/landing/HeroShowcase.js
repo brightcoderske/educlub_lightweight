@@ -117,7 +117,18 @@ function HeroShowcase({ image, alt }) {
       sx={{
         position: "relative",
         width: "100%",
-        minHeight: { xs: 300, sm: 400, lg: 520 },
+        minHeight: { xs: 300, sm: 400, md: 380, lg: 440 },
+        isolation: "isolate",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          inset: "8% 4% 5%",
+          zIndex: -1,
+          borderRadius: "50%",
+          background:
+            "radial-gradient(circle, rgba(124,58,237,0.42) 0%, rgba(37,99,235,0.18) 48%, transparent 72%)",
+          filter: "blur(18px)",
+        },
         ...float,
       }}
     >
@@ -143,7 +154,10 @@ function HeroShowcase({ image, alt }) {
           width: "100%",
           height: "auto",
           display: "block",
-          filter: "drop-shadow(0 24px 48px rgba(3,6,28,0.55))",
+          transform: { md: "scale(1.04)", lg: "scale(1.07)" },
+          transformOrigin: "center bottom",
+          filter:
+            "saturate(1.12) contrast(1.04) drop-shadow(0 28px 42px rgba(3,6,28,0.72)) drop-shadow(0 0 24px rgba(92,103,255,0.2))",
         }}
       />
 

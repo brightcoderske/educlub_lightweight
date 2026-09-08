@@ -363,9 +363,9 @@ export function PublicNotFound() {
 const HERO_SHOWCASE = "/hero-learners-1200.webp";
 
 const HERO_STATS = [
-  ["100,000+", "Learners"],
-  ["2,000+", "Schools"],
-  ["50+", "Counties"],
+  ["10,000+", "Learners"],
+  ["20+", "Schools"],
+  ["10+", "Counties"],
 ];
 
 export default function PublicSite() {
@@ -408,13 +408,13 @@ export default function PublicSite() {
         >
           <MDBox
             px={{ xs: 2, md: 6, lg: 10 }}
-            py={{ xs: isHome ? 3.5 : 6, md: isHome ? 4 : 9 }}
+            py={{ xs: isHome ? 3.5 : 6, md: isHome ? 2.5 : 9 }}
             maxWidth="1440px"
             mx="auto"
             width="100%"
           >
-            <Grid container spacing={{ xs: 4, lg: 6 }} alignItems="center">
-              <Grid item xs={12} lg={isHome ? 6 : 12}>
+            <Grid container spacing={{ xs: 4, md: 3, lg: 5 }} alignItems="center">
+              <Grid item xs={12} md={isHome ? 6 : 12}>
                 <Chip
                   label={page.eyebrow}
                   color="info"
@@ -480,7 +480,7 @@ export default function PublicSite() {
                     display="flex"
                     flexWrap="wrap"
                     gap={{ xs: 3, sm: 5 }}
-                    mt={{ xs: 3, md: 5 }}
+                    mt={{ xs: 3, md: 3.5 }}
                   >
                     {HERO_STATS.map(([value, label]) => (
                       <MDBox key={label}>
@@ -500,14 +500,14 @@ export default function PublicSite() {
               </Grid>
 
               {isHome && (
-                <Grid item xs={12} lg={6}>
+                <Grid item xs={12} md={6}>
                   <MDBox
                     sx={{
                       // No horizontal bleed: the group has to sit whole inside
                       // the column. Bleeding it past the gutter clipped the
                       // learner on the right against the viewport edge.
-                      mt: { xs: 2, lg: -3 },
-                      mb: { xs: -1, lg: -5 },
+                      mt: { xs: 2, md: 0, lg: -2 },
+                      mb: { xs: -1, md: -2, lg: -4 },
                     }}
                   >
                     <HeroShowcase

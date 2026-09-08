@@ -16,20 +16,20 @@ import MDTypography from "components/MDTypography";
  */
 
 const PERSONAS = [
-  ["Coder", "code", "#2563eb", "#e8f0fe", "/courses"],
-  ["AI Explorer", "smart_toy", "#7c3aed", "#f1eafe", "/courses"],
-  ["Web Creator", "web", "#0d9488", "#e2f7f4", "/courses"],
-  ["Digital Designer", "brush", "#ea580c", "#fdeee2", "/courses"],
-  ["Data Thinker", "insights", "#0891b2", "#e0f5fa", "/quizzes"],
-  ["Fast Typist", "keyboard", "#db2777", "#fdeaf3", "/typing"],
+  ["Coder", "Build games and apps", "code", "#2563eb", "#e8f0fe", "/courses"],
+  ["AI Explorer", "Discover smart technology", "smart_toy", "#7c3aed", "#f1eafe", "/courses"],
+  ["Web Creator", "Bring ideas online", "web", "#0d9488", "#e2f7f4", "/courses"],
+  ["Digital Designer", "Create bold visuals", "brush", "#ea580c", "#fdeee2", "/courses"],
+  ["Data Thinker", "Find stories in numbers", "insights", "#0891b2", "#e0f5fa", "/quizzes"],
+  ["Fast Typist", "Type with speed and accuracy", "keyboard", "#db2777", "#fdeaf3", "/typing"],
 ];
 
 const STEPS = [
-  ["Learn", "Structured courses in Scratch, Python, web and more.", "menu_book"],
-  ["Practise", "Improve with typing lessons, quizzes and challenges.", "keyboard"],
-  ["Build", "Create real projects and bring your ideas to life.", "construction"],
-  ["Compete", "Join competitions and represent your school.", "emoji_events"],
-  ["Grow", "Earn badges and achievements as you learn.", "trending_up"],
+  ["Learn", "Structured courses in Scratch, Python, web and more.", "menu_book", "#2563eb", "#e8f0fe"],
+  ["Practise", "Improve with typing lessons, quizzes and challenges.", "keyboard", "#7c3aed", "#f1eafe"],
+  ["Build", "Create real projects and bring your ideas to life.", "construction", "#0d9488", "#e2f7f4"],
+  ["Compete", "Join competitions and represent your school.", "emoji_events", "#ea580c", "#fdeee2"],
+  ["Grow", "Earn badges and achievements as you learn.", "trending_up", "#db2777", "#fdeaf3"],
 ];
 
 const EXPLORE = [
@@ -39,6 +39,7 @@ const EXPLORE = [
     "Start Typing",
     "/typing",
     "linear-gradient(140deg,#2563eb,#1e40af)",
+    "keyboard",
   ],
   [
     "Courses",
@@ -46,6 +47,7 @@ const EXPLORE = [
     "Explore Courses",
     "/courses",
     "linear-gradient(140deg,#7c3aed,#4c1d95)",
+    "school",
   ],
   [
     "Challenges & Quizzes",
@@ -53,6 +55,7 @@ const EXPLORE = [
     "Try a Quiz",
     "/quizzes",
     "linear-gradient(140deg,#059669,#065f46)",
+    "quiz",
   ],
   [
     "Competitions",
@@ -60,6 +63,7 @@ const EXPLORE = [
     "View Competitions",
     "/competitions",
     "linear-gradient(140deg,#ea580c,#9a3412)",
+    "emoji_events",
   ],
   [
     "Holiday Bootcamps",
@@ -67,6 +71,7 @@ const EXPLORE = [
     "See Bootcamps",
     "/holiday-bootcamps",
     "linear-gradient(140deg,#db2777,#9d174d)",
+    "rocket_launch",
   ],
 ];
 
@@ -128,10 +133,10 @@ function DashboardSketch() {
       <MDBox p={2}>
         <Grid container spacing={1.25}>
           {[
-            ["1,245", "Learners"],
-            ["78", "Courses"],
-            ["23", "Challenges"],
-            ["12", "Competitions"],
+            ["320", "Learners"],
+            ["12", "Courses"],
+            ["8", "Challenges"],
+            ["3", "Competitions"],
           ].map(([value, label]) => (
             <Grid item xs={6} sm={3} key={label}>
               <MDBox
@@ -304,25 +309,36 @@ function HomeSections() {
 
   return (
     <>
-      <MDBox px={{ xs: 2, md: 6, lg: 10 }} py={{ xs: 5, md: 7 }} maxWidth="1440px" mx="auto">
+      <MDBox px={{ xs: 2, md: 6, lg: 10 }} py={{ xs: 5, md: 8 }} maxWidth="1440px" mx="auto">
         <SectionHeading
           title="What will you become?"
           subtitle="Explore fun paths and discover your passion."
         />
         <Grid container spacing={2}>
-          {PERSONAS.map(([label, icon, colour, tint, path]) => (
+          {PERSONAS.map(([label, description, icon, colour, tint, path]) => (
             <Grid item xs={6} sm={4} md={2} key={label}>
               <Card
+                component="button"
+                type="button"
                 sx={{
+                  width: "100%",
                   height: "100%",
+                  minHeight: { xs: 170, md: 190 },
+                  border: "1px solid #e8eaf2",
+                  background: `linear-gradient(160deg, #fff 45%, ${tint})`,
                   cursor: "pointer",
-                  transition: "transform 160ms ease, box-shadow 160ms ease",
-                  "&:hover": { transform: "translateY(-4px)", boxShadow: "0 12px 28px #1018281f" },
+                  font: "inherit",
+                  transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+                  "&:hover": {
+                    transform: "translateY(-5px)",
+                    boxShadow: `0 16px 32px ${colour}22`,
+                    borderColor: `${colour}55`,
+                  },
                   "@media (prefers-reduced-motion: reduce)": { transition: "none" },
                 }}
                 onClick={() => navigate(path)}
               >
-                <MDBox p={2} textAlign="center">
+                <MDBox p={{ xs: 2, md: 2.25 }} textAlign="left" width="100%">
                   <Icon
                     sx={{
                       color: colour,
@@ -336,8 +352,14 @@ function HomeSections() {
                   >
                     {icon}
                   </Icon>
-                  <MDTypography variant="button" fontWeight="bold" display="block" mt={1.25}>
+                  <MDTypography variant="button" fontWeight="bold" display="block" mt={1.75}>
                     {label}
+                  </MDTypography>
+                  <MDTypography variant="caption" sx={{ color: "#667085", display: "block", mt: 0.5, lineHeight: 1.45 }}>
+                    {description}
+                  </MDTypography>
+                  <MDTypography variant="caption" sx={{ color: colour, display: "block", mt: 1.25, fontWeight: 800 }}>
+                    Explore path →
                   </MDTypography>
                 </MDBox>
               </Card>
@@ -347,45 +369,48 @@ function HomeSections() {
       </MDBox>
 
       <MDBox sx={{ bgcolor: "#f7f8fc" }}>
-        <MDBox px={{ xs: 2, md: 6, lg: 10 }} py={{ xs: 5, md: 7 }} maxWidth="1440px" mx="auto">
-          <SectionHeading title="One platform. Many ways to grow." />
+        <MDBox px={{ xs: 2, md: 6, lg: 10 }} py={{ xs: 5, md: 8 }} maxWidth="1440px" mx="auto">
+          <SectionHeading
+            title="One platform. Many ways to grow."
+            subtitle="A clear journey from first lesson to proud achievement."
+          />
           <Grid container spacing={2}>
-            {STEPS.map(([title, body, icon], index) => (
+            {STEPS.map(([title, body, icon, colour, tint], index) => (
               <Grid item xs={12} sm={6} md key={title}>
                 <MDBox
                   sx={{
                     height: "100%",
-                    p: 2,
-                    borderRadius: "14px",
+                    minHeight: 180,
+                    p: 2.25,
+                    borderRadius: "18px",
                     bgcolor: "#fff",
                     border: "1px solid #e7e9f2",
+                    boxShadow: "0 10px 28px rgba(16,24,40,.06)",
                   }}
                 >
-                  <MDBox display="flex" alignItems="center" gap={1} mb={1}>
+                  <MDBox display="flex" alignItems="center" justifyContent="space-between" mb={2}>
                     <MDBox
                       sx={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: "50%",
-                        bgcolor: "#4338ca",
-                        color: "#fff",
+                        width: 48,
+                        height: 48,
+                        borderRadius: "14px",
+                        bgcolor: tint,
+                        color: colour,
                         display: "grid",
                         placeItems: "center",
-                        fontSize: ".72rem",
-                        fontWeight: 800,
                         flexShrink: 0,
                       }}
                     >
-                      {index + 1}
+                      <Icon sx={{ color: colour }}>{icon}</Icon>
                     </MDBox>
-                    <Icon sx={{ color: "#4338ca" }} fontSize="small">
-                      {icon}
-                    </Icon>
-                    <MDTypography variant="button" fontWeight="bold">
-                      {title}
+                    <MDTypography variant="caption" sx={{ color: colour, fontWeight: 800 }}>
+                      0{index + 1}
                     </MDTypography>
                   </MDBox>
-                  <MDTypography variant="caption" sx={{ color: "#667085" }}>
+                  <MDTypography variant="h6" fontWeight="bold" sx={{ color: "#101828" }}>
+                    {title}
+                  </MDTypography>
+                  <MDTypography variant="body2" sx={{ color: "#667085", mt: 0.75, lineHeight: 1.55 }}>
                     {body}
                   </MDTypography>
                 </MDBox>
@@ -395,11 +420,14 @@ function HomeSections() {
         </MDBox>
       </MDBox>
 
-      <MDBox px={{ xs: 2, md: 6, lg: 10 }} py={{ xs: 5, md: 7 }} maxWidth="1440px" mx="auto">
-        <SectionHeading title="Explore eduClub" />
+      <MDBox px={{ xs: 2, md: 6, lg: 10 }} py={{ xs: 5, md: 8 }} maxWidth="1440px" mx="auto">
+        <SectionHeading
+          title="Explore eduClub"
+          subtitle="Choose what you want to learn, practise or achieve today."
+        />
         <Grid container spacing={2}>
-          {EXPLORE.map(([title, body, cta, path, background]) => (
-            <Grid item xs={12} sm={6} lg key={title}>
+          {EXPLORE.map(([title, body, cta, path, background, icon], index) => (
+            <Grid item xs={12} sm={6} lg={index < 2 ? 6 : 4} key={title}>
               <MDBox
                 component="button"
                 type="button"
@@ -407,32 +435,61 @@ function HomeSections() {
                 sx={{
                   width: "100%",
                   height: "100%",
-                  minHeight: 168,
+                  minHeight: { xs: 210, md: index < 2 ? 230 : 210 },
                   textAlign: "left",
                   border: 0,
                   cursor: "pointer",
                   font: "inherit",
-                  p: 2,
-                  borderRadius: "16px",
+                  p: { xs: 2.5, md: 3 },
+                  borderRadius: "20px",
                   background,
                   color: "#fff",
                   display: "flex",
                   flexDirection: "column",
-                  transition: "transform 160ms ease",
-                  "&:hover": { transform: "translateY(-4px)" },
+                  position: "relative",
+                  overflow: "hidden",
+                  boxShadow: "0 16px 34px rgba(16,24,40,.16)",
+                  transition: "transform 160ms ease, box-shadow 160ms ease",
+                  "&::after": {
+                    content: '""',
+                    position: "absolute",
+                    width: 170,
+                    height: 170,
+                    borderRadius: "50%",
+                    right: -55,
+                    bottom: -85,
+                    bgcolor: "rgba(255,255,255,.1)",
+                  },
+                  "&:hover": {
+                    transform: "translateY(-5px)",
+                    boxShadow: "0 22px 42px rgba(16,24,40,.24)",
+                  },
                   "@media (prefers-reduced-motion: reduce)": { transition: "none" },
                 }}
               >
+                <MDBox
+                  sx={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: "14px",
+                    bgcolor: "rgba(255,255,255,.16)",
+                    display: "grid",
+                    placeItems: "center",
+                    mb: 2,
+                  }}
+                >
+                  <Icon sx={{ color: "#fff" }}>{icon}</Icon>
+                </MDBox>
                 <MDTypography variant="h6" sx={{ color: "#fff", fontWeight: 800 }}>
                   {title}
                 </MDTypography>
                 <MDTypography
-                  variant="caption"
-                  sx={{ color: "rgba(255,255,255,.88)", display: "block", mt: 0.75, flex: 1 }}
+                  variant="body2"
+                  sx={{ color: "rgba(255,255,255,.88)", display: "block", mt: 0.75, flex: 1, lineHeight: 1.55 }}
                 >
                   {body}
                 </MDTypography>
-                <MDTypography variant="button" sx={{ color: "#fff", fontWeight: 800, mt: 1.5 }}>
+                <MDTypography variant="button" sx={{ color: "#fff", fontWeight: 800, mt: 2, position: "relative", zIndex: 1 }}>
                   {cta} →
                 </MDTypography>
               </MDBox>

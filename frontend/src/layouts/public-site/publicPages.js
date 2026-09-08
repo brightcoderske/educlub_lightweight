@@ -81,7 +81,7 @@ export const PUBLIC_PAGES = {
     h1: "Free typing tutor, digital skills and online challenges for curious kids",
     eyebrow: "Learn. Build. Practise. Compete.",
     intro:
-      "eduClub gives families and schools one focused place for coding classes for kids in Kenya, free typing practice for students and STEM courses for children. Learners build computer confidence through My Typing Tutor, progressive courses, real projects, quizzes and engaging challenges.",
+      "Children build computer confidence through free typing practice, progressive STEM courses, real projects, quizzes and fun challenges.",
     keywords: [
       "online courses for kids Kenya",
       "STEM courses for kids Kenya",

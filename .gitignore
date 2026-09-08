@@ -38,6 +38,7 @@ output/pdf/*
 .cursor
 .superpowers/
 .worktrees/
+/course-builder/
 backend\.env
 .env.example
 
