@@ -169,8 +169,9 @@ CREATE TABLE IF NOT EXISTS courses (
   certificate_enabled BOOLEAN DEFAULT FALSE,
   independent_price_amount NUMERIC(12, 2) DEFAULT 0,
   independent_currency VARCHAR(10) DEFAULT 'KES',
-  course_category VARCHAR(50) DEFAULT 'general' CHECK (course_category IN ('general', 'weekly_typing', 'weekly_quiz')),
+  course_category VARCHAR(50) DEFAULT 'general',
   is_active BOOLEAN DEFAULT TRUE,
+  deleted_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -185,9 +186,12 @@ ALTER TABLE courses ADD COLUMN IF NOT EXISTS certificate_enabled BOOLEAN DEFAULT
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS independent_price_amount NUMERIC(12, 2) DEFAULT 0;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS independent_currency VARCHAR(10) DEFAULT 'KES';
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS course_category VARCHAR(50) DEFAULT 'general';
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+-- Older MySQL/MariaDB schemas generated anonymous checks while the PostgreSQL
+-- schema generated the named constraint below. Drop both shapes so normal
+-- courses can use reusable subject categories.
+ALTER TABLE courses DROP CONSTRAINT IF EXISTS courses_chk_1;
 ALTER TABLE courses DROP CONSTRAINT IF EXISTS courses_course_category_check;
-ALTER TABLE courses ADD CONSTRAINT courses_course_category_check
-  CHECK (course_category IN ('general', 'weekly_typing', 'weekly_quiz'));
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_courses_school_code
   ON courses(school_id, code)
@@ -207,10 +211,10 @@ CREATE TABLE IF NOT EXISTS course_templates (
   certificate_enabled BOOLEAN DEFAULT FALSE,
   independent_price_amount NUMERIC(12, 2) DEFAULT 0,
   independent_currency VARCHAR(10) DEFAULT 'KES',
-  course_category VARCHAR(50) DEFAULT 'general'
-    CHECK (course_category IN ('general', 'weekly_typing', 'weekly_quiz')),
+  course_category VARCHAR(50) DEFAULT 'general',
   version INTEGER DEFAULT 1,
   is_active BOOLEAN DEFAULT TRUE,
+  deleted_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -221,6 +225,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_course_templates_code
 
 ALTER TABLE course_templates ADD COLUMN IF NOT EXISTS independent_price_amount NUMERIC(12, 2) DEFAULT 0;
 ALTER TABLE course_templates ADD COLUMN IF NOT EXISTS independent_currency VARCHAR(10) DEFAULT 'KES';
+ALTER TABLE course_templates ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE course_templates DROP CONSTRAINT IF EXISTS course_templates_chk_1;
 
 CREATE TABLE IF NOT EXISTS course_template_modules (
   id SERIAL PRIMARY KEY,
@@ -230,6 +236,7 @@ CREATE TABLE IF NOT EXISTS course_template_modules (
   learning_outcomes JSONB DEFAULT '[]'::jsonb,
   position INTEGER NOT NULL DEFAULT 1,
   is_published BOOLEAN DEFAULT FALSE,
+  archived_at TIMESTAMP,
   unlock_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -320,6 +327,7 @@ CREATE TABLE IF NOT EXISTS course_modules (
 );
 
 ALTER TABLE course_modules ADD COLUMN IF NOT EXISTS template_module_id INTEGER REFERENCES course_template_modules(id) ON DELETE SET NULL;
+ALTER TABLE course_modules ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS learning_activities (
   id SERIAL PRIMARY KEY,
@@ -336,12 +344,14 @@ CREATE TABLE IF NOT EXISTS learning_activities (
     CHECK (completion_rule IN ('manual', 'viewed', 'scrolled', 'submitted', 'graded', 'score_at_least')),
   pass_score NUMERIC(8, 2),
   is_published BOOLEAN DEFAULT FALSE,
+  archived_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(module_id, position)
 );
 
 ALTER TABLE learning_activities ADD COLUMN IF NOT EXISTS template_activity_id INTEGER REFERENCES course_template_activities(id) ON DELETE SET NULL;
+ALTER TABLE learning_activities ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
 ALTER TABLE learning_activities
   ADD COLUMN IF NOT EXISTS availability_mode VARCHAR(20) NOT NULL DEFAULT 'required';
 ALTER TABLE learning_activities

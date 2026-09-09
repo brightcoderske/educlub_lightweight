@@ -55,7 +55,7 @@ async function ensureIndependentSchoolCourses() {
     `SELECT id
      FROM course_templates
      WHERE is_active = true
-       AND COALESCE(course_category, 'general') = 'general'
+       AND COALESCE(course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')
      ORDER BY name`,
   );
 

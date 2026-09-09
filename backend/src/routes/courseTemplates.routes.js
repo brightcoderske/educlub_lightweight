@@ -8,6 +8,7 @@ const {
 } = require("../middleware");
 
 router.get("/", authenticateToken, controller.listTemplates);
+router.get("/count", authenticateToken, isSystemAdmin, controller.countTemplates);
 router.post("/", authenticateToken, isSystemAdmin, controller.createTemplate);
 router.get(
   "/:templateId/builder",
@@ -37,6 +38,12 @@ router.put(
   authenticateToken,
   isSystemAdmin,
   controller.updateTemplate,
+);
+router.delete(
+  "/:templateId",
+  authenticateToken,
+  isSystemAdmin,
+  controller.deleteTemplate,
 );
 router.post(
   "/:templateId/modules",

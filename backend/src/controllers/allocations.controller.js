@@ -123,7 +123,8 @@ async function getAllAllocations(req, res) {
     } else if (category === "weekly") {
       queryText += " AND c.course_category IN ('weekly_typing', 'weekly_quiz')";
     } else if (category !== "all") {
-      queryText += " AND COALESCE(c.course_category, 'general') = 'general'";
+      queryText +=
+        " AND COALESCE(c.course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')";
     }
 
     queryText += " ORDER BY l.full_name";

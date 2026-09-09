@@ -76,7 +76,7 @@ async function getCachedCourseProgressForPeriod(learnerId, term, academicYear) {
        AND pc.term = $2
        AND pc.academic_year = $3
        AND a.status IN ('active', 'in_progress', 'completed')
-       AND COALESCE(c.course_category, 'general') = 'general'
+       AND COALESCE(c.course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')
      ORDER BY a.allocated_at DESC`,
     [learnerId, term, Number(academicYear)]
   );
@@ -96,7 +96,7 @@ async function getActiveAllocations(learnerId, term = null, academicYear = null)
      JOIN courses c ON c.id = a.course_id
      WHERE a.learner_id = $1
        AND a.status IN ('active', 'in_progress', 'completed')
-       AND COALESCE(c.course_category, 'general') = 'general'
+       AND COALESCE(c.course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')
        AND ($2::varchar IS NULL OR a.term = $2::varchar)
        AND ($3::integer IS NULL OR a.academic_year = $3::integer)
      ORDER BY a.allocated_at DESC`,
@@ -121,11 +121,13 @@ async function buildNativeCourseProgress(learnerId, course) {
      FROM course_modules cm
      LEFT JOIN learning_activities la
        ON la.module_id = cm.id
+      AND la.archived_at IS NULL
       AND la.is_published = true
      LEFT JOIN activity_progress ap
        ON ap.activity_id = la.id
       AND ap.learner_id = $1
      WHERE cm.course_id = $2
+       AND cm.archived_at IS NULL
        AND cm.is_published = true
      ORDER BY cm.position, la.position`,
     [learnerId, course.id]
@@ -158,11 +160,13 @@ async function buildNativeCourseProgressForLearners(learnerIds, course) {
      CROSS JOIN course_modules cm
      LEFT JOIN learning_activities la
        ON la.module_id = cm.id
+      AND la.archived_at IS NULL
       AND la.is_published = true
      LEFT JOIN activity_progress ap
        ON ap.activity_id = la.id
       AND ap.learner_id = target.learner_id
      WHERE cm.course_id = $2
+       AND cm.archived_at IS NULL
        AND cm.is_published = true
      ORDER BY target.learner_id, cm.position, la.position`,
     [learnerIds, course.id]
@@ -425,7 +429,7 @@ async function getSchoolCourseProgress({
        WHERE l.school_id = $1
          AND a.course_id = $2
          AND a.status IN ('active', 'in_progress', 'completed')
-         AND COALESCE(c.course_category, 'general') = 'general'
+         AND COALESCE(c.course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')
          AND (${termParam}::varchar IS NULL OR a.term = ${termParam}::varchar)
          AND (${yearParam}::integer IS NULL OR a.academic_year = ${yearParam}::integer)
          ${filters}
@@ -533,7 +537,7 @@ async function getSchoolCompletionSummary({ schoolId, term, academicYear }) {
       AND pc.academic_year = a.academic_year
      WHERE l.school_id = $1
        AND a.status IN ('active', 'in_progress', 'completed')
-       AND COALESCE(c.course_category, 'general') = 'general'
+       AND COALESCE(c.course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')
        ${filters}`,
     params
   );

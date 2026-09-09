@@ -10,6 +10,7 @@ const {
 const canManageCourse = requireRole("system_admin", "school_admin", "teacher");
 
 router.get("/", authenticateToken, coursesController.getAllCourses);
+router.get("/count", authenticateToken, coursesController.getCourseCount);
 router.get(
   "/learner/badges",
   authenticateToken,
@@ -212,7 +213,7 @@ router.put(
 router.delete(
   "/:id",
   authenticateToken,
-  isSystemAdmin,
+  requireRole("system_admin", "school_admin"),
   coursesController.deleteCourse,
 );
 

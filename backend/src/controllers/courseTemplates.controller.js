@@ -14,6 +14,16 @@ async function listTemplates(req, res) {
   }
 }
 
+async function countTemplates(req, res) {
+  try {
+    const count = await courseTemplatesService.countTemplates();
+    res.json({ count });
+  } catch (error) {
+    console.error("Count course templates error:", error);
+    res.status(500).json({ error: "Failed to count course templates" });
+  }
+}
+
 async function createTemplate(req, res) {
   try {
     const template = await courseTemplatesService.createTemplate(req.body);
@@ -35,6 +45,17 @@ async function updateTemplate(req, res) {
   } catch (error) {
     console.error("Update course template error:", error);
     res.status(500).json({ error: "Failed to update course template" });
+  }
+}
+
+async function deleteTemplate(req, res) {
+  try {
+    const deleted = await courseTemplatesService.deleteTemplate(req.params.templateId);
+    if (!deleted) return res.status(404).json({ error: "Template not found" });
+    res.json({ message: "Course template deleted; adopted school courses were retained" });
+  } catch (error) {
+    console.error("Delete course template error:", error);
+    res.status(500).json({ error: "Failed to delete course template" });
   }
 }
 
@@ -207,8 +228,10 @@ async function adoptTemplate(req, res) {
 
 module.exports = {
   listTemplates,
+  countTemplates,
   createTemplate,
   updateTemplate,
+  deleteTemplate,
   getTemplateBuilder,
   getTemplateLearningOverview,
   getTemplateModuleLearning,

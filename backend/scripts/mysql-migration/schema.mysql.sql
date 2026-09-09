@@ -186,8 +186,9 @@ CREATE TABLE IF NOT EXISTS courses (
   certificate_enabled TINYINT(1) DEFAULT FALSE,
   independent_price_amount DECIMAL(12, 2) DEFAULT 0,
   independent_currency VARCHAR(10) DEFAULT 'KES',
-  course_category VARCHAR(50) DEFAULT 'general' CHECK (course_category IN ('general', 'weekly_typing', 'weekly_quiz')),
+  course_category VARCHAR(50) DEFAULT 'general',
   is_active TINYINT(1) DEFAULT TRUE,
+  deleted_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE SET NULL
@@ -216,10 +217,11 @@ ALTER TABLE courses ADD COLUMN independent_currency VARCHAR(10) DEFAULT 'KES';
 
 ALTER TABLE courses ADD COLUMN course_category VARCHAR(50) DEFAULT 'general';
 
-ALTER TABLE courses DROP CONSTRAINT courses_course_category_check;
+ALTER TABLE courses ADD COLUMN deleted_at DATETIME;
 
-ALTER TABLE courses ADD CONSTRAINT courses_course_category_check
-  CHECK (course_category IN ('general', 'weekly_typing', 'weekly_quiz'));
+ALTER TABLE courses DROP CONSTRAINT courses_chk_1;
+
+ALTER TABLE courses DROP CONSTRAINT courses_course_category_check;
 
 CREATE UNIQUE INDEX idx_courses_school_code
   ON courses(school_id, code)
@@ -237,10 +239,10 @@ CREATE TABLE IF NOT EXISTS course_templates (
   certificate_enabled TINYINT(1) DEFAULT FALSE,
   independent_price_amount DECIMAL(12, 2) DEFAULT 0,
   independent_currency VARCHAR(10) DEFAULT 'KES',
-  course_category VARCHAR(50) DEFAULT 'general'
-    CHECK (course_category IN ('general', 'weekly_typing', 'weekly_quiz')),
+  course_category VARCHAR(50) DEFAULT 'general',
   version INT DEFAULT 1,
   is_active TINYINT(1) DEFAULT TRUE,
+  deleted_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -253,6 +255,10 @@ ALTER TABLE course_templates ADD COLUMN independent_price_amount DECIMAL(12, 2) 
 
 ALTER TABLE course_templates ADD COLUMN independent_currency VARCHAR(10) DEFAULT 'KES';
 
+ALTER TABLE course_templates ADD COLUMN deleted_at DATETIME;
+
+ALTER TABLE course_templates DROP CONSTRAINT course_templates_chk_1;
+
 CREATE TABLE IF NOT EXISTS course_template_modules (
   id INT AUTO_INCREMENT PRIMARY KEY,
   template_id INT,
@@ -261,6 +267,7 @@ CREATE TABLE IF NOT EXISTS course_template_modules (
   learning_outcomes JSON DEFAULT ('[]'),
   position INT NOT NULL DEFAULT 1,
   is_published TINYINT(1) DEFAULT FALSE,
+  archived_at DATETIME,
   unlock_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -374,6 +381,8 @@ ALTER TABLE course_modules ADD COLUMN template_module_id INT;
 ALTER TABLE course_modules
   ADD FOREIGN KEY (template_module_id) REFERENCES course_template_modules(id) ON DELETE SET NULL;
 
+ALTER TABLE course_modules ADD COLUMN archived_at DATETIME;
+
 CREATE TABLE IF NOT EXISTS learning_activities (
   id INT AUTO_INCREMENT PRIMARY KEY,
   module_id INT,
@@ -389,6 +398,7 @@ CREATE TABLE IF NOT EXISTS learning_activities (
     CHECK (completion_rule IN ('manual', 'viewed', 'scrolled', 'submitted', 'graded', 'score_at_least')),
   pass_score DECIMAL(8, 2),
   is_published TINYINT(1) DEFAULT FALSE,
+  archived_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(module_id, position),
@@ -400,6 +410,8 @@ ALTER TABLE learning_activities ADD COLUMN template_activity_id INT;
 
 ALTER TABLE learning_activities
   ADD FOREIGN KEY (template_activity_id) REFERENCES course_template_activities(id) ON DELETE SET NULL;
+
+ALTER TABLE learning_activities ADD COLUMN archived_at DATETIME;
 
 ALTER TABLE learning_activities
   ADD COLUMN availability_mode VARCHAR(20) NOT NULL DEFAULT 'required';

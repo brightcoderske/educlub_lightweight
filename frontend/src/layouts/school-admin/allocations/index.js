@@ -84,7 +84,7 @@ function SchoolAdminAllocations() {
           .catch((err) => {
             throw new Error(`Learners: ${err.message}`);
           }),
-        apiClient.get("/courses?category=general").catch((err) => {
+        apiClient.get("/courses?category=standard").catch((err) => {
           throw new Error(`Courses: ${err.message}`);
         }),
         apiClient.get(`/allocations?school_id=${user?.schoolId}`).catch((err) => {

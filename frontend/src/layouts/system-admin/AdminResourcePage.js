@@ -98,6 +98,7 @@ function AdminResourcePage({
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [actionPending, setActionPending] = useState(false);
   const [error, setError] = useState("");
   // Several actions per row grew every row to three lines. Edit stays visible;
   // the rest live behind this menu.
@@ -182,6 +183,30 @@ function AdminResourcePage({
     }
   };
 
+  const runAction = async (action, item) => {
+    setRowMenu({ anchor: null, item: null });
+    if (action.method !== "delete") {
+      navigate(action.path(item));
+      return;
+    }
+
+    const confirmed = window.confirm(
+      action.confirmMessage || `Delete ${item.name || "this record"}?`,
+    );
+    if (!confirmed) return;
+
+    setActionPending(true);
+    setError("");
+    try {
+      await apiClient.delete(`${endpoint}/${item.id}`);
+      await loadItems(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionPending(false);
+    }
+  };
+
   if (authLoading) {
     return <MDBox p={2}>Loading...</MDBox>;
   }
@@ -203,6 +228,13 @@ function AdminResourcePage({
               <Grid container spacing={2}>
                 {formFields.map((field) => {
                   const hasDefault = Object.prototype.hasOwnProperty.call(field, "defaultValue");
+                  const suggestions = field.suggestionsFromItems
+                    ? [...new Set(items.map((item) => item[field.suggestionsFromItems]).filter(Boolean))]
+                    : [];
+                  const datalistId = `${endpoint}-${field.name}-suggestions`.replace(
+                    /[^a-z0-9_-]/gi,
+                    "-"
+                  );
                   const value =
                     form[field.name] !== undefined
                       ? form[field.name]
@@ -219,6 +251,8 @@ function AdminResourcePage({
                         value={String(value)}
                         SelectProps={field.options ? { native: true } : undefined}
                         InputLabelProps={field.options ? { shrink: true } : undefined}
+                        inputProps={suggestions.length ? { list: datalistId } : undefined}
+                        helperText={field.helperText}
                         onChange={(event) =>
                           handleChange(field.name, event.target.value, field.type)
                         }
@@ -229,6 +263,13 @@ function AdminResourcePage({
                           </option>
                         ))}
                       </MDInput>
+                      {suggestions.length > 0 && (
+                        <datalist id={datalistId}>
+                          {suggestions.map((suggestion) => (
+                            <option key={suggestion} value={suggestion} />
+                          ))}
+                        </datalist>
+                      )}
                     </Grid>
                   );
                 })}
@@ -345,10 +386,8 @@ function AdminResourcePage({
         {actions.map((action) => (
           <MenuItem
             key={action.label}
-            onClick={() => {
-              navigate(action.path(rowMenu.item));
-              setRowMenu({ anchor: null, item: null });
-            }}
+            disabled={actionPending}
+            onClick={() => runAction(action, rowMenu.item)}
           >
             {action.label}
           </MenuItem>

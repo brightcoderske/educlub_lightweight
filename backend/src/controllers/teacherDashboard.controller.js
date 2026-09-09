@@ -20,6 +20,7 @@ async function getDashboard(req, res) {
          WHERE cta.teacher_user_id = $1
            AND cta.is_active = true
            AND c.school_id = $2
+           AND c.deleted_at IS NULL
          ORDER BY c.name`,
         params,
       ),
@@ -34,10 +35,11 @@ async function getDashboard(req, res) {
          LEFT JOIN course_allocations ca
            ON ca.course_id = cta.course_id
           AND ca.status IN ('active', 'completed')
-         LEFT JOIN course_modules cm ON cm.course_id = cta.course_id
-         LEFT JOIN learning_activities la ON la.module_id = cm.id
+         LEFT JOIN course_modules cm ON cm.course_id = cta.course_id AND cm.archived_at IS NULL
+         LEFT JOIN learning_activities la ON la.module_id = cm.id AND la.archived_at IS NULL
          LEFT JOIN activity_submissions s ON s.activity_id = la.id
-         WHERE cta.teacher_user_id = $1 AND cta.is_active = true`,
+         WHERE cta.teacher_user_id = $1 AND cta.is_active = true
+           AND c.deleted_at IS NULL`,
         params,
       ),
       query(
@@ -51,6 +53,9 @@ async function getDashboard(req, res) {
          JOIN activity_submissions s ON s.activity_id = la.id
          JOIN learners l ON l.id = s.learner_id
          WHERE cta.teacher_user_id = $1 AND cta.is_active = true
+           AND c.deleted_at IS NULL
+           AND cm.archived_at IS NULL
+           AND la.archived_at IS NULL
          ORDER BY s.submitted_at DESC
          LIMIT 8`,
         params,
@@ -65,6 +70,8 @@ async function getDashboard(req, res) {
          JOIN terms t ON t.id = sms.term_id AND t.is_active = true
          WHERE cta.teacher_user_id = $1
            AND cta.is_active = true
+           AND c.deleted_at IS NULL
+           AND cm.archived_at IS NULL
            AND sms.opens_at <= CURRENT_TIMESTAMP
          ORDER BY sms.opens_at DESC
          LIMIT 8`,

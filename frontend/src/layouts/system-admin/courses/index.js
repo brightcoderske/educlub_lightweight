@@ -16,7 +16,14 @@ function SystemAdminCourses() {
         { key: "code", label: "Code" },
         { key: "target_level", label: "Level" },
         { key: "estimated_weeks", label: "Weeks" },
-        { key: "course_category", label: "Category" },
+        {
+          key: "course_category",
+          label: "Category",
+          render: (course) =>
+            String(course.course_category || "general")
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, (letter) => letter.toUpperCase()),
+        },
         // Price and currency are one fact, not two columns.
         {
           key: "independent_price_amount",
@@ -42,12 +49,25 @@ function SystemAdminCourses() {
           color: "dark",
           path: (course) => `/system-admin/courses/${course.id}/reviews`,
         },
+        {
+          label: "Delete Course",
+          method: "delete",
+          confirmMessage:
+            "Delete this master course template? Schools that already adopted it will keep their courses, learner work, and reports.",
+        },
       ]}
       formFields={[
         { name: "name", label: "Course title" },
         { name: "code", label: "Course code" },
         { name: "target_level", label: "Target grade or level" },
         { name: "estimated_weeks", label: "Estimated weeks", type: "number" },
+        {
+          name: "course_category",
+          label: "Course category",
+          defaultValue: "general",
+          suggestionsFromItems: "course_category",
+          helperText: "Choose an existing category or type a new one.",
+        },
         {
           name: "independent_price_amount",
           label: "Independent learner price",

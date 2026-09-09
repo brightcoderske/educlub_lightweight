@@ -5,12 +5,16 @@ const {
   buildTemplateModuleLearning,
 } = require("./courseTemplatePreview");
 const { sanitizeActivityContent } = require("../utils/richTextSanitizer");
+const { withTransaction } = require("../database/transaction");
 
 function normalizeCourseCategory(category) {
-  if (["general", "weekly_typing", "weekly_quiz"].includes(category)) {
-    return category;
-  }
-  return "general";
+  const normalized = String(category || "general")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 50);
+  return normalized || "general";
 }
 
 function isSystemAdmin(user = {}) {
@@ -115,17 +119,20 @@ async function listTemplates(filters = {}, user = {}) {
   if (isSchoolStaff(user) && schoolId) {
     sql += ` LEFT JOIN courses c
               ON c.template_id = t.id
-             AND c.school_id = $1`;
+             AND c.school_id = $1
+             AND c.deleted_at IS NULL`;
   }
 
-  sql += " WHERE 1=1";
+  sql += " WHERE t.deleted_at IS NULL";
 
   if (!isSystemAdmin(user)) {
     sql += " AND COALESCE(t.is_active, true) = true";
   }
 
-  if (filters.category && filters.category !== "all") {
-    params.push(filters.category);
+  if (filters.category === "standard") {
+    sql += " AND t.course_category NOT IN ('weekly_typing', 'weekly_quiz')";
+  } else if (filters.category && filters.category !== "all") {
+    params.push(normalizeCourseCategory(filters.category));
     sql += ` AND t.course_category = $${params.length}`;
   }
 
@@ -162,6 +169,14 @@ async function createTemplate(data = {}) {
 }
 
 async function updateTemplate(templateId, data = {}) {
+  const currentResult = await query(
+    "SELECT * FROM course_templates WHERE id = $1 AND deleted_at IS NULL",
+    [templateId],
+  );
+  const current = currentResult.rows[0];
+  if (!current) return null;
+  const next = { ...current, ...data };
+
   const result = await query(
     `UPDATE course_templates
      SET name = $1,
@@ -179,20 +194,21 @@ async function updateTemplate(templateId, data = {}) {
          version = COALESCE(version, 1) + 1,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $13
+       AND deleted_at IS NULL
      RETURNING *`,
     [
-      data.name,
-      data.code || null,
-      data.description || "",
-      data.target_level || null,
-      data.image_url || null,
-      data.estimated_weeks || null,
-      JSON.stringify(data.learning_objectives || []),
-      data.certificate_enabled === true,
-      Number(data.independent_price_amount || 0),
-      data.independent_currency || "KES",
-      normalizeCourseCategory(data.course_category),
-      data.is_active !== false,
+      next.name,
+      next.code || null,
+      next.description || "",
+      next.target_level || null,
+      next.image_url || null,
+      next.estimated_weeks || null,
+      JSON.stringify(next.learning_objectives || []),
+      next.certificate_enabled === true,
+      Number(next.independent_price_amount || 0),
+      next.independent_currency || "KES",
+      normalizeCourseCategory(next.course_category),
+      next.is_active !== false,
       templateId,
     ],
   );
@@ -204,7 +220,7 @@ async function updateTemplate(templateId, data = {}) {
 
 async function getTemplateBuilder(templateId) {
   const templateResult = await query(
-    "SELECT * FROM course_templates WHERE id = $1",
+    "SELECT * FROM course_templates WHERE id = $1 AND deleted_at IS NULL",
     [templateId],
   );
   const template = templateResult.rows[0];
@@ -367,6 +383,19 @@ async function createTemplateActivity(moduleId, data = {}) {
   return result.rows[0];
 }
 
+async function deleteTemplate(templateId) {
+  const result = await query(
+    `UPDATE course_templates
+     SET is_active = false,
+         deleted_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+       AND deleted_at IS NULL`,
+    [templateId],
+  );
+  return result.rowCount > 0;
+}
+
 async function updateTemplateActivity(activityId, data = {}) {
   const templateId = await getTemplateIdForActivity(activityId);
   const safeContent = sanitizeActivityContent(data.content || {});
@@ -468,6 +497,16 @@ async function reorderTemplateActivities(moduleId, activityIds = []) {
   return result.rows;
 }
 
+async function countTemplates() {
+  const result = await query(
+    `SELECT COUNT(*) AS count
+     FROM course_templates
+     WHERE deleted_at IS NULL
+       AND COALESCE(course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')`,
+  );
+  return Number(result.rows[0]?.count || 0);
+}
+
 async function copyActivities(templateModuleId, schoolModuleId) {
   const activities = await query(
     `SELECT *
@@ -511,13 +550,14 @@ async function adoptTemplate(templateId, user = {}) {
      FROM courses
      WHERE school_id = $1
        AND template_id = $2
+       AND deleted_at IS NULL
      LIMIT 1`,
     [user.schoolId, templateId],
   );
   if (existing.rows[0]) return existing.rows[0];
 
   const templateResult = await query(
-    "SELECT * FROM course_templates WHERE id = $1 AND is_active = true",
+    "SELECT * FROM course_templates WHERE id = $1 AND is_active = true AND deleted_at IS NULL",
     [templateId],
   );
   const template = templateResult.rows[0];
@@ -584,9 +624,9 @@ async function adoptTemplate(templateId, user = {}) {
   return course;
 }
 
-async function getSchoolCourse(courseId, user = {}) {
+async function getSchoolCourse(courseId, user = {}, runQuery = query) {
   requireSchool(user);
-  const result = await query(
+  const result = await runQuery(
     `SELECT c.*,
             t.version AS current_template_version,
             (
@@ -596,24 +636,26 @@ async function getSchoolCourse(courseId, user = {}) {
      FROM courses c
      LEFT JOIN course_templates t ON t.id = c.template_id
      WHERE c.id = $1
-       AND c.school_id = $2`,
+       AND c.school_id = $2
+       AND c.deleted_at IS NULL`,
     [courseId, user.schoolId],
   );
   return result.rows[0];
 }
 
-async function syncSchoolCourse(courseId, user = {}) {
-  const course = await getSchoolCourse(courseId, user);
+async function syncSchoolCourse(courseId, user = {}, runQuery = query) {
+  const course = await getSchoolCourse(courseId, user, runQuery);
   if (!course?.template_id)
     throw new Error("This course is not linked to a template.");
 
-  const template = await query("SELECT * FROM course_templates WHERE id = $1", [
-    course.template_id,
-  ]);
+  const template = await runQuery(
+    "SELECT * FROM course_templates WHERE id = $1 AND deleted_at IS NULL",
+    [course.template_id],
+  );
   const templateRow = template.rows[0];
   if (!templateRow) throw new Error("Template no longer exists.");
 
-  await query(
+  await runQuery(
     `UPDATE courses
      SET name = $1,
          code = $2,
@@ -644,19 +686,20 @@ async function syncSchoolCourse(courseId, user = {}) {
     ],
   );
 
-  const templateModules = await query(
+  const templateModules = await runQuery(
     "SELECT * FROM course_template_modules WHERE template_id = $1 ORDER BY position",
     [course.template_id],
   );
 
   for (const templateModule of templateModules.rows) {
-    let schoolModule = await query(
+    let schoolModule = await runQuery(
       `UPDATE course_modules
        SET title = $1,
            description = $2,
            learning_outcomes = $3,
            is_published = $4,
            unlock_at = $5,
+           archived_at = NULL,
            updated_at = CURRENT_TIMESTAMP
        WHERE course_id = $6
          AND template_module_id = $7
@@ -673,7 +716,7 @@ async function syncSchoolCourse(courseId, user = {}) {
     );
 
     if (!schoolModule.rows[0]) {
-      schoolModule = await query(
+      schoolModule = await runQuery(
         `INSERT INTO course_modules (
            course_id, template_module_id, title, description, learning_outcomes,
            position, is_published, unlock_at
@@ -701,7 +744,7 @@ async function syncSchoolCourse(courseId, user = {}) {
       );
     }
 
-    const templateActivities = await query(
+    const templateActivities = await runQuery(
       `SELECT *
        FROM course_template_activities
        WHERE template_module_id = $1
@@ -710,7 +753,7 @@ async function syncSchoolCourse(courseId, user = {}) {
     );
 
     for (const templateActivity of templateActivities.rows) {
-      const updated = await query(
+      const updated = await runQuery(
         `UPDATE learning_activities
          SET title = $1,
              activity_type = $2,
@@ -721,6 +764,7 @@ async function syncSchoolCourse(courseId, user = {}) {
              completion_rule = $7,
              pass_score = $8,
              is_published = $9,
+             archived_at = NULL,
              updated_at = CURRENT_TIMESTAMP
          WHERE module_id = $10
            AND template_activity_id = $11
@@ -741,7 +785,7 @@ async function syncSchoolCourse(courseId, user = {}) {
       );
 
       if (!updated.rows[0]) {
-        await query(
+        await runQuery(
           `INSERT INTO learning_activities (
              module_id, template_activity_id, title, activity_type, content, points,
              position, is_required, availability_mode, completion_rule, pass_score, is_published
@@ -774,46 +818,64 @@ async function syncSchoolCourse(courseId, user = {}) {
     }
   }
 
-  return getSchoolCourse(courseId, user);
+  return getSchoolCourse(courseId, user, runQuery);
 }
 
 async function rollbackSchoolCourse(courseId, user = {}) {
-  const course = await getSchoolCourse(courseId, user);
-  if (!course?.template_id) throw new Error("This course is not linked to a template.");
+  return withTransaction(async (client) => {
+    const runQuery = client.query.bind(client);
+    const course = await getSchoolCourse(courseId, user, runQuery);
+    if (!course?.template_id) throw new Error("This course is not linked to a template.");
 
-  await query(
-    `DELETE FROM learning_activities la
-     USING course_modules cm
-     WHERE la.module_id = cm.id
-       AND cm.course_id = $1
-       AND la.template_activity_id IS NOT NULL
-       AND NOT EXISTS (
-         SELECT 1
-         FROM course_template_activities ta
-         WHERE ta.id = la.template_activity_id
-       )`,
-    [courseId]
-  );
+    // Retire the visible school structure without deleting learner evidence.
+    // Moving positions out of the active range frees the template positions
+    // while progress, submissions, grades, feedback and reports retain their
+    // original module/activity ids for historical access.
+    await runQuery(
+      `UPDATE learning_activities la
+       JOIN course_modules cm ON cm.id = la.module_id
+       SET la.position = -la.id,
+           la.is_published = false,
+           la.archived_at = CURRENT_TIMESTAMP
+       WHERE cm.course_id = $1
+         AND la.archived_at IS NULL`,
+      [courseId],
+    );
+    await runQuery(
+      `UPDATE course_modules
+       SET position = -id,
+           is_published = false,
+           archived_at = CURRENT_TIMESTAMP
+       WHERE course_id = $1
+         AND archived_at IS NULL`,
+      [courseId],
+    );
+    await runQuery(
+      `UPDATE course_modules cm
+       JOIN course_template_modules tm ON tm.id = cm.template_module_id
+       SET cm.position = tm.position
+       WHERE cm.course_id = $1`,
+      [courseId],
+    );
+    await runQuery(
+      `UPDATE learning_activities la
+       JOIN course_template_activities ta ON ta.id = la.template_activity_id
+       JOIN course_modules cm ON cm.id = la.module_id
+       SET la.position = ta.position
+       WHERE cm.course_id = $1`,
+      [courseId],
+    );
 
-  await query(
-    `DELETE FROM course_modules cm
-     WHERE cm.course_id = $1
-       AND cm.template_module_id IS NOT NULL
-       AND NOT EXISTS (
-         SELECT 1
-         FROM course_template_modules tm
-         WHERE tm.id = cm.template_module_id
-       )`,
-    [courseId]
-  );
-
-  return syncSchoolCourse(courseId, user);
+    return syncSchoolCourse(courseId, user, runQuery);
+  });
 }
 
 module.exports = {
   listTemplates,
+  countTemplates,
   createTemplate,
   updateTemplate,
+  deleteTemplate,
   getTemplateBuilder,
   getTemplateLearningOverview,
   getTemplateModuleLearning,

@@ -48,7 +48,7 @@ function SystemAdminDashboard() {
         });
       const cached = getCachedPage(CACHE_KEY)?.value;
       if (cached) {
-        setStats(cached.stats || stats);
+        setStats({ ...(cached.stats || stats), courses: "—" });
         setCurrentTerm(cached.currentTerm || null);
         setMfaPolicy(cached.mfaPolicy || mfaPolicy);
       }
@@ -64,7 +64,7 @@ function SystemAdminDashboard() {
         ] = await Promise.all([
           load("/schools"),
           load("/learners"),
-          load("/courses"),
+          load("/course-templates/count"),
           load("/users?role=school_admin"),
           load("/academic/terms"),
           apiClient.get("/academic/terms/current").catch(() => null),
@@ -77,7 +77,7 @@ function SystemAdminDashboard() {
         const nextStats = {
           schools: schoolsRes?.length ?? "—",
           learners: learnersRes?.length ?? "—",
-          courses: coursesRes?.length ?? "—",
+          courses: coursesRes?.count ?? "—",
           schoolAdmins: schoolAdminsRes?.length ?? "—",
           pastTerms:
             termsRes?.filter((termItem) => new Date(termItem.end_date) < new Date()).length ?? "—",

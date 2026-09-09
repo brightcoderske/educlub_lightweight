@@ -27,22 +27,24 @@ const {
 } = require("../utils/richTextSanitizer");
 
 function normalizeCourseCategory(category) {
-  if (["general", "weekly_typing", "weekly_quiz"].includes(category)) {
-    return category;
-  }
-  return "general";
+  const normalized = String(category || "general")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 50);
+  return normalized || "general";
 }
 
 async function getAllCourses(filters = {}) {
-  const category =
-    filters.category === "all"
-      ? null
-      : normalizeCourseCategory(filters.category);
   const params = [];
   let categorySql = "";
 
-  if (category) {
-    params.push(category);
+  if (!filters.category || filters.category === "standard") {
+    categorySql =
+      " AND COALESCE(c.course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')";
+  } else if (filters.category !== "all") {
+    params.push(normalizeCourseCategory(filters.category));
     categorySql = ` AND c.course_category = $${params.length}`;
   }
 
@@ -94,12 +96,53 @@ async function getAllCourses(filters = {}) {
      LEFT JOIN course_templates t ON t.id = c.template_id
      ${allocationJoinSql}
      WHERE 1=1
+       AND c.deleted_at IS NULL
        ${categorySql}
        ${scopeSql}
      ORDER BY c.course_category, c.name`,
     params
   );
   return result.rows;
+}
+
+async function getCourseCount(filters = {}) {
+  const params = [];
+  const where = [
+    "COALESCE(c.course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')",
+  ];
+
+  if (filters.user?.role === "school_admin") {
+    params.push(filters.user.schoolId);
+    where.push(`c.school_id = $${params.length}`);
+  } else if (filters.user?.role === "teacher") {
+    params.push(filters.user.schoolId, filters.user.userId);
+    where.push(`c.school_id = $${params.length - 1}`);
+    where.push(`EXISTS (
+      SELECT 1 FROM course_teacher_assignments cta
+      WHERE cta.course_id = c.id
+        AND cta.teacher_user_id = $${params.length}
+        AND cta.is_active = true
+    )`);
+  } else if (filters.user?.role === "learner") {
+    params.push(filters.user.userId);
+    where.push(`EXISTS (
+      SELECT 1
+      FROM course_allocations a
+      JOIN learners l ON l.id = a.learner_id
+      WHERE a.course_id = c.id
+        AND a.status IN ('active', 'in_progress', 'completed')
+        AND l.user_id = $${params.length}
+    )`);
+  }
+
+  const result = await query(
+    `SELECT COUNT(*) AS count
+     FROM courses c
+     WHERE c.deleted_at IS NULL
+       AND ${where.join(" AND ")}`,
+    params
+  );
+  return Number(result.rows[0]?.count || 0);
 }
 
 async function createCourse(courseData) {
@@ -207,12 +250,23 @@ async function updateCourse(id, courseData) {
   return result.rows[0];
 }
 
-async function deleteCourse(id) {
-  await query(
-    `DELETE FROM courses c
-     WHERE c.id = $1`,
-    [id]
+async function deleteCourse(id, user = {}) {
+  const params = [id];
+  let scopeSql = "";
+  if (user.role === "school_admin") {
+    params.push(user.schoolId);
+    scopeSql = ` AND school_id = $${params.length}`;
+  }
+  const result = await query(
+    `UPDATE courses
+     SET is_active = false,
+         deleted_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+       AND deleted_at IS NULL${scopeSql}`,
+    params
   );
+  return result.rowCount > 0;
 }
 
 async function findLearnerForUser(userId) {
@@ -236,7 +290,7 @@ async function assertCourseManageAccess(courseId, user = {}) {
   if (!isSchoolStaff(user) || !user.schoolId) return false;
 
   const result = await query(
-    "SELECT id FROM courses WHERE id = $1 AND school_id = $2",
+    "SELECT id FROM courses WHERE id = $1 AND school_id = $2 AND deleted_at IS NULL",
     [courseId, user.schoolId]
   );
   if (!result.rows[0]) return false;
@@ -376,7 +430,8 @@ async function assertCourseAccess(courseId, user = {}) {
               ) AS update_available
        FROM courses c
        LEFT JOIN course_templates t ON t.id = c.template_id
-       WHERE c.id = $1`,
+       WHERE c.id = $1
+         AND c.deleted_at IS NULL`,
       [courseId]
     );
     return { course: result.rows[0], learner: null };
@@ -394,7 +449,8 @@ async function assertCourseAccess(courseId, user = {}) {
               ) AS update_available
        FROM courses c
        LEFT JOIN course_templates t ON t.id = c.template_id
-       WHERE c.id = $1 AND c.school_id = $2`,
+       WHERE c.id = $1 AND c.school_id = $2
+         AND c.deleted_at IS NULL`,
       [courseId, user.schoolId]
     );
     return { course: result.rows[0], learner: null };
@@ -419,6 +475,7 @@ async function assertCourseAccess(courseId, user = {}) {
      JOIN course_allocations a ON a.course_id = c.id
      LEFT JOIN course_templates t ON t.id = c.template_id
      WHERE c.id = $1
+       AND c.deleted_at IS NULL
        AND a.learner_id = $2
        AND a.status IN ('active', 'in_progress', 'completed')
      LIMIT 1`,
@@ -563,11 +620,13 @@ async function getCourseLearningOverview(courseId, user = {}, options = {}) {
      LEFT JOIN school_module_schedules sms ON sms.module_id = cm.id
      LEFT JOIN learning_activities la
        ON la.module_id = cm.id
+      AND la.archived_at IS NULL
       AND (la.is_published = true OR ${staffParam} = true)
      LEFT JOIN activity_progress ap
        ON ap.activity_id = la.id
       ${learnerJoin}
      WHERE cm.course_id = $1
+       AND cm.archived_at IS NULL
        AND (cm.is_published = true OR ${staffParam} = true)
      ORDER BY cm.position, la.position`,
     params
@@ -730,7 +789,10 @@ async function assertActivityAccess(activityId, user = {}) {
      FROM learning_activities la
      JOIN course_modules cm ON cm.id = la.module_id
      JOIN courses c ON c.id = cm.course_id
-     WHERE la.id = $1`,
+     WHERE la.id = $1
+       AND la.archived_at IS NULL
+       AND cm.archived_at IS NULL
+       AND c.deleted_at IS NULL`,
     [activityId]
   );
   const activity = result.rows[0];
@@ -1368,6 +1430,8 @@ async function upsertActivityProgress(
      JOIN course_modules cm ON cm.id = la.module_id
      JOIN course_allocations ca ON ca.course_id = cm.course_id
      WHERE la.id = $1::integer
+       AND la.archived_at IS NULL
+       AND cm.archived_at IS NULL
        AND ca.learner_id = $2::integer
        AND ca.status IN ('active', 'in_progress', 'completed')
      LIMIT 1`,
@@ -1495,7 +1559,9 @@ async function maybeCreateCourseCompletionCertificate({
             )::integer AS required_done
      FROM courses c
      LEFT JOIN course_modules cm ON cm.course_id = c.id
+       AND cm.archived_at IS NULL
      LEFT JOIN learning_activities la ON la.module_id = cm.id
+       AND la.archived_at IS NULL
      LEFT JOIN activity_progress ap
        ON ap.activity_id = la.id
       AND ap.learner_id = $2::integer
@@ -1842,7 +1908,7 @@ async function createModule(courseId, data = {}) {
      )
      VALUES (
        $1, $2, $3, $4,
-       COALESCE($5, (SELECT COALESCE(MAX(position), 0) + 1 FROM course_modules WHERE course_id = $1)),
+       COALESCE($5, (SELECT COALESCE(MAX(position), 0) + 1 FROM course_modules WHERE course_id = $1 AND archived_at IS NULL)),
        $6, NULLIF($7, '')::timestamp
      )
      RETURNING *`,
@@ -1871,7 +1937,7 @@ async function createManagedModule(courseId, user = {}, data = {}) {
 
 async function updateModule(moduleId, user = {}, data = {}) {
   const moduleCourse = await query(
-    "SELECT course_id FROM course_modules WHERE id = $1",
+    "SELECT course_id FROM course_modules WHERE id = $1 AND archived_at IS NULL",
     [moduleId]
   );
   const courseId = moduleCourse.rows[0]?.course_id;
@@ -1931,7 +1997,7 @@ async function createActivity(moduleId, data = {}) {
      )
      VALUES (
        $1, $2, $3, $4, $5,
-       COALESCE($6, (SELECT COALESCE(MAX(position), 0) + 1 FROM learning_activities WHERE module_id = $1)),
+       COALESCE($6, (SELECT COALESCE(MAX(position), 0) + 1 FROM learning_activities WHERE module_id = $1 AND archived_at IS NULL)),
        $7, $8, $9, $10, $11
      )
      RETURNING *`,
@@ -1954,7 +2020,7 @@ async function createActivity(moduleId, data = {}) {
 
 async function createManagedActivity(moduleId, user = {}, data = {}) {
   const moduleCourse = await query(
-    "SELECT course_id FROM course_modules WHERE id = $1",
+    "SELECT course_id FROM course_modules WHERE id = $1 AND archived_at IS NULL",
     [moduleId]
   );
   const courseId = moduleCourse.rows[0]?.course_id;
@@ -1976,7 +2042,9 @@ async function updateActivity(activityId, user = {}, data = {}) {
     `SELECT cm.course_id
      FROM learning_activities la
      JOIN course_modules cm ON cm.id = la.module_id
-     WHERE la.id = $1`,
+     WHERE la.id = $1
+       AND la.archived_at IS NULL
+       AND cm.archived_at IS NULL`,
     [activityId]
   );
   const courseId = activityCourse.rows[0]?.course_id;
@@ -2063,6 +2131,7 @@ async function reorderActivities(moduleId, user = {}, activityIds = []) {
     `SELECT id
      FROM learning_activities
      WHERE module_id = $1::integer
+       AND archived_at IS NULL
        AND id = ANY($2::integer[])`,
     [moduleId, orderedIds]
   );
@@ -2095,6 +2164,7 @@ async function reorderActivities(moduleId, user = {}, activityIds = []) {
     `SELECT *
      FROM learning_activities
      WHERE module_id = $1::integer
+       AND archived_at IS NULL
      ORDER BY position`,
     [moduleId]
   );
@@ -2222,6 +2292,7 @@ async function revealModuleFeedbackIdentity(feedbackId, user = {}, data = {}) {
 
 module.exports = {
   getAllCourses,
+  getCourseCount,
   createCourse,
   getCourseById,
   updateCourse,

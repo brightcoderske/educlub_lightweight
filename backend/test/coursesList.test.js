@@ -46,6 +46,60 @@ test("learner course list joins the learner allocation for preview access detail
   assert.equal(courses[0].access_level, "preview");
 });
 
+test("standard course lists include reusable subject categories but exclude weekly system courses", async () => {
+  const service = loadServiceWithQuery(async (sql, params) => {
+    assert.match(
+      sql,
+      /COALESCE\(c\.course_category, 'general'\) NOT IN \('weekly_typing', 'weekly_quiz'\)/,
+    );
+    assert.deepEqual(params, [4]);
+    return { rows: [{ id: 12, course_category: "web_development" }] };
+  });
+
+  const courses = await service.getAllCourses({
+    category: "standard",
+    user: { role: "school_admin", schoolId: 4 },
+  });
+
+  assert.equal(courses[0].course_category, "web_development");
+});
+
+test("course categories accept reusable human-entered values", () => {
+  const service = loadServiceWithQuery(async () => ({ rows: [] }));
+  assert.equal(service.normalizeCourseCategory(" Web Development "), "web_development");
+  assert.equal(service.normalizeCourseCategory(""), "general");
+});
+
+test("dashboard course count is a scoped database aggregate", async () => {
+  const service = loadServiceWithQuery(async (sql, params) => {
+    assert.match(sql, /SELECT COUNT\(\*\) AS count/);
+    assert.match(sql, /c\.school_id = \$1/);
+    assert.deepEqual(params, [4]);
+    return { rows: [{ count: 7 }] };
+  });
+
+  assert.equal(
+    await service.getCourseCount({ user: { role: "school_admin", schoolId: 4 } }),
+    7,
+  );
+});
+
+test("school admins soft-delete only their own course so learning history remains", async () => {
+  const service = loadServiceWithQuery(async (sql, params) => {
+    assert.match(sql, /UPDATE courses/);
+    assert.match(sql, /deleted_at = CURRENT_TIMESTAMP/);
+    assert.doesNotMatch(sql, /DELETE FROM courses/);
+    assert.match(sql, /school_id = \$2/);
+    assert.deepEqual(params, [12, 4]);
+    return { rows: [], rowCount: 1 };
+  });
+
+  assert.equal(
+    await service.deleteCourse(12, { role: "school_admin", schoolId: 4 }),
+    true,
+  );
+});
+
 test("independent preview limits access to the configured first activities only", () => {
   const source = require("node:fs").readFileSync(
     require("node:path").join(__dirname, "../src/services/courses.service.js"),

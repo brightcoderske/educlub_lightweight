@@ -138,6 +138,16 @@ async function getAllCourses(req, res) {
   }
 }
 
+async function getCourseCount(req, res) {
+  try {
+    const count = await coursesService.getCourseCount({ user: req.user });
+    res.json({ count });
+  } catch (error) {
+    console.error("Get course count error:", error);
+    res.status(500).json({ error: "Failed to count courses" });
+  }
+}
+
 async function createCourse(req, res) {
   try {
     const courseData = req.body;
@@ -177,7 +187,8 @@ async function updateCourse(req, res) {
 
 async function deleteCourse(req, res) {
   try {
-    await coursesService.deleteCourse(req.params.id);
+    const deleted = await coursesService.deleteCourse(req.params.id, req.user);
+    if (!deleted) return res.status(404).json({ error: "Course not found" });
     res.json({ message: "Course deleted successfully" });
   } catch (error) {
     console.error("Delete course error:", error);
@@ -687,6 +698,7 @@ async function revealModuleFeedbackIdentity(req, res) {
 module.exports = {
   isAllowedSubmissionFile,
   getAllCourses,
+  getCourseCount,
   createCourse,
   getCourseById,
   updateCourse,

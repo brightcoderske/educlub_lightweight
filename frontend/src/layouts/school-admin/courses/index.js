@@ -44,6 +44,7 @@ function Courses() {
   const [assignments, setAssignments] = useState([]);
   const [assignmentCourse, setAssignmentCourse] = useState(null);
   const [teacherUserId, setTeacherUserId] = useState("");
+  const [descriptionTemplate, setDescriptionTemplate] = useState(null);
   // Six buttons per row made every row three lines tall. One primary action
   // stays visible; the rest live behind this menu.
   const [rowMenu, setRowMenu] = useState({ anchor: null, course: null });
@@ -69,7 +70,7 @@ function Courses() {
       setCourses(response);
       if (user?.role === "school_admin") {
         const templateResponse = await apiClient
-          .get("/course-templates?category=general")
+          .get("/course-templates?category=standard")
           .catch((err) => {
             throw new Error(`Templates: ${err.message}`);
           });
@@ -160,6 +161,21 @@ function Courses() {
       setError("");
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const deleteCourse = async (course) => {
+    const confirmed = window.confirm(
+      `Delete "${course.name}" from active courses? Learner work and completed reports will be retained for history.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await apiClient.delete(`/courses/${course.id}`);
+      setRowMenu({ anchor: null, course: null });
+      await fetchCourses(true);
+    } catch (err) {
+      setError(err.message || "Failed to delete course");
     }
   };
 
@@ -310,6 +326,7 @@ function Courses() {
                       <TableHead sx={{ display: "table-header-group" }}>
                         <TableRow>
                           <TableCell>Course</TableCell>
+                          <TableCell>Category</TableCell>
                           <TableCell>Level</TableCell>
                           <TableCell align="right">Weeks</TableCell>
                           <TableCell>Status</TableCell>
@@ -352,6 +369,11 @@ function Courses() {
                                     : ""}
                                 </MDTypography>
                               )}
+                            </TableCell>
+                            <TableCell>
+                              {String(course.course_category || "general")
+                                .replace(/_/g, " ")
+                                .replace(/\b\w/g, (letter) => letter.toUpperCase())}
                             </TableCell>
                             <TableCell>
                               <MDTypography variant="caption" color="text">
@@ -426,6 +448,7 @@ function Courses() {
                         <TableHead sx={{ display: "table-header-group" }}>
                           <TableRow>
                             <TableCell>Template</TableCell>
+                            <TableCell>Category</TableCell>
                             <TableCell>Level</TableCell>
                             <TableCell>Weeks</TableCell>
                             <TableCell>Version</TableCell>
@@ -454,8 +477,28 @@ function Courses() {
                                     )}
                                   </MDBox>
                                   <MDTypography variant="caption" color="text">
-                                    {template.description || "No description"}
+                                    {template.description
+                                      ? `${template.description.slice(0, 120)}${
+                                          template.description.length > 120 ? "…" : ""
+                                        }`
+                                      : "No description"}
                                   </MDTypography>
+                                  {template.description?.length > 120 && (
+                                    <MDButton
+                                      variant="text"
+                                      color="info"
+                                      size="small"
+                                      onClick={() => setDescriptionTemplate(template)}
+                                      sx={{ minWidth: 0, ml: 0.5, px: 0.5 }}
+                                    >
+                                      Read more
+                                    </MDButton>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {String(template.course_category || "general")
+                                    .replace(/_/g, " ")
+                                    .replace(/\b\w/g, (letter) => letter.toUpperCase())}
                                 </TableCell>
                                 <TableCell>{template.target_level || "All levels"}</TableCell>
                                 <TableCell>{template.estimated_weeks || "-"}</TableCell>
@@ -545,6 +588,13 @@ function Courses() {
             () => requestUpdate(rowMenu.course?.id),
             user?.role === "teacher" && Boolean(rowMenu.course?.update_available),
           ],
+          [
+            "delete",
+            "delete_forever",
+            "Delete Course",
+            () => deleteCourse(rowMenu.course),
+            user?.role === "school_admin",
+          ],
         ]
           .filter(([, , , , shown]) => shown)
           .map(([key, icon, label, run]) => (
@@ -563,6 +613,24 @@ function Courses() {
           ))}
       </Menu>
       <Footer />
+      <Dialog
+        open={Boolean(descriptionTemplate)}
+        onClose={() => setDescriptionTemplate(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>{descriptionTemplate?.name}</DialogTitle>
+        <DialogContent>
+          <MDTypography variant="body2" color="text" sx={{ whiteSpace: "pre-wrap" }}>
+            {descriptionTemplate?.description}
+          </MDTypography>
+        </DialogContent>
+        <DialogActions>
+          <MDButton color="info" onClick={() => setDescriptionTemplate(null)}>
+            Close
+          </MDButton>
+        </DialogActions>
+      </Dialog>
       <Dialog
         open={Boolean(assignmentCourse)}
         onClose={() => setAssignmentCourse(null)}

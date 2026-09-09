@@ -52,7 +52,7 @@ function SchoolAdminDashboard() {
         });
       const cached = getCachedPage(cacheKey)?.value;
       if (cached) {
-        setStats(cached.stats || stats);
+        setStats({ ...(cached.stats || stats), courses: "—" });
         setRecentActivity(cached.recentActivity || []);
         setCurrentTerm(cached.currentTerm || null);
         setPopulation(cached.population || []);
@@ -64,7 +64,7 @@ function SchoolAdminDashboard() {
             load(`/learners?school_id=${user?.schoolId}`),
             load(`/allocations?school_id=${user?.schoolId}`),
             load(`/certificates?school_id=${user?.schoolId}`),
-            load("/courses"),
+            load("/courses/count"),
             load("/academic/terms"),
           ]);
         const populationRes = await apiClient.get("/learners/population").catch(() => []);
@@ -91,7 +91,7 @@ function SchoolAdminDashboard() {
           allocated: allocationsRes?.length ?? "—",
           completed: allocationsRes?.filter((a) => a.status === "completed").length ?? "—",
           certificates: certificatesRes?.length ?? "—",
-          courses: coursesRes?.length ?? "—",
+          courses: coursesRes?.count ?? "—",
           activeTerms:
             termsRes?.filter((termItem) => new Date(termItem.end_date) < new Date()).length ?? "—",
           completionRate:
