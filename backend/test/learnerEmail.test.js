@@ -33,3 +33,21 @@ test("an address that cannot receive mail is refused with a message a child can 
     );
   }
 });
+
+// The one rule for "can mail reach this address": the same check an address
+// passes when it is entered is the check applied before something is sent to it.
+test("an address is deliverable exactly when it would have been accepted", () => {
+  const { isDeliverableEmail } = require("../src/services/userEmail.service");
+
+  assert.equal(isDeliverableEmail("anna@gmail.com"), true);
+  assert.equal(isDeliverableEmail("  Anna.Mani@Gmail.COM "), true);
+
+  // The generated placeholder, and any other .local address, cannot receive mail.
+  assert.equal(isDeliverableEmail("annamani@learners.educlub.local"), false);
+  assert.equal(isDeliverableEmail("someone@office.LOCAL"), false);
+
+  for (const unusable of ["", "   ", null, undefined, "nope", "a@b", "two words@x.com"]) {
+    assert.equal(isDeliverableEmail(unusable), false, `${JSON.stringify(unusable)} is not deliverable`);
+  }
+  assert.equal(isDeliverableEmail(`${"a".repeat(250)}@x.com`), false, "longer than the column holds");
+});

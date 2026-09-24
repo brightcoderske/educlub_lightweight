@@ -21,11 +21,11 @@ test("refresh uses rotating hashed server-side sessions without requiring an acc
   assert.match(service, /token_reuse/);
 });
 
-test("MFA codes are hashed, attempt-limited, and compared in constant time", () => {
+// The attempt limit is asserted by behaviour in mfaSignIn.test.js.
+test("MFA codes are hashed and compared in constant time", () => {
   const service = fs.readFileSync(path.join(__dirname, "../src/services/auth.service.js"), "utf8");
   assert.match(service, /createHmac\("sha256"/);
   assert.match(service, /timingSafeEqual/);
-  assert.match(service, /mfa_code_attempts[\s\S]*>= 5/);
   assert.doesNotMatch(service, /SET mfa_code = \$1/);
 });
 

@@ -21,6 +21,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { staffCreatedNotice } from "lib/staffNotice";
 
 function Teachers() {
   const { user } = useAuth();
@@ -28,6 +29,7 @@ function Teachers() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ full_name: "", email: "" });
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   const loadTeachers = () =>
     apiClient
@@ -42,9 +44,13 @@ function Teachers() {
   const save = async () => {
     try {
       setError("");
-      await apiClient.post("/users/staff", { ...form, role: "teacher" });
+      setMessage("");
+      const created = await apiClient.post("/users/staff", { ...form, role: "teacher" });
       setOpen(false);
       setForm({ full_name: "", email: "" });
+      const notice = staffCreatedNotice("teacher", created);
+      if (notice.ok) setMessage(notice.text);
+      else setError(notice.text);
       await loadTeachers();
     } catch (err) {
       setError(err.message);
@@ -82,6 +88,11 @@ function Teachers() {
       <MDBox py={2}>
         <Card>
           <MDBox p={2}>
+            {message && (
+              <MDTypography variant="body2" color="success" mb={2}>
+                {message}
+              </MDTypography>
+            )}
             {error && (
               <MDTypography variant="body2" color="error" mb={2}>
                 {error}

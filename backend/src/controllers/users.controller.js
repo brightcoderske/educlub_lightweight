@@ -4,6 +4,7 @@ const authService = require("../services/auth.service");
 const { generateRandomPassword, hashPassword } = require("../utils/password");
 const { sendWelcomeEmail } = require("../utils/email");
 const { isUniqueViolation } = require("../utils/dbErrors");
+const { respondWithError } = require("../utils/httpErrors");
 const userEmailService = require("../services/userEmail.service");
 const {
   resolveStaffAccountInput,
@@ -102,14 +103,18 @@ async function createStaffAccount(req, res) {
       );
     }
 
-    await sendWelcomeEmail(
+    // The account exists either way, so a failed send must not fail the
+    // request - but it must not be hidden either. This email is the only place
+    // the new person learns their first-login details, and the page used to say
+    // "emailed" whatever happened here.
+    const welcomeEmailSent = await sendWelcomeEmail(
       staff.email,
       staff.fullName,
       staff.username,
       password,
     );
 
-    res.status(201).json({ ...user, phone });
+    res.status(201).json({ ...user, phone, welcome_email_sent: welcomeEmailSent });
   } catch (error) {
     console.error("Create staff account error:", error);
     if (isUniqueViolation(error)) {
@@ -146,7 +151,7 @@ async function resetUserPasswordByEmail(req, res) {
       return res.status(403).json({ error: "User is outside your school" });
     }
 
-    if (authService.isDeliverableEmail(user.email)) {
+    if (userEmailService.isDeliverableEmail(user.email)) {
       const result = await authService.sendPasswordResetLinkForUser(
         user,
         req.user.userId,
@@ -191,8 +196,9 @@ async function resetUserPasswordByEmail(req, res) {
       temporaryPassword: password,
     });
   } catch (error) {
-    console.error("Reset user password email error:", error);
-    res.status(500).json({ error: "Failed to reset password by email" });
+    // A delivery failure carries its own status and message, so the administrator
+    // is told email is the problem rather than that something went wrong.
+    respondWithError(res, error, "Failed to reset password by email");
   }
 }
 

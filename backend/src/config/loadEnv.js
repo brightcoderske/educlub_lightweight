@@ -1,4 +1,3 @@
-const fs = require("fs");
 const path = require("path");
 const dotenv = require("dotenv");
 
@@ -22,27 +21,22 @@ let loaded;
  *
  * Whichever caller gets here first does the work and every later one gets the
  * same answer. That matters because the answer cannot be recomputed afterwards:
- * once the file has been read, the process environment already contains its
+ * once the file has been read the process environment already contains its
  * values and the disagreement is gone.
  */
 function loadEnv(envPath = path.resolve(process.cwd(), ".env")) {
   if (loaded) return loaded;
 
-  let fileValues = {};
-  let found = false;
-  try {
-    fileValues = dotenv.parse(fs.readFileSync(envPath));
-    found = true;
-  } catch {
-    // No .env file is normal where the host injects every variable itself.
-  }
+  // Taken before dotenv adds to it, for the same reason.
+  const inherited = { ...process.env };
+  // No .env file is normal where the host injects every variable itself.
+  const { parsed = {}, error } = dotenv.config({ path: envPath });
 
   loaded = {
     path: envPath,
-    found,
-    shadowed: findShadowedKeys(fileValues, process.env),
+    found: !error,
+    shadowed: findShadowedKeys(parsed, inherited),
   };
-  dotenv.config({ path: envPath });
   return loaded;
 }
 

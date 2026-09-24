@@ -6,7 +6,13 @@ const jwt = require("jsonwebtoken");
 const { withTransaction } = require("../database/transaction");
 const { query, runWithDbContext } = require("../config");
 const env = require("../config/env");
-const { sendMFACode, sendPasswordResetLinkEmail } = require("../utils/email");
+const {
+  sendMFACode,
+  sendPasswordResetLinkEmail,
+  getLastEmailFailure,
+} = require("../utils/email");
+const { info, warn } = require("../utils/logger");
+const { isDeliverableEmail } = require("./userEmail.service");
 const privacyService = require("./privacy.service");
 const sessionService = require("./session.service");
 
@@ -95,14 +101,6 @@ function validatePasswordPolicy(password) {
   }
 }
 
-function isDeliverableEmail(email) {
-  return Boolean(
-    email &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
-    !email.endsWith(".local"),
-  );
-}
-
 function hashResetToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
@@ -113,6 +111,10 @@ function hashTrustedDeviceToken(token) {
     .update(token || "")
     .digest("hex");
 }
+
+// Wrong guesses allowed against one emailed code, after which it is no good and
+// a new one has to be requested by signing in again.
+const MAX_MFA_ATTEMPTS = 5;
 
 function hashMfaCode(code) {
   return crypto.createHmac("sha256", env.jwtSecret).update(String(code || "")).digest("hex");
@@ -225,11 +227,13 @@ async function createTrustedMfaDevice(userId, ipAddress, userAgent) {
   };
 }
 
+// The roles the MFA policy covers, which the System Admin switches on and off.
+// Teachers and learners are never asked for a code.
+const MFA_ROLES = ["system_admin", "school_admin"];
+
+// A role with nothing stored is on: the safe default, and what the schema seeds.
 function normalizeMfaPolicy(value) {
-  return {
-    system_admin: value?.system_admin !== false,
-    school_admin: value?.school_admin !== false,
-  };
+  return Object.fromEntries(MFA_ROLES.map((role) => [role, value?.[role] !== false]));
 }
 
 async function getMfaPolicy() {
@@ -239,8 +243,14 @@ async function getMfaPolicy() {
   return normalizeMfaPolicy(result.rows[0]?.value);
 }
 
-async function updateMfaPolicy(policy, updatedByUserId) {
-  const nextPolicy = normalizeMfaPolicy(policy);
+async function updateMfaPolicy(patch, updatedByUserId) {
+  // The System Admin screen sends both roles, but the API accepts one. Only the
+  // roles named are changed and the rest keep what is stored: normalising the
+  // patch on its own turned every role it left out back on.
+  const changes = Object.fromEntries(
+    MFA_ROLES.filter((role) => typeof patch?.[role] === "boolean").map((role) => [role, patch[role]]),
+  );
+  const nextPolicy = { ...(await getMfaPolicy()), ...changes };
   const result = await query(
     `INSERT INTO system_settings (\`key\`, value, updated_by_user_id, updated_at)
      VALUES ('mfa_policy', $1::jsonb, $2, NOW())
@@ -256,12 +266,11 @@ async function updateMfaPolicy(policy, updatedByUserId) {
 }
 
 async function isMfaRequiredForUser(user) {
-  if (user.role !== "system_admin" && user.role !== "school_admin") {
+  if (!MFA_ROLES.includes(user.role)) {
     return false;
   }
 
-  const policy = await getMfaPolicy();
-  return Boolean(policy[user.role]);
+  return (await getMfaPolicy())[user.role];
 }
 
 async function revokeTrustedMfaDevices(userId) {
@@ -328,7 +337,10 @@ async function sendPasswordResetLinkForUser(
   userAgent,
 ) {
   if (!isDeliverableEmail(user.email)) {
-    throw new Error("This account does not have a reachable email address.");
+    throw Object.assign(
+      new Error("This account does not have a reachable email address."),
+      { statusCode: 400 },
+    );
   }
 
   const reset = await createPasswordResetToken(
@@ -345,12 +357,46 @@ async function sendPasswordResetLinkForUser(
   );
 
   if (!sent) {
-    throw new Error("Could not send password reset email.");
+    // Says what happened, and that it is not the administrator's doing, so a
+    // failed send is not reported as a generic "something went wrong".
+    throw Object.assign(
+      new Error(
+        "The reset link could not be emailed. Email delivery is not working right now, so nothing was sent.",
+      ),
+      { statusCode: 503, mailCode: getLastEmailFailure()?.code },
+    );
   }
 
   return {
     message: "Password reset link sent. The link expires in 30 minutes.",
   };
+}
+
+// Enough to recognise what was typed, without keeping an address in full.
+function maskIdentifier(value) {
+  const text = String(value || "");
+  const at = text.indexOf("@");
+  const head = text.slice(0, Math.min(2, at > 0 ? at : text.length));
+  return `${head}***${at > 0 ? text.slice(at) : ""}`;
+}
+
+/**
+ * Writes what became of a reset request to audit_logs. The public page answers
+ * the same thing whatever happens, on purpose, so without this the only place
+ * the outcome exists is a log file - and "the reset was never sent" cannot be
+ * told apart from "no such account" or "the mail server refused it".
+ */
+async function recordResetOutcome(user, ipAddress, outcome, detail = {}) {
+  try {
+    await query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values, ip_address)
+       VALUES ($1, $2, 'user', $1, $3, $4)`,
+      [user.id, `password_reset_${outcome}`, JSON.stringify(detail), ipAddress || null],
+    );
+  } catch (error) {
+    // Recording what happened must never change what the person is told.
+    console.error("Could not record the password reset outcome:", error);
+  }
 }
 
 async function requestPasswordReset(identifier, ipAddress, userAgent) {
@@ -368,14 +414,36 @@ async function requestPasswordReset(identifier, ipAddress, userAgent) {
   );
   const user = result.rows[0];
 
-  if (!user || !isDeliverableEmail(user.email)) {
+  // The answer to the person is the same in every case. What differs is what
+  // the operator can see afterwards, so each way of ending up without an email
+  // is recorded under its own name.
+  if (!user) {
+    info("password_reset_skipped", {
+      reason: "no_active_account",
+      requested: maskIdentifier(identifier),
+    });
+    return generic;
+  }
+
+  if (!isDeliverableEmail(user.email)) {
+    info("password_reset_skipped", {
+      reason: "no_deliverable_email",
+      userId: user.id,
+      role: user.role,
+    });
+    await recordResetOutcome(user, ipAddress, "skipped_no_email", { role: user.role });
     return generic;
   }
 
   try {
     await sendPasswordResetLinkForUser(user, null, ipAddress, userAgent);
+    info("password_reset_link_sent", { userId: user.id });
+    await recordResetOutcome(user, ipAddress, "email_sent");
   } catch (error) {
+    const failure = { reason: error.message, mailCode: error.mailCode || null };
+    warn("password_reset_failed", { userId: user.id, ...failure });
     console.error("Public password reset email error:", error);
+    await recordResetOutcome(user, ipAddress, "email_failed", failure);
   }
 
   return generic;
@@ -549,15 +617,18 @@ async function verify2FA(
     throw new Error("MFA code has expired");
   }
 
-  if (Number(user.mfa_code_attempts || 0) >= 5) {
+  if (Number(user.mfa_code_attempts || 0) >= MAX_MFA_ATTEMPTS) {
     throw new Error("Too many MFA attempts. Request a new code.");
   }
 
   if (!safeHashEqual(user.mfa_code_hash, hashMfaCode(code))) {
+    // This only counts the attempt. Discarding the code in the same statement
+    // once the count was reached took a try off the limit on MySQL and MariaDB,
+    // which evaluate the assignments left to right, so the test saw the count
+    // already raised; and it made the check above unreachable, so the person was
+    // told the code had "expired" rather than that they had used up their tries.
     await query(
-      `UPDATE users SET mfa_code_attempts = mfa_code_attempts + 1,
-       mfa_code_hash = CASE WHEN mfa_code_attempts + 1 >= 5 THEN NULL ELSE mfa_code_hash END
-       WHERE id = $1`,
+      "UPDATE users SET mfa_code_attempts = mfa_code_attempts + 1 WHERE id = $1",
       [user.id],
     );
     throw new Error("Invalid MFA code");
@@ -674,7 +745,6 @@ module.exports = {
   requestPasswordReset,
   confirmPasswordReset,
   sendPasswordResetLinkForUser,
-  isDeliverableEmail,
   getMfaPolicy,
   updateMfaPolicy,
   generateMFACode,

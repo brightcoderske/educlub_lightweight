@@ -11,6 +11,7 @@ const { normalizeGrade } = require("../utils/grade");
 const streakService = require("../services/streak.service");
 const { getSchoolPopulation } = require("../services/schoolPopulation.service");
 const userEmailService = require("../services/userEmail.service");
+const { respondWithError } = require("../utils/httpErrors");
 
 function canManageLearner(user, learner) {
   if (user.role === "system_admin") {
@@ -650,7 +651,7 @@ async function resetLearnerPassword(req, res) {
 
     if (
       !providedTemporaryPassword &&
-      authService.isDeliverableEmail(user.email)
+      userEmailService.isDeliverableEmail(user.email)
     ) {
       const result = await authService.sendPasswordResetLinkForUser(
         user,
@@ -695,8 +696,9 @@ async function resetLearnerPassword(req, res) {
         : temporaryPassword,
     });
   } catch (error) {
-    console.error("Reset learner password error:", error);
-    res.status(500).json({ error: "Failed to reset learner password" });
+    // A delivery failure carries its own status and message, so the administrator
+    // is told email is the problem rather than that something went wrong.
+    respondWithError(res, error, "Failed to reset learner password");
   }
 }
 

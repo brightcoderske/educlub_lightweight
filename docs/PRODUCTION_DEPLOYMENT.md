@@ -97,9 +97,8 @@ secrets in Vercel because the React frontend would not use them and must not
 receive them.
 
 Every mail setting is read from the environment; no address, sender name or host
-is built into the code. `EMAIL_USER` must be a real mailbox with a password (a
-forwarder cannot log in), and `EMAIL_FROM` and `EMAIL_REPLY_TO` are optional: with
-neither, mail goes out as `EMAIL_USER` with no Reply-To.
+is built into the code. Each one is explained where it is set, in
+`backend/.env.production.example`.
 
 Keep each variable in exactly one place. `.env` in the application root is the
 file `scripts/deploy-cpanel-git.sh` requires and never overwrites. A variable set

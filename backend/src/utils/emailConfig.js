@@ -115,5 +115,4 @@ module.exports = {
   buildMailDefaults,
   buildTransportOptions,
   resolveMailIdentity,
-  parseAddress,
 };

@@ -1,14 +1,10 @@
 const nodemailer = require("nodemailer");
 const env = require("../config/env");
-const {
-  buildMailDefaults,
-  buildTransportOptions,
-  resolveMailIdentity,
-} = require("./emailConfig");
+const { buildMailDefaults, buildTransportOptions } = require("./emailConfig");
+const { escapeHtml } = require("./html");
 
 const transporter = nodemailer.createTransport(buildTransportOptions(env));
 const mailDefaults = buildMailDefaults(env);
-const mailIdentity = resolveMailIdentity(env);
 
 let lastFailure = null;
 
@@ -61,8 +57,13 @@ async function verifyMailLogin() {
 }
 
 const getLastEmailFailure = () => lastFailure;
-const getMailIdentity = () => mailIdentity;
+const getMailDefaults = () => mailDefaults;
 
+// Every value that reaches a template from outside goes through escapeHtml.
+// Several are typed by people who are not staff - a self-registering learner or
+// parent chooses the names that land in the notice sent to every system admin -
+// and an unescaped value is HTML in a message that arrives from eduClub's own
+// address: a ready-made phishing link. Only the template's own markup is markup.
 function emailShell(title, body) {
   return `
     <div style="background:#f4f7fb;padding:32px 16px;font-family:Arial,sans-serif;color:#344767;">
@@ -89,10 +90,10 @@ async function sendMFACode(email, code, fullName) {
     subject: "eduClub - Your MFA Verification Code",
     html: emailShell(
       "Your verification code",
-      `<p>Dear ${fullName},</p>
+      `<p>Dear ${escapeHtml(fullName)},</p>
        <p>Use this code to complete your sign in:</p>
        <div style="background:#eef5ff;border-radius:12px;padding:20px;text-align:center;margin:22px 0;">
-         <span style="font-size:34px;font-weight:700;color:#1A73E8;letter-spacing:6px;">${code}</span>
+         <span style="font-size:34px;font-weight:700;color:#1A73E8;letter-spacing:6px;">${escapeHtml(code)}</span>
        </div>
        <p>This code expires in 5 minutes.</p>`,
     ),
@@ -108,39 +109,18 @@ async function sendWelcomeEmail(email, fullName, username, password) {
     subject: "Welcome to eduClub - Your Account Details",
     html: emailShell(
       "Welcome to eduClub",
-      `<p>Dear ${fullName},</p>
+      `<p>Dear ${escapeHtml(fullName)},</p>
        <p>Your account is ready. Use the details below for your first login.</p>
        <div style="background:#f8fafc;border:1px solid #e9ecef;border-radius:12px;padding:18px;margin:20px 0;">
-         <p style="margin:0 0 8px;"><strong>Username:</strong> ${username}</p>
-         <p style="margin:0;"><strong>Temporary password:</strong> ${password}</p>
+         <p style="margin:0 0 8px;"><strong>Username:</strong> ${escapeHtml(username)}</p>
+         <p style="margin:0;"><strong>Temporary password:</strong> ${escapeHtml(password)}</p>
        </div>
        <p>You will be asked to create a stronger password on first sign in.</p>
-       <p><a href="${env.frontendUrl}" style="display:inline-block;background:#1A73E8;color:white;text-decoration:none;padding:12px 18px;border-radius:10px;">Open eduClub LMS</a></p>`,
+       <p><a href="${escapeHtml(env.frontendUrl)}" style="display:inline-block;background:#1A73E8;color:white;text-decoration:none;padding:12px 18px;border-radius:10px;">Open eduClub LMS</a></p>`,
     ),
   };
 
   return deliver(mailOptions, "Welcome email");
-}
-
-async function sendPasswordResetEmail(email, fullName, username, password) {
-  const mailOptions = {
-    ...mailDefaults,
-    to: email,
-    subject: "eduClub - Password Reset",
-    html: emailShell(
-      "Password reset",
-      `<p>Dear ${fullName},</p>
-       <p>Your password has been reset by an administrator.</p>
-       <div style="background:#fff8e6;border:1px solid #ffe1a6;border-radius:12px;padding:18px;margin:20px 0;">
-         <p style="margin:0 0 8px;"><strong>Username:</strong> ${username}</p>
-         <p style="margin:0;"><strong>Temporary password:</strong> ${password}</p>
-       </div>
-       <p>You will be asked to create a new password after sign in.</p>
-       <p><a href="${env.frontendUrl}" style="display:inline-block;background:#1A73E8;color:white;text-decoration:none;padding:12px 18px;border-radius:10px;">Sign in to eduClub LMS</a></p>`,
-    ),
-  };
-
-  return deliver(mailOptions, "Password reset email");
 }
 
 async function sendPasswordResetLinkEmail(
@@ -155,10 +135,10 @@ async function sendPasswordResetLinkEmail(
     subject: "eduClub - Reset your password",
     html: emailShell(
       "Reset your password",
-      `<p>Dear ${fullName},</p>
+      `<p>Dear ${escapeHtml(fullName)},</p>
        <p>Use the secure link below to create a new eduClub password.</p>
-       <p><a href="${resetUrl}" style="display:inline-block;background:#1A73E8;color:white;text-decoration:none;padding:12px 18px;border-radius:10px;">Set new password</a></p>
-       <p>This link expires in ${expiresMinutes} minutes and can only be used once.</p>
+       <p><a href="${escapeHtml(resetUrl)}" style="display:inline-block;background:#1A73E8;color:white;text-decoration:none;padding:12px 18px;border-radius:10px;">Set new password</a></p>
+       <p>This link expires in ${escapeHtml(expiresMinutes)} minutes and can only be used once.</p>
        <p>If you did not request this reset, ignore this email or contact your eduClub administrator.</p>`,
     ),
   };
@@ -177,11 +157,11 @@ async function sendLearnerRegistrationWelcomeEmail({
     subject: "Welcome to eduClub - Your learner account is ready",
     html: emailShell(
       "Welcome to eduClub",
-      `<p>Dear ${learnerName},</p>
-       <p>Your eduClub learner account has been created with parental consent from ${parentName}.</p>
+      `<p>Dear ${escapeHtml(learnerName)},</p>
+       <p>Your eduClub learner account has been created with parental consent from ${escapeHtml(parentName)}.</p>
        <p>You can now sign in, explore open competitions, and join available challenges. Competition access does not require course allocation; learners enrol from the Competitions tab after payment where required.</p>
        <p>Open courses and school learning activities will appear in your dashboard when available.</p>
-       <p><a href="${env.frontendUrl}/authentication/sign-in" style="display:inline-block;background:#1A73E8;color:white;text-decoration:none;padding:12px 18px;border-radius:10px;">Open eduClub</a></p>
+       <p><a href="${escapeHtml(env.frontendUrl)}/authentication/sign-in" style="display:inline-block;background:#1A73E8;color:white;text-decoration:none;padding:12px 18px;border-radius:10px;">Open eduClub</a></p>
        <p>Keep your password private and contact your school administrator if you need help.</p>`,
     ),
   };
@@ -206,12 +186,12 @@ async function sendLearnerRegistrationAdminEmail({
       "New learner registration",
       `<p>A learner has self-registered on eduClub.</p>
        <div style="background:#f8fafc;border:1px solid #e9ecef;border-radius:12px;padding:18px;margin:20px 0;">
-         <p style="margin:0 0 8px;"><strong>Learner:</strong> ${learnerName}</p>
-         <p style="margin:0 0 8px;"><strong>Email:</strong> ${learnerEmail}</p>
-         <p style="margin:0 0 8px;"><strong>School:</strong> ${schoolName}</p>
-         <p style="margin:0 0 8px;"><strong>Grade:</strong> ${grade}</p>
-         <p style="margin:0 0 8px;"><strong>Parent/guardian:</strong> ${parentName}</p>
-         <p style="margin:0;"><strong>Parent phone:</strong> ${parentPhone}</p>
+         <p style="margin:0 0 8px;"><strong>Learner:</strong> ${escapeHtml(learnerName)}</p>
+         <p style="margin:0 0 8px;"><strong>Email:</strong> ${escapeHtml(learnerEmail)}</p>
+         <p style="margin:0 0 8px;"><strong>School:</strong> ${escapeHtml(schoolName)}</p>
+         <p style="margin:0 0 8px;"><strong>Grade:</strong> ${escapeHtml(grade)}</p>
+         <p style="margin:0 0 8px;"><strong>Parent/guardian:</strong> ${escapeHtml(parentName)}</p>
+         <p style="margin:0;"><strong>Parent phone:</strong> ${escapeHtml(parentPhone)}</p>
        </div>
        <p>Please review the learner record if your operating process requires approval or follow-up.</p>`,
     ),
@@ -224,10 +204,9 @@ module.exports = {
   deliver,
   verifyMailLogin,
   getLastEmailFailure,
-  getMailIdentity,
+  getMailDefaults,
   sendMFACode,
   sendWelcomeEmail,
-  sendPasswordResetEmail,
   sendPasswordResetLinkEmail,
   sendLearnerRegistrationWelcomeEmail,
   sendLearnerRegistrationAdminEmail,

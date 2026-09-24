@@ -25,29 +25,42 @@ const isPlaceholderEmail = (email) =>
   normalizeEmail(email).endsWith(`@${PLACEHOLDER_DOMAIN}`);
 
 /**
+ * The one rule for whether mail to an address can arrive: what is wrong with
+ * it, as a message a child can act on, or null when nothing is. An address is
+ * held to the same rule when it is entered and when something is about to be
+ * sent to it.
+ */
+function problemWith(email) {
+  if (!email) return "Enter an email address.";
+  if (email.length > 255) return "That email address is too long.";
+  if (!EMAIL_PATTERN.test(email)) {
+    return "Enter a complete email address, like yourname@gmail.com.";
+  }
+  // The generated placeholder is not a real mailbox; accepting it back would
+  // quietly undo a working address.
+  if (email.endsWith(".local")) {
+    return "Use a real email address you can open, not an eduClub placeholder.";
+  }
+  return null;
+}
+
+/**
  * Returns the cleaned address, or throws an Error carrying statusCode 400 with
  * a message a child can act on.
  */
 function assertUsableEmail(value) {
   const email = normalizeEmail(value);
-  const fail = (message) => {
-    const error = new Error(message);
+  const problem = problemWith(email);
+
+  if (problem) {
+    const error = new Error(problem);
     error.statusCode = 400;
     throw error;
-  };
-
-  if (!email) fail("Enter an email address.");
-  if (email.length > 255) fail("That email address is too long.");
-  if (!EMAIL_PATTERN.test(email)) {
-    fail("Enter a complete email address, like yourname@gmail.com.");
-  }
-  // The generated placeholder is not a real mailbox; accepting it back would
-  // quietly undo a working address.
-  if (email.endsWith(".local")) {
-    fail("Use a real email address you can open, not an eduClub placeholder.");
   }
   return email;
 }
+
+const isDeliverableEmail = (value) => problemWith(normalizeEmail(value)) === null;
 
 async function assertEmailIsFree(email, userId) {
   const clash = await query(
@@ -104,6 +117,7 @@ async function syncLearnerEmailFromUser(userId, email) {
 module.exports = {
   normalizeEmail,
   isPlaceholderEmail,
+  isDeliverableEmail,
   assertUsableEmail,
   setLearnerEmail,
   syncLearnerEmailFromUser,

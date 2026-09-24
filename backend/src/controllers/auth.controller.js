@@ -2,6 +2,7 @@ const authService = require("../services/auth.service");
 const { recordSecurityEvent } = require("../services/securityAudit.service");
 const sessionService = require("../services/session.service");
 const { runWithDbContext } = require("../config/db");
+const { respondWithError } = require("../utils/httpErrors");
 
 const REFRESH_COOKIE = "educlub_refresh";
 
@@ -213,10 +214,7 @@ async function updateProfilePhoto(req, res) {
   try {
     res.json(await authService.updateProfilePhoto(req.user.userId, req.body.dataUrl));
   } catch (error) {
-    if (!error.statusCode) console.error("Update profile photo error:", error);
-    res.status(error.statusCode || 500).json({
-      error: error.statusCode ? error.message : "Could not save your photo. Please try again.",
-    });
+    respondWithError(res, error, "Could not save your photo. Please try again.");
   }
 }
 

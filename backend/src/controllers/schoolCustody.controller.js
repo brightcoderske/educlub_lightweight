@@ -1,4 +1,5 @@
 const { query } = require("../config");
+const { respondWithError } = require("../utils/httpErrors");
 const billing = require("../services/schoolBilling.service");
 const { getSchoolPopulation } = require("../services/schoolPopulation.service");
 const { writeInvoicePdf } = require("../services/invoicePdf.service");
@@ -136,13 +137,6 @@ async function setBillingRate(req, res) {
   }
 }
 
-function fail(res, error, fallback) {
-  if (!error.statusCode) console.error(fallback, error);
-  res.status(error.statusCode || 500).json({
-    error: error.statusCode ? error.message : fallback,
-  });
-}
-
 async function previewInvoice(req, res) {
   try {
     const { term, academic_year: academicYear } = req.query;
@@ -151,7 +145,7 @@ async function previewInvoice(req, res) {
     }
     res.json(await billing.previewInvoice(req.params.id, term, Number(academicYear)));
   } catch (error) {
-    fail(res, error, "Failed to prepare the invoice");
+    respondWithError(res, error,"Failed to prepare the invoice");
   }
 }
 
@@ -171,7 +165,7 @@ async function issueInvoice(req, res) {
     });
     res.status(201).json(invoice);
   } catch (error) {
-    fail(res, error, "Failed to issue the invoice");
+    respondWithError(res, error,"Failed to issue the invoice");
   }
 }
 
@@ -179,7 +173,7 @@ async function listInvoices(req, res) {
   try {
     res.json(await billing.listInvoices(req.params.id || null));
   } catch (error) {
-    fail(res, error, "Failed to load invoices");
+    respondWithError(res, error,"Failed to load invoices");
   }
 }
 
@@ -195,7 +189,7 @@ async function updateInvoiceStatus(req, res) {
     });
     res.json(invoice);
   } catch (error) {
-    fail(res, error, "Failed to update the invoice");
+    respondWithError(res, error,"Failed to update the invoice");
   }
 }
 
@@ -239,7 +233,7 @@ async function getIdentity(req, res) {
   try {
     res.json(await getBillingIdentity());
   } catch (error) {
-    fail(res, error, "Failed to load the billing identity");
+    respondWithError(res, error,"Failed to load the billing identity");
   }
 }
 
@@ -252,7 +246,7 @@ async function updateIdentity(req, res) {
     });
     res.json(next);
   } catch (error) {
-    fail(res, error, "Failed to save the billing identity");
+    respondWithError(res, error,"Failed to save the billing identity");
   }
 }
 

@@ -183,7 +183,9 @@ for attempt in {1..20}; do
     # application's own log line at startup shows what Passenger gives it.
     step "Checking outgoing mail"
     if ! npm run --silent email:verify; then
-      echo "      mail is NOT working with the settings above. The release itself is unaffected."
+      echo "      mail is NOT working with the settings above. The release is running, but nothing that needs"
+      echo "      email will arrive - including the sign-in code administrators are asked for while MFA is on."
+      echo "      If nobody can sign in, see 'Sign-in codes (MFA)' in docs/PRODUCTION_OPERATIONS.md."
     fi
 
     echo

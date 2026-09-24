@@ -5,6 +5,9 @@ const {
   describeMailSettings,
   explainMailFailure,
   formatMailReport,
+  printMailAdvice,
+  printMailReport,
+  reportMailStartup,
 } = require("../src/utils/mailDiagnostics");
 
 // The shape config/env exports, so these run against what the scripts really pass in.
@@ -45,13 +48,13 @@ test("a variable overridden by the process environment is named, and only mail o
     mailEnv({ envShadowedKeys: ["EMAIL_USER", "DATABASE_URL", "EMAIL_FROM"] }),
   ).join("\n");
 
-  assert.match(report, /EMAIL_USER, EMAIL_FROM are also set in the process environment/);
-  assert.match(report, /the one in \.env is ignored/);
+  assert.match(report, /Override   : EMAIL_USER, EMAIL_FROM - Set in the process environment/);
+  assert.match(report, /the \.env value is ignored/);
   // The rest of the configuration is not this report's business.
   assert.doesNotMatch(report, /DATABASE_URL/);
 
   const single = formatMailReport(mailEnv({ envShadowedKeys: ["EMAIL_PASSWORD"] })).join("\n");
-  assert.match(single, /EMAIL_PASSWORD is also set in the process environment/);
+  assert.match(single, /Override   : EMAIL_PASSWORD - Set in the process environment/);
 });
 
 test("nothing is reported as overridden when nothing is", () => {
@@ -80,14 +83,13 @@ test("a sender realigned onto the login's domain is explained in the report", ()
   ).join("\n");
 
   assert.match(report, /Sending as : eduClub <school@gmail\.com>/);
-  assert.match(report, /is not on the domain of school@gmail\.com/);
-  assert.match(report, /EMAIL_FROM \(noreply@educlub\.com\)/);
+  assert.match(report, /Note       : EMAIL_FROM is not on the domain of EMAIL_USER/);
 });
 
 test("a refused login is explained in terms of the mailbox and the password", () => {
   const lines = explainMailFailure(
     { code: "EAUTH", message: "Invalid login: 535 Incorrect authentication data" },
-    describeMailSettings(mailEnv()),
+    mailEnv(),
   );
   const text = lines.join("\n");
 
@@ -100,17 +102,15 @@ test("a refused login is explained in terms of the mailbox and the password", ()
 test("a 535 is recognised even when it arrives without the EAUTH code", () => {
   const lines = explainMailFailure(
     { code: "unknown", message: "535 Incorrect authentication data" },
-    describeMailSettings(mailEnv()),
+    mailEnv(),
   );
   assert.match(lines.join("\n"), /refused the login/);
 });
 
 test("connection failures point at host, port and certificate rather than the password", () => {
-  const settings = describeMailSettings(mailEnv());
-
   const certificate = explainMailFailure(
     { code: "ESOCKET", message: "Hostname/IP does not match certificate's altnames" },
-    settings,
+    mailEnv(),
   ).join("\n");
   assert.match(certificate, /Could not complete a connection to mail\.educlub\.co\.ke:465/);
   assert.match(certificate, /EMAIL_TLS_SERVERNAME/);
@@ -118,7 +118,7 @@ test("connection failures point at host, port and certificate rather than the pa
 
   const timeout = explainMailFailure(
     { code: "ETIMEDOUT", message: "Greeting never received" },
-    settings,
+    mailEnv(),
   ).join("\n");
   assert.match(timeout, /EMAIL_HOST and EMAIL_PORT/);
   assert.doesNotMatch(timeout, /EMAIL_TLS_SERVERNAME/);
@@ -127,7 +127,7 @@ test("connection failures point at host, port and certificate rather than the pa
 test("a message refused after a good login is not blamed on the password", () => {
   const text = explainMailFailure(
     { code: "EENVELOPE", message: "Mail command failed: 550 Sender verify failed" },
-    describeMailSettings(mailEnv()),
+    mailEnv(),
   ).join("\n");
 
   assert.match(text, /accepted the login but refused the message/);
@@ -137,15 +137,13 @@ test("a message refused after a good login is not blamed on the password", () =>
 
 test("an error it does not recognise gets no invented advice", () => {
   assert.deepEqual(
-    explainMailFailure({ code: "EWHATEVER", message: "something odd" }, describeMailSettings(mailEnv())),
+    explainMailFailure({ code: "EWHATEVER", message: "something odd" }, mailEnv()),
     [],
   );
-  assert.deepEqual(explainMailFailure(null, describeMailSettings(mailEnv())), []);
+  assert.deepEqual(explainMailFailure(null, mailEnv()), []);
 });
 
 // reportMailStartup: what the running application writes to its log.
-const { reportMailStartup } = require("../src/utils/mailDiagnostics");
-
 function startupLog(env, loginResult) {
   const entries = [];
   const log = {
@@ -217,4 +215,34 @@ test("startup says when the sender had to be moved onto the login's domain", asy
 
   assert.equal(moved.configuredFrom, "noreply@educlub.com");
   assert.equal(moved.sendingAs, "school@gmail.com");
+});
+
+test("the host's hourly sending limit is recognised, and not blamed on the settings", () => {
+  const text = explainMailFailure(
+    {
+      code: "EENVELOPE",
+      message:
+        "Mail command failed: 550 Domain educlub.co.ke has exceeded the max emails per hour (100/100 (100%)) allowed. Message discarded.",
+    },
+    mailEnv(),
+  ).join("\n");
+
+  assert.match(text, /hourly sending limit/);
+  assert.match(text, /settings are fine/);
+  assert.doesNotMatch(text, /password/i);
+});
+
+test("the scripts print exactly the report and the advice the rest of the code produces", () => {
+  const printed = [];
+  printMailReport(mailEnv(), (text) => printed.push(text));
+  assert.deepEqual(printed, [`${formatMailReport(mailEnv()).join("\n")}\n`]);
+
+  const failure = { code: "EAUTH", message: "Invalid login: 535 Incorrect authentication data" };
+  const advice = [];
+  printMailAdvice(failure, mailEnv(), (line) => advice.push(line));
+  assert.deepEqual(advice, explainMailFailure(failure, mailEnv()));
+
+  const nothing = [];
+  printMailAdvice({ code: "EWHATEVER", message: "odd" }, mailEnv(), (line) => nothing.push(line));
+  assert.deepEqual(nothing, []);
 });

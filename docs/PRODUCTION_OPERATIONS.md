@@ -28,6 +28,29 @@ mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p educlub_restore < educlub-before-rele
 
 Migrations are forward-only because DDL and data transformations are not always safely reversible, and MySQL additionally commits DDL implicitly, so a failed release cannot be unwound inside a transaction. Roll back application code only when it remains schema-compatible. Otherwise restore the pre-release backup into a new database and switch the connection string; never reset the live database destructively.
 
+## Sign-in codes (MFA)
+
+After their password, system admins and school admins are asked for a six-digit
+code that is emailed to them. It is on for both roles until a System Admin says
+otherwise, and the System Admin decides: **System Admin dashboard > Administrator
+MFA** has a switch for each role. Someone who ticks "remember this device" is not
+asked again on that browser for up to twelve hours. Teachers and learners are
+never asked.
+
+The code goes out through the same mail login as every other email. When mail is
+not working, sign-in fails with "We could not email your verification code" -
+closed on purpose, because a code nobody can receive must not be skippable.
+`npm run email:verify`, and step 8 of every deploy, says whether mail works.
+
+If mail is down and an administrator cannot get in, a System Admin who still can
+switches the role off from the dashboard. When the System Admin is the one locked
+out, switch both roles off in the database, sign in, fix mail, and switch them
+back on from the dashboard:
+
+```sql
+UPDATE system_settings SET value = '{"system_admin": false, "school_admin": false}' WHERE `key` = 'mfa_policy';
+```
+
 ## Local verification
 
 Copy `backend/.env.example` to `backend/.env`, replace every placeholder, create the MySQL 8 database, then run:

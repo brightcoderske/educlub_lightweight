@@ -19,6 +19,7 @@ import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
+import { staffCreatedNotice } from "lib/staffNotice";
 
 const emptyForm = {
   school: null,
@@ -77,21 +78,20 @@ function SystemAdminSchoolAdmins() {
     setError("");
     setMessage("");
     try {
-      await apiClient.post("/users/staff", {
+      const created = await apiClient.post("/users/staff", {
         school_id: form.school?.id,
         role: form.role,
         full_name: form.full_name,
         email: form.email,
         phone: form.phone,
       });
-      setMessage(
-        `${
-          form.role === "teacher" ? "Teacher" : "School Admin"
-        } created. Login details have been emailed.`
-      );
+      const notice = staffCreatedNotice(form.role, created);
       setForm(emptyForm);
       setEditingId(null);
       await loadData(true);
+      // After the reload, which starts by clearing any error on the page.
+      if (notice.ok) setMessage(notice.text);
+      else setError(notice.text);
     } catch (err) {
       setError(err.message);
     } finally {

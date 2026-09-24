@@ -14,15 +14,10 @@ require("../src/config/loadEnv").loadEnv(path.resolve(__dirname, "../.env"));
 
 const env = require("../src/config/env");
 const { verifyMailLogin } = require("../src/utils/email");
-const {
-  describeMailSettings,
-  explainMailFailure,
-  formatMailReport,
-} = require("../src/utils/mailDiagnostics");
+const { printMailAdvice, printMailReport } = require("../src/utils/mailDiagnostics");
 
 async function main() {
-  console.log(formatMailReport(env).join("\n"));
-  console.log("");
+  printMailReport(env);
 
   const result = await verifyMailLogin();
   if (result.ok) {
@@ -31,9 +26,7 @@ async function main() {
   }
 
   console.error(`SMTP verification failed [${result.code}]: ${result.message}`);
-  for (const line of explainMailFailure(result, describeMailSettings(env))) {
-    console.error(line);
-  }
+  printMailAdvice(result, env);
   return 1;
 }
 

@@ -1,3 +1,5 @@
+const { escapeHtml } = require("../utils/html");
+
 const css = `
 <style>
   .sc-rich { --blue:#3f8cff; --yellow:#ffbf2f; --orange:#ff9f1c; --purple:#b455c6; --pink:#ff6fae; --red:#e45757; --green:#22a06b; --ink:#172033; --muted:#5b6474; --paper:#fffdf7; --line:#e5e7eb; --soft:#f6f7fb; font-family:"Segoe UI",system-ui,sans-serif; color:var(--ink); line-height:1.65; }
@@ -79,14 +81,6 @@ const css = `
   @keyframes sc-fall { to { transform:translateY(105vh) rotate(540deg); opacity:.1; } }
   @media (max-width:700px){ .sc-preview { grid-template-columns:1fr; } .sc-hero { padding:20px; } }
 </style>`;
-
-function escapeHtml(value = "") {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function slug(value = "") {
   return String(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");

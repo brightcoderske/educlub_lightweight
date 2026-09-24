@@ -1,5 +1,12 @@
 const { resolveMailIdentity } = require("./emailConfig");
 
+// Said once, because it is said in two places: the report a script prints and
+// the line the application logs at startup.
+const REALIGNED =
+  "EMAIL_FROM is not on the domain of EMAIL_USER, so mail is sent as EMAIL_USER and EMAIL_FROM is used as Reply-To. Set EMAIL_ALLOW_UNALIGNED_FROM=true only if the host is authorised to send for that domain.";
+const OVERRIDDEN =
+  "Set in the process environment (the hosting panel, or the shell) to a different value from .env, so the .env value is ignored. Remove the entry from the environment, or make the two match.";
+
 /**
  * What the mailer will really use, in a form that is safe to print or log.
  *
@@ -41,18 +48,19 @@ function describeMailSettings(env) {
 
 /**
  * Next steps for a failed connection, login or send. `failure` is what the
- * mailer records: { code, message }. Returns lines; empty when the failure is
- * not one of the recognised kinds, so an unfamiliar error is never dressed up
- * as a familiar one.
+ * mailer records: { code, message }; `env` is the object from config/env.
+ * Returns lines; empty when the failure is not one of the recognised kinds, so
+ * an unfamiliar error is never dressed up as a familiar one.
  */
-function explainMailFailure(failure, settings) {
+function explainMailFailure(failure, env) {
   const code = String(failure?.code || "");
   const message = String(failure?.message || "");
-  const server = `${settings.host}:${settings.port}`;
+  const { host, port, user } = describeMailSettings(env);
+  const server = `${host}:${port}`;
 
   if (code === "EAUTH" || /\b535\b/.test(message)) {
     return [
-      `The mail server (${server}) refused the login for ${settings.user}.`,
+      `The mail server (${server}) refused the login for ${user}.`,
       "  - EMAIL_USER must be the full address of a real mailbox (cPanel > Email Accounts). A forwarder has no password, so it cannot log in.",
       "  - EMAIL_PASSWORD must be that mailbox's current password. If unsure, set a new one in cPanel and put the same value here.",
       "  - If EMAIL_USER is not what .env says, a variable in the process environment (the hosting panel, or the shell) is overriding .env.",
@@ -72,6 +80,16 @@ function explainMailFailure(failure, settings) {
       );
     }
     return lines;
+  }
+
+  // cPanel hosts cap how many messages a domain may send per hour and refuse the
+  // rest until it rolls over ("has exceeded the max emails per hour"). Nothing is
+  // wrong with the settings, which is what makes it look like a fault.
+  if (/max(imum)? emails? per hour|hourly (email|sending)|exceeded the max/i.test(message)) {
+    return [
+      "The host's hourly sending limit for this domain has been reached, so it is refusing mail until the hour rolls over.",
+      "  - The settings are fine. Ask the host to raise the hourly email limit, or send fewer messages at once.",
+    ];
   }
 
   if (code === "EENVELOPE" || code === "EMESSAGE") {
@@ -106,21 +124,23 @@ function formatMailReport(env) {
     lines.push(`  TLS        : certificate must be issued for ${settings.tlsServername}`);
   }
 
-  if (!settings.aligned) {
-    lines.push(
-      `  Note       : EMAIL_FROM (${settings.configuredFrom}) is not on the domain of ${settings.user}, so mail is sent as ${settings.user} and EMAIL_FROM is used as Reply-To. Set EMAIL_ALLOW_UNALIGNED_FROM=true only if the host is authorised to send for that domain.`,
-    );
-  }
+  if (!settings.aligned) lines.push(`  Note       : ${REALIGNED}`);
 
   const overridden = (env.envShadowedKeys || []).filter((key) => key.startsWith("EMAIL_"));
-  if (overridden.length) {
-    lines.push(
-      `  Override   : ${overridden.join(", ")} ${overridden.length === 1 ? "is" : "are"} also set in the process environment with a different value. That value wins and the one in .env is ignored. Remove it from the environment (the hosting panel, or the shell), or make the two match.`,
-    );
-  }
+  if (overridden.length) lines.push(`  Override   : ${overridden.join(", ")} - ${OVERRIDDEN}`);
 
   for (const note of settings.notes) lines.push(`  Note       : ${note}`);
   return lines;
+}
+
+/** What a mail script prints first: the settings it is about to use. */
+function printMailReport(env, write = console.log) {
+  write(`${formatMailReport(env).join("\n")}\n`);
+}
+
+/** What a mail script prints last when something failed: what to check. */
+function printMailAdvice(failure, env, write = console.error) {
+  for (const line of explainMailFailure(failure, env)) write(line);
 }
 
 /**
@@ -153,8 +173,7 @@ function reportMailStartup({ env, log, verifyLogin }) {
     log.info("email_from_realigned", {
       configuredFrom: mail.configuredFrom,
       sendingAs: mail.user,
-      reason:
-        "EMAIL_FROM is not on the domain of EMAIL_USER, so mail is sent as EMAIL_USER and EMAIL_FROM is used as Reply-To.",
+      reason: REALIGNED,
     });
   }
 
@@ -163,8 +182,7 @@ function reportMailStartup({ env, log, verifyLogin }) {
     log.warn("env_overridden_by_process_environment", {
       keys: overridden,
       envFile: env.envFile,
-      reason:
-        "Set in the process environment (the hosting panel, or the shell) to a different value from .env, so the .env value is ignored.",
+      reason: OVERRIDDEN,
     });
   }
 
@@ -177,7 +195,7 @@ function reportMailStartup({ env, log, verifyLogin }) {
         ...where,
         code: result.code,
         response: result.message,
-        hints: explainMailFailure(result, mail),
+        hints: explainMailFailure(result, env),
       });
     }
   });
@@ -187,5 +205,7 @@ module.exports = {
   describeMailSettings,
   explainMailFailure,
   formatMailReport,
+  printMailReport,
+  printMailAdvice,
   reportMailStartup,
 };
