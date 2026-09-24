@@ -23,6 +23,64 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Material+Icons+Round&display=swap" />
     <title>eduClub LMS | Digital Skills and Competitions for Kids</title>
+    <script id="educlub-load-watchdog">
+      // Every page is sent with the app hidden until src/index.js shows it (see
+      // scripts/generate-public-seo.js). If that script never arrives - a dropped
+      // connection, or a file from a release that has since been replaced - nothing
+      // else ever shows, and it reads as a blank page. Say what is wrong instead, and
+      // leave the way open for the app to take over if it turns up late.
+      (function () {
+        var shown = false;
+
+        function stuck() {
+          var app = document.getElementById("app");
+          if (shown || !app || !app.dataset.seoSnapshot) return; // the app has started
+          shown = true;
+
+          var box = document.createElement("div");
+          box.setAttribute("role", "alert");
+          box.style.cssText =
+            "max-width:28rem;margin:20vh auto 0;padding:0 1.25rem;text-align:center;" +
+            "font-family:Arial,Helvetica,sans-serif;color:#17324d";
+
+          var title = document.createElement("h1");
+          title.style.cssText = "font-size:1.4rem;margin:0 0 0.75rem";
+          title.textContent = "eduClub is taking longer than usual to load";
+
+          var text = document.createElement("p");
+          text.style.cssText = "font-size:1rem;line-height:1.6;margin:0 0 1.25rem";
+          text.textContent =
+            "Check your internet connection, then reload the page. " +
+            "If it keeps happening, try updating your browser.";
+
+          var button = document.createElement("button");
+          button.type = "button";
+          button.style.cssText =
+            "padding:0.7rem 1.6rem;border:0;border-radius:0.5rem;background:#1a73e8;" +
+            "color:#fff;font-size:1rem;font-weight:700;cursor:pointer";
+          button.textContent = "Reload page";
+          button.onclick = function () {
+            window.location.reload();
+          };
+
+          box.appendChild(title);
+          box.appendChild(text);
+          box.appendChild(button);
+          while (app.firstChild) app.removeChild(app.firstChild);
+          app.appendChild(box);
+          app.style.visibility = "";
+        }
+
+        window.addEventListener(
+          "error",
+          function (event) {
+            if (event.target && event.target.tagName === "SCRIPT") stuck();
+          },
+          true
+        );
+        window.setTimeout(stuck, 12000);
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

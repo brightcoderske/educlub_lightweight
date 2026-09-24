@@ -17,6 +17,8 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "App";
+import AppErrorBoundary from "components/AppErrorBoundary";
+import { reloadForNewVersion } from "lib/staleBuild";
 
 // Material Dashboard 2 React Context Provider
 import { MaterialUIControllerProvider } from "context";
@@ -29,12 +31,20 @@ if (container.dataset.seoSnapshot) {
   delete container.dataset.seoSnapshot;
 }
 
+// A page opened before a release asks for screens that no longer exist. Vite reports
+// that here, before React is involved, and loading the page again is the cure.
+window.addEventListener("vite:preloadError", (event) => {
+  if (reloadForNewVersion()) event.preventDefault();
+});
+
 const root = createRoot(container);
 
 root.render(
   <BrowserRouter>
-    <MaterialUIControllerProvider>
-      <App />
-    </MaterialUIControllerProvider>
+    <AppErrorBoundary>
+      <MaterialUIControllerProvider>
+        <App />
+      </MaterialUIControllerProvider>
+    </AppErrorBoundary>
   </BrowserRouter>
 );

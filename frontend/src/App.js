@@ -17,6 +17,7 @@ import Sidenav from "examples/Sidenav";
 import IdleTimeoutGuard from "components/IdleTimeoutGuard";
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
+import AppErrorBoundary from "components/AppErrorBoundary";
 
 // eduClub routes
 import routes from "routes";
@@ -114,15 +115,19 @@ function AppContent() {
         />
       )}
       <IdleTimeoutGuard active={Boolean(user)} onTimeout={logout} />
-      <Suspense
-        fallback={
-          <MDBox minHeight="50vh" display="flex" alignItems="center" justifyContent="center">
-            <MDTypography role="status" aria-live="polite">Loading your workspace…</MDTypography>
-          </MDBox>
-        }
-      >
-        <Routes>{getRoutes()}</Routes>
-      </Suspense>
+      <AppErrorBoundary resetKey={pathname}>
+        <Suspense
+          fallback={
+            <MDBox minHeight="50vh" display="flex" alignItems="center" justifyContent="center">
+              <MDTypography role="status" aria-live="polite">
+                Loading your workspace…
+              </MDTypography>
+            </MDBox>
+          }
+        >
+          <Routes>{getRoutes()}</Routes>
+        </Suspense>
+      </AppErrorBoundary>
     </>
   );
 }
