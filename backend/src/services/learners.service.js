@@ -4,42 +4,65 @@ const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
 
+// The longest the name part of a username gets before any number is added.
+// Learners are children who have to type it, and the column would allow far
+// more; a name this long is rare, and the credential card shrinks to fit it.
+const USERNAME_NAME_PART_MAX = 20;
+
+/**
+ * "Floyed Muchiri" -> "floyedmuchiri": the first and last names, lower-case
+ * letters and digits only, with accents folded ("José" -> "jose"). Middle names
+ * are left out because they make a username nobody remembers, and a clash is
+ * settled by a number anyway. This used to cut the whole name at eight letters,
+ * which lost the surname and clashed far more often.
+ */
 function generateUsernameFromName(fullName) {
-  // Remove special characters and spaces, convert to lowercase
-  const cleaned = fullName
+  const words = String(fullName || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
-    .replace(/\s+/g, "");
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-z0-9]/g, ""))
+    .filter(Boolean);
+  const kept = words.length > 2 ? [words[0], words[words.length - 1]] : words;
 
-  // Take first 8 characters
-  const baseUsername = cleaned.substring(0, 8);
-
-  return baseUsername;
+  // A name with no Latin letters leaves nothing to build on.
+  return kept.join("").slice(0, USERNAME_NAME_PART_MAX) || "learner";
 }
 
-async function isUsernameUnique(username, queryExecutor = query) {
-  const result = await queryExecutor("SELECT id FROM users WHERE username = $1", [
-    username,
-  ]);
-  return result.rows.length === 0;
-}
-
+/**
+ * The name-based username, or that with the smallest number that makes it free:
+ * floyedmuchiri, floyedmuchiri1, floyedmuchiri2. Everything that could clash is
+ * fetched in one query. The unique index on users.username is what guarantees no
+ * two accounts share one; this picks a name that will not be refused.
+ *
+ * Case is ignored on purpose. The column compares case-sensitively, so the index
+ * would allow "FloyedMuchiri" beside "floyedmuchiri", but sign-in matches
+ * LOWER(username), and two accounts it cannot tell apart means one of them can
+ * never sign in.
+ */
 async function generateUniqueUsername(fullName, queryExecutor = query) {
-  let baseUsername = generateUsernameFromName(fullName);
-  let username = baseUsername;
-  let counter = 1;
+  const base = generateUsernameFromName(fullName);
+  // The base is letters and digits only, so the pattern carries no wildcard of its own.
+  const result = await queryExecutor("SELECT username FROM users WHERE LOWER(username) LIKE $1", [
+    `${base}%`,
+  ]);
+  const taken = new Set(result.rows.map((row) => String(row.username).toLowerCase()));
 
-  while (!(await isUsernameUnique(username, queryExecutor))) {
-    username = `${baseUsername}${counter}`;
-    counter++;
-
-    // Safety check to prevent infinite loop
-    if (counter > 1000) {
-      throw new Error("Unable to generate unique username");
-    }
-  }
-
+  let username = base;
+  for (let number = 1; taken.has(username); number += 1) username = `${base}${number}`;
   return username;
+}
+
+/**
+ * The largest font size, from `max` down to `min`, at which `text` fits in
+ * `maxWidth` in the font the document is currently set to. A credential must be
+ * printed whole, so this shrinks it rather than cutting it off.
+ */
+function fittingFontSize(doc, text, maxWidth, { max = 9, min = 6 } = {}) {
+  let size = max;
+  while (size > min && doc.fontSize(size).widthOfString(text) > maxWidth) size -= 0.5;
+  return size;
 }
 
 async function getAllLearners(filters = {}) {
@@ -254,10 +277,14 @@ async function generateCredentialCardsPDF({
       });
     doc.text(`Grade: ${learner.grade || "Update on login"}`, x + 12, y + 120);
     doc.text(`Stream: ${learner.stream || "Update on login"}`, x + 12, y + 138);
+    // A username comes from the learner's name, so it can be long. It is printed
+    // whole: shrunk to fit the card, never wrapped over the edge or cut short.
+    const usernameLine = `Username: ${learner.username || "-"}`;
+    doc.font("Helvetica-Bold");
     doc
-      .font("Helvetica-Bold")
-      .text(`Username: ${learner.username || "-"}`, x + 12, y + 166);
-    doc.text(`Password: ${defaultPassword}`, x + 12, y + 186);
+      .fontSize(fittingFontSize(doc, usernameLine, cardWidth - 24))
+      .text(usernameLine, x + 12, y + 166, { width: cardWidth - 24, lineBreak: false });
+    doc.fontSize(9).text(`Password: ${defaultPassword}`, x + 12, y + 186);
     doc
       .font("Helvetica")
       .fontSize(8)
@@ -288,5 +315,5 @@ module.exports = {
   generateCredentialCardsPDF,
   generateUsernameFromName,
   generateUniqueUsername,
-  isUsernameUnique,
+  fittingFontSize,
 };
