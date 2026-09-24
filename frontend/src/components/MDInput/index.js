@@ -21,8 +21,10 @@ import PropTypes from "prop-types";
 // Custom styles for MDInput
 import MDInputRoot from "components/MDInput/MDInputRoot";
 
+// `disabled` is also handed to the input itself. It used to reach only the styling
+// (ownerState), so a field marked disabled looked it and could still be typed into.
 const MDInput = forwardRef(({ error, success, disabled, ...rest }, ref) => (
-  <MDInputRoot {...rest} ref={ref} ownerState={{ error, success, disabled }} />
+  <MDInputRoot {...rest} disabled={disabled} ref={ref} ownerState={{ error, success, disabled }} />
 ));
 
 // Setting default values for the props of MDInput
