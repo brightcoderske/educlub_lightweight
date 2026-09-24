@@ -3,10 +3,46 @@ const env = require("../config/env");
 const {
   buildMailDefaults,
   buildTransportOptions,
+  resolveMailIdentity,
 } = require("./emailConfig");
 
 const transporter = nodemailer.createTransport(buildTransportOptions(env));
 const mailDefaults = buildMailDefaults(env);
+const mailIdentity = resolveMailIdentity(env);
+
+let lastFailure = null;
+
+/**
+ * The one place mail is handed to the transport.
+ *
+ * Every caller used to swallow its own failure and return false, so a refused
+ * message looked exactly like a delivered one from upstream. Delivery still
+ * does not throw here - a welcome email must not fail account creation - but
+ * the failure is logged with its SMTP code and returned, and the callers that
+ * cannot work without delivery (MFA, password reset) check the result.
+ */
+async function deliver(mailOptions, description) {
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(description + " sent to " + mailOptions.to + " (" + (info.messageId || "no id") + ")");
+    return true;
+  } catch (error) {
+    lastFailure = {
+      at: new Date().toISOString(),
+      description,
+      to: mailOptions.to,
+      code: error.code || error.responseCode || "unknown",
+      message: error.message,
+    };
+    console.error(
+      description + " to " + mailOptions.to + " FAILED [" + lastFailure.code + "]: " + error.message,
+    );
+    return false;
+  }
+}
+
+const getLastEmailFailure = () => lastFailure;
+const getMailIdentity = () => mailIdentity;
 
 function emailShell(title, body) {
   return `
@@ -43,14 +79,7 @@ async function sendMFACode(email, code, fullName) {
     ),
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`MFA code sent to ${email}`);
-    return true;
-  } catch (error) {
-    console.error("Failed to send MFA code:", error);
-    return false;
-  }
+  return deliver(mailOptions, "MFA code");
 }
 
 async function sendWelcomeEmail(email, fullName, username, password) {
@@ -71,14 +100,7 @@ async function sendWelcomeEmail(email, fullName, username, password) {
     ),
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Welcome email sent to ${email}`);
-    return true;
-  } catch (error) {
-    console.error("Failed to send welcome email:", error);
-    return false;
-  }
+  return deliver(mailOptions, "Welcome email");
 }
 
 async function sendPasswordResetEmail(email, fullName, username, password) {
@@ -99,14 +121,7 @@ async function sendPasswordResetEmail(email, fullName, username, password) {
     ),
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Password reset email sent to ${email}`);
-    return true;
-  } catch (error) {
-    console.error("Failed to send password reset email:", error);
-    return false;
-  }
+  return deliver(mailOptions, "Password reset email");
 }
 
 async function sendPasswordResetLinkEmail(
@@ -129,14 +144,7 @@ async function sendPasswordResetLinkEmail(
     ),
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Password reset link sent to ${email}`);
-    return true;
-  } catch (error) {
-    console.error("Failed to send password reset link:", error);
-    return false;
-  }
+  return deliver(mailOptions, "Password reset link");
 }
 
 async function sendLearnerRegistrationWelcomeEmail({
@@ -159,14 +167,7 @@ async function sendLearnerRegistrationWelcomeEmail({
     ),
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Learner registration welcome email sent to ${email}`);
-    return true;
-  } catch (error) {
-    console.error("Failed to send learner registration welcome email:", error);
-    return false;
-  }
+  return deliver(mailOptions, "Learner welcome email");
 }
 
 async function sendLearnerRegistrationAdminEmail({
@@ -197,17 +198,13 @@ async function sendLearnerRegistrationAdminEmail({
     ),
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Learner registration admin email sent to ${to}`);
-    return true;
-  } catch (error) {
-    console.error("Failed to send learner registration admin email:", error);
-    return false;
-  }
+  return deliver(mailOptions, "Learner registration notice");
 }
 
 module.exports = {
+  deliver,
+  getLastEmailFailure,
+  getMailIdentity,
   sendMFACode,
   sendWelcomeEmail,
   sendPasswordResetEmail,

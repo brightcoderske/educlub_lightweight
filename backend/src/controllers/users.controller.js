@@ -3,6 +3,8 @@ const env = require("../config/env");
 const authService = require("../services/auth.service");
 const { generateRandomPassword, hashPassword } = require("../utils/password");
 const { sendWelcomeEmail } = require("../utils/email");
+const { isUniqueViolation } = require("../utils/dbErrors");
+const userEmailService = require("../services/userEmail.service");
 const {
   resolveStaffAccountInput,
 } = require("../services/staffAccounts.service");
@@ -110,10 +112,10 @@ async function createStaffAccount(req, res) {
     res.status(201).json({ ...user, phone });
   } catch (error) {
     console.error("Create staff account error:", error);
-    if (error.code === "23505") {
+    if (isUniqueViolation(error)) {
       return res
         .status(409)
-        .json({ error: "A user with this email already exists" });
+        .json({ error: "A user with this email or username already exists" });
     }
     const status = /required|teachers only|cannot create/i.test(error.message)
       ? 400
@@ -240,6 +242,12 @@ async function updateUser(req, res) {
       ],
     );
 
+    // A learner's address lives in two tables. Changing it here without the
+    // learners row leaves staff screens and report cards showing the old one.
+    if (existing.role === "learner" && email && email !== existing.email) {
+      await userEmailService.syncLearnerEmailFromUser(existing.id, email);
+    }
+
     if (existing.role === "school_admin") {
       await query(
         `INSERT INTO school_admins (user_id, school_id, is_primary)
@@ -267,7 +275,7 @@ async function updateUser(req, res) {
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Update user error:", error);
-    if (error.code === "23505") {
+    if (isUniqueViolation(error)) {
       return res
         .status(409)
         .json({ error: "Email or username is already in use" });

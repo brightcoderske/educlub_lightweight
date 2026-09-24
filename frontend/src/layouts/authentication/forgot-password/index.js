@@ -68,7 +68,8 @@ function ForgotPassword() {
         <MDBox pt={4} pb={3} px={3}>
           <MDBox mb={2}>
             <MDInput
-              type="email"
+              type="text"
+              autoComplete="username"
               label="Email or username"
               fullWidth
               value={email}

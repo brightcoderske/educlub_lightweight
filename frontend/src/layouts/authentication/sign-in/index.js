@@ -192,11 +192,13 @@ function SignIn() {
           </MDBox>
           <MDBox mb={2}>
             <MDInput
-              type="email"
-              label="Email"
+              type="text"
+              label="Email or username"
+              autoComplete="username"
               fullWidth
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              helperText="Use whichever you were given - your email address or your username."
             />
           </MDBox>
           <MDBox mb={2}>

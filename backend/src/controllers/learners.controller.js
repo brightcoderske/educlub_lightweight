@@ -10,6 +10,7 @@ const academicService = require("../services/academic.service");
 const { normalizeGrade } = require("../utils/grade");
 const streakService = require("../services/streak.service");
 const { getSchoolPopulation } = require("../services/schoolPopulation.service");
+const userEmailService = require("../services/userEmail.service");
 
 function canManageLearner(user, learner) {
   if (user.role === "system_admin") {
@@ -361,12 +362,12 @@ async function updateLearner(req, res) {
         ? existingLearner.full_name
         : full_name || existingLearner.full_name;
 
-    // A learner owns exactly one field on their own record: the grade they are
-    // in. Stream, term, academic year and email are placement data an operator
-    // sets - they drive allocations, report cards and promotion, so a child
-    // typing into them would silently move themselves out of their own class.
-    // The profile screen renders those read-only; this is what makes that true
-    // rather than decorative.
+    // A learner owns two fields on their own record: the grade they are in, and
+    // the email address they can actually open. Stream, term and academic year
+    // stay operator-only - they drive allocations, report cards and promotion,
+    // so a child typing into them would silently move themselves out of their
+    // own class. The profile screen renders those read-only; this is what makes
+    // that true rather than decorative.
     const selfEdit = req.user.role === "learner";
     let nextGrade = existingLearner.grade;
 
@@ -379,6 +380,25 @@ async function updateLearner(req, res) {
       }
     }
 
+    // An email change has to reach the users row too. Everything the platform
+    // sends - password reset links, MFA codes, certificates - reads
+    // users.email, so updating only the learners row leaves the learner with a
+    // real address on screen and an undeliverable one in every email.
+    let nextEmail = existingLearner.email;
+    if (email !== undefined && email !== null && String(email).trim() !== "") {
+      try {
+        nextEmail = await userEmailService.setLearnerEmail({
+          learnerId: existingLearner.id,
+          userId: existingLearner.user_id,
+          email,
+        });
+      } catch (emailError) {
+        return res
+          .status(emailError.statusCode || 400)
+          .json({ error: emailError.message });
+      }
+    }
+
     const result = await query(
       `UPDATE learners
        SET school_id = $1, full_name = $2, email = $3, grade = $4, term = $5,
@@ -388,7 +408,7 @@ async function updateLearner(req, res) {
       [
         nextSchoolId,
         nextFullName,
-        !selfEdit && email !== undefined ? email : existingLearner.email,
+        nextEmail,
         nextGrade,
         !selfEdit && term !== undefined ? term : existingLearner.term,
         !selfEdit && academic_year !== undefined

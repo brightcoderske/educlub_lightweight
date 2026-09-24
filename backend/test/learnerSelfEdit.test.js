@@ -26,13 +26,26 @@ test("a learner editing their own record keeps the placement fields they were gi
 
   assert.match(handler, /const selfEdit = req\.user\.role === "learner"/);
 
-  for (const field of ["email", "term", "academic_year", "stream"]) {
+  for (const field of ["term", "academic_year", "stream"]) {
     assert.match(
       handler,
       new RegExp(`!selfEdit && ${field} !== undefined`),
       `${field} is writable by the learner it belongs to`,
     );
   }
+});
+
+test("a learner may set their own email, and it reaches the login account too", () => {
+  const handler = updateLearner();
+
+  // The selfEdit guard is gone from email...
+  assert.doesNotMatch(handler, /!selfEdit && email !== undefined/);
+  // ...but it goes through the service that validates the address and writes
+  // both rows, so users.email - which every message is actually sent to -
+  // cannot drift from the learner record staff see.
+  assert.match(handler, /userEmailService\.setLearnerEmail\(/);
+  assert.match(handler, /userId: existingLearner\.user_id/);
+  assert.match(handler, /statusCode \|\| 400/);
 });
 
 test("a learner cannot promote themselves through next_grade or next_term", () => {

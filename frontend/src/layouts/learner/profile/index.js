@@ -37,6 +37,7 @@ function LearnerProfile() {
   // screen is placement data an operator owns, so it is read from the learner
   // record and rendered as text rather than as an input.
   const [grade, setGrade] = useState("");
+  const [email, setEmail] = useState("");
   const [passwords, setPasswords] = useState({
     oldPassword: "",
     newPassword: "",
@@ -123,6 +124,7 @@ function LearnerProfile() {
       const currentLearner = learners[0];
       setLearner(currentLearner || null);
       setGrade(currentLearner?.grade || "");
+      setEmail(currentLearner?.email || "");
     } catch (err) {
       setError(err.message);
     }
@@ -138,6 +140,26 @@ function LearnerProfile() {
       setLearner(updated);
       setGrade(updated.grade || "");
       setMessage("Your grade is updated.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // A learner is given a placeholder address when their account is made, and
+  // nothing sent to it can arrive. Until they can replace it themselves, a
+  // forgotten password needs an administrator.
+  const saveEmail = async () => {
+    if (!learner) return;
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const updated = await apiClient.put(`/learners/${learner.id}`, { email });
+      setLearner(updated);
+      setEmail(updated.email || "");
+      setMessage("Your email address is saved. Password reset links will go there.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -170,9 +192,13 @@ function LearnerProfile() {
   const gradeChoices = Array.from({ length: 12 }, (_, index) => `Grade ${index + 1}`);
   const grades = grade && !gradeChoices.includes(grade) ? [grade, ...gradeChoices] : gradeChoices;
 
+  // Accounts start with a generated <name>@learners.educlub.local address,
+  // which no mail server can deliver to.
+  const placeholderEmail = String(learner?.email || user?.email || "").endsWith(".local");
+
   const details = [
     ["Full name", learner?.full_name || getUserDisplayName(user)],
-    ["Email", learner?.email || user?.email],
+    ["Email", placeholderEmail ? "Not set yet" : learner?.email || user?.email],
     ["School", learner?.school_name || user?.schoolName],
     ["Class / Stream", learner?.stream],
     ["Term", learner?.term],
@@ -329,6 +355,33 @@ function LearnerProfile() {
                       </MDTypography>
                     </MDBox>
                   ))}
+                </MDBox>
+                <MDBox mt={2}>
+                  <MDInput
+                    type="email"
+                    label="My email address"
+                    fullWidth
+                    value={email}
+                    disabled={!learner || saving}
+                    onChange={(event) => setEmail(event.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    helperText={
+                      placeholderEmail
+                        ? "You do not have a real email yet. Add one you can open, so you can reset your own password."
+                        : "Password reset links and codes are sent here."
+                    }
+                  />
+                  <MDButton
+                    variant="gradient"
+                    color="info"
+                    sx={{ mt: 1.5 }}
+                    onClick={saveEmail}
+                    disabled={
+                      saving || !learner || !email.trim() || email.trim() === (learner?.email || "")
+                    }
+                  >
+                    {saving ? "Saving…" : "Save my email"}
+                  </MDButton>
                 </MDBox>
                 <MDBox mt={2}>
                   <MDInput

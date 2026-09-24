@@ -51,7 +51,18 @@ test("login failures use a generic response and audit attempts", () => {
   const verifyStart = controller.indexOf("async function verify2FA");
   const loginFunction = controller.slice(loginStart, verifyStart);
   assert.match(loginFunction, /Invalid login details/);
+  // A failed sign-in may not echo the thrown error. The one exception runs
+  // through explainableLoginFailure, which passes a message on solely when
+  // the auth service set a status itself - and it only does that after the
+  // password has been verified (a suspended school, or a verification code
+  // that could not be sent), so nothing here reveals whether an account
+  // exists.
   assert.doesNotMatch(loginFunction, /error: error\.message/);
+  assert.match(loginFunction, /explainableLoginFailure\(error\)/);
+  assert.match(
+    controller,
+    /if \(!error \|\| !error\.statusCode\) return null;/,
+  );
 });
 
 test("manual independent course access is system-admin only and audited", () => {

@@ -133,6 +133,30 @@ async function reasonToSkip(db, statement) {
     if (rows.length) return `foreign key on ${foreignKey[1]}.${foreignKey[2]} already present`;
   }
 
+  const dropIndex = statement.match(
+    /^DROP INDEX (\w+)\s+ON (\w+)/i,
+  );
+  if (dropIndex && !(await indexExists(db, dropIndex[2], dropIndex[1]))) {
+    return `index ${dropIndex[1]} not present`;
+  }
+
+  // A column already of the requested type needs no rewrite, and on a large
+  // table that rewrite is not free.
+  const modifyColumn = statement.match(
+    /^ALTER TABLE (\w+)\s+MODIFY COLUMN (\w+)\s+([\w()]+)/i,
+  );
+  if (modifyColumn) {
+    const [rows] = await db.query(
+      `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1`,
+      [CONFIG.database, modifyColumn[1], modifyColumn[2]],
+    );
+    const current = String(rows[0]?.COLUMN_TYPE || "").toLowerCase();
+    if (current === modifyColumn[3].toLowerCase()) {
+      return `column ${modifyColumn[1]}.${modifyColumn[2]} is already ${current}`;
+    }
+  }
+
   const index = statement.match(/^CREATE (?:UNIQUE )?INDEX (\w+)\s+ON (\w+)/i);
   if (index && (await indexExists(db, index[2], index[1]))) {
     return `index ${index[1]} already present`;

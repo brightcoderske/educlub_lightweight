@@ -34,6 +34,21 @@ function clearRefreshCookie(res) {
   });
 }
 
+/**
+ * What a failed sign-in is allowed to say.
+ *
+ * Everything is generic by default, so the response can never be used to work
+ * out which accounts exist. The exceptions are the failures the auth service
+ * marks with a status of its own, and both of those happen only AFTER the
+ * password has been checked: a suspended school, and a verification code that
+ * could not be emailed. Neither can be fixed by trying again, so answering
+ * "invalid login details" would send the person round in circles.
+ */
+function explainableLoginFailure(error) {
+  if (!error || !error.statusCode) return null;
+  return { status: error.statusCode, message: error.message };
+}
+
 async function login(req, res) {
   try {
     const { email, password, trustedDeviceToken } = req.body;
@@ -55,6 +70,10 @@ async function login(req, res) {
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
+    const explained = explainableLoginFailure(error);
+    if (explained) {
+      return res.status(explained.status).json({ error: explained.message });
+    }
     res.status(401).json({ error: "Invalid login details" });
   }
 }

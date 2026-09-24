@@ -18,6 +18,7 @@ const {
   securityHeaders,
 } = require("./middleware/security.middleware");
 const { ensureStartupSchema } = require("./services/startupSchema.service");
+const { getMailIdentity } = require("./utils/email");
 
 // Import routes
 const authRoutes = require("./routes/auth.routes");
@@ -218,6 +219,19 @@ if (env.nodeEnv !== "test") {
     .then(() => {
       server = app.listen(PORT, () => {
         info("server_started", { port: PORT, environment: env.nodeEnv, standaloneLms: env.standaloneLmsEnabled });
+        // Mail that is sent as a domain the SMTP account cannot authenticate
+        // for is accepted by the transport and then filed as spam or refused by
+        // the receiving server, which looks exactly like "email is broken".
+        const mail = getMailIdentity();
+        info("email_identity", { from: mail.from, replyTo: mail.replyTo || null });
+        if (!mail.aligned) {
+          info("email_from_realigned", {
+            configuredFrom: mail.configuredFrom,
+            sendingAs: mail.authenticated,
+            reason:
+              "EMAIL_FROM is not the authenticated mailbox, so it is used as Reply-To instead. Verify it as an alias of EMAIL_USER to send from it.",
+          });
+        }
       });
       server.requestTimeout = Number(process.env.HTTP_REQUEST_TIMEOUT_MS || 30_000);
       server.headersTimeout = Number(process.env.HTTP_HEADERS_TIMEOUT_MS || 35_000);

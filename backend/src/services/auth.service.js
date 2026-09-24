@@ -490,8 +490,22 @@ async function login(email, password, trustedDeviceToken) {
       [hashMfaCode(mfaCode), expiresAt, user.id],
     );
 
-    // Send MFA code via email
-    await sendMFACode(user.email, mfaCode, user.full_name);
+    // Send MFA code via email. If it cannot be delivered there is no way to
+    // finish this sign-in, so say so here instead of handing back a code entry
+    // screen that can never be satisfied.
+    const mfaSent = await sendMFACode(user.email, mfaCode, user.full_name);
+    if (!mfaSent) {
+      await query(
+        `UPDATE users SET mfa_code_hash = NULL, mfa_code_expires_at = NULL,
+         mfa_code_created_at = NULL WHERE id = $1`,
+        [user.id],
+      );
+      const error = new Error(
+        "We could not email your verification code. Please contact your administrator.",
+      );
+      error.statusCode = 503;
+      throw error;
+    }
 
     const tempToken = jwt.sign(
       { userId: user.id, mfaPending: true },

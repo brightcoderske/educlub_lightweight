@@ -57,7 +57,8 @@ module.exports = {
     "",
   flutterwaveBaseUrl:
     process.env.FLUTTERWAVE_BASE_URL || "https://api.flutterwave.com/v3",
-  // Email configuration for MFA (required)
+  // Mail. Everything here comes from .env so moving between providers -
+  // cPanel, a relay, anything - is a configuration change and never a code one.
   emailHost: process.env.EMAIL_HOST,
   emailPort,
   emailSecure,
@@ -66,6 +67,19 @@ module.exports = {
   emailFrom:
     process.env.EMAIL_FROM || `eduClub <${process.env.EMAIL_USER}>`,
   emailReplyTo: process.env.EMAIL_REPLY_TO || "support@educlub.co.ke",
+  // STARTTLS on port 587: refuse to carry on in plain text if the upgrade
+  // fails. Ignored when EMAIL_SECURE is true, which is already encrypted.
+  emailRequireTls: process.env.EMAIL_REQUIRE_TLS === "true",
+  // Shared hosting often presents a certificate for the server's own hostname
+  // rather than mail.yourdomain. Naming it here keeps verification on.
+  emailTlsServername: process.env.EMAIL_TLS_SERVERNAME || undefined,
+  // Last resort for a host whose certificate cannot be matched at all. Opt-in,
+  // because turning it off removes the protection against interception.
+  emailTlsRejectUnauthorized:
+    process.env.EMAIL_TLS_REJECT_UNAUTHORIZED !== "false",
+  // Send EMAIL_FROM exactly as written, even when the mailbox that
+  // authenticates cannot be shown to own it.
+  emailAllowUnalignedFrom: process.env.EMAIL_ALLOW_UNALIGNED_FROM === "true",
   // Default passwords (required for initial setup)
   defaultAdminPassword: process.env.DEFAULT_ADMIN_PASSWORD,
   defaultSchoolAdminPassword: process.env.DEFAULT_SCHOOL_ADMIN_PASSWORD,

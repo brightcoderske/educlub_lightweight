@@ -23,7 +23,9 @@
     "import:scratch-pathway": "node scripts/import-scratch-pathway.js",
     "db:apply-schema": "node scripts/mysql-migration/apply-schema.js",
     "db:translate-schema": "node scripts/mysql-migration/translate-schema.js",
-    "db:seed-admin": "node scripts/mysql-migration/seed-admin.js"
+    "db:seed-admin": "node scripts/mysql-migration/seed-admin.js",
+    "mail:verify": "node scripts/verify-email.js",
+    "mail:test": "node scripts/send-test-email.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",

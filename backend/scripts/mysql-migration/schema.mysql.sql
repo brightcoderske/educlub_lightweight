@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name VARCHAR(255) NOT NULL,
   role VARCHAR(50) NOT NULL CHECK (role IN ('system_admin', 'school_admin', 'teacher', 'learner')),
   school_id INT,
-  username VARCHAR(50) UNIQUE,
+  username VARCHAR(255) UNIQUE,
   mfa_enabled TINYINT(1) DEFAULT FALSE,
   mfa_secret VARCHAR(255),
   mfa_code VARCHAR(10),
