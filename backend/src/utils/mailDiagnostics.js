@@ -1,11 +1,11 @@
 const { resolveMailIdentity } = require("./emailConfig");
 
-// Said once, because it is said in two places: the report a script prints and
-// the line the application logs at startup.
+// Each said once, because each is said in two places: the report a script
+// prints and the line the application logs at startup.
 const REALIGNED =
   "EMAIL_FROM is not on the domain of EMAIL_USER, so mail is sent as EMAIL_USER and EMAIL_FROM is used as Reply-To. Set EMAIL_ALLOW_UNALIGNED_FROM=true only if the host is authorised to send for that domain.";
-const OVERRIDDEN =
-  "Set in the process environment (the hosting panel, or the shell) to a different value from .env, so the .env value is ignored. Remove the entry from the environment, or make the two match.";
+const REPLACED =
+  "Also set in the environment (the hosting panel, a shell, or its startup files) to a different value. Mail settings are read from .env, so those values are ignored; remove them so the two cannot disagree.";
 
 /**
  * What the mailer will really use, in a form that is safe to print or log.
@@ -63,7 +63,7 @@ function explainMailFailure(failure, env) {
       `The mail server (${server}) refused the login for ${user}.`,
       "  - EMAIL_USER must be the full address of a real mailbox (cPanel > Email Accounts). A forwarder has no password, so it cannot log in.",
       "  - EMAIL_PASSWORD must be that mailbox's current password. If unsure, set a new one in cPanel and put the same value here.",
-      "  - If EMAIL_USER is not what .env says, a variable in the process environment (the hosting panel, or the shell) is overriding .env.",
+      "  - .env is read when the application starts, so a change to it takes effect after a restart (a deploy restarts it).",
     ];
   }
 
@@ -126,8 +126,8 @@ function formatMailReport(env) {
 
   if (!settings.aligned) lines.push(`  Note       : ${REALIGNED}`);
 
-  const overridden = (env.envShadowedKeys || []).filter((key) => key.startsWith("EMAIL_"));
-  if (overridden.length) lines.push(`  Override   : ${overridden.join(", ")} - ${OVERRIDDEN}`);
+  const replaced = env.envReplacedKeys || [];
+  if (replaced.length) lines.push(`  Ignored    : ${replaced.join(", ")} - ${REPLACED}`);
 
   for (const note of settings.notes) lines.push(`  Note       : ${note}`);
   return lines;
@@ -177,12 +177,23 @@ function reportMailStartup({ env, log, verifyLogin }) {
     });
   }
 
+  const replaced = env.envReplacedKeys || [];
+  if (replaced.length) {
+    log.warn("mail_settings_in_environment_ignored", {
+      keys: replaced,
+      envFile: env.envFile,
+      reason: REPLACED,
+    });
+  }
+
+  // Settings other than mail keep dotenv's rule: the environment wins.
   const overridden = env.envShadowedKeys || [];
   if (overridden.length) {
     log.warn("env_overridden_by_process_environment", {
       keys: overridden,
       envFile: env.envFile,
-      reason: OVERRIDDEN,
+      reason:
+        "Set in the process environment (the hosting panel, or the shell) to a different value from .env, so the .env value is ignored. Remove the entry from the environment, or make the two match.",
     });
   }
 

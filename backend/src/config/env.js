@@ -60,10 +60,12 @@ module.exports = {
   flutterwaveBaseUrl:
     process.env.FLUTTERWAVE_BASE_URL || "https://api.flutterwave.com/v3",
   // Where the settings were read from, so startup can say when a value in the
-  // process environment (a hosting panel, the shell) is beating the one in .env.
+  // process environment (a hosting panel, the shell) is beating the one in .env,
+  // and when a stale mail setting there was ignored because .env wins for those.
   envFile: envFile.path,
   envFileFound: envFile.found,
   envShadowedKeys: envFile.shadowed,
+  envReplacedKeys: envFile.replaced,
   // Mail. Everything here comes from .env so moving between providers -
   // cPanel, a relay, anything - is a configuration change and never a code one.
   // No address or sender name is built into the code as a fallback: with no

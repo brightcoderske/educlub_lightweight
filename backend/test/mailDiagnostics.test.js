@@ -22,6 +22,7 @@ const mailEnv = (overrides = {}) => ({
   envFile: "/srv/app/.env",
   envFileFound: true,
   envShadowedKeys: [],
+  envReplacedKeys: [],
   ...overrides,
 });
 
@@ -43,22 +44,23 @@ test("with no Reply-To configured the report says so instead of inventing one", 
   assert.match(report, /Reply-To   : \(none\)/);
 });
 
-test("a variable overridden by the process environment is named, and only mail ones", () => {
+test("mail settings that were also set in the environment are named as ignored", () => {
   const report = formatMailReport(
-    mailEnv({ envShadowedKeys: ["EMAIL_USER", "DATABASE_URL", "EMAIL_FROM"] }),
+    mailEnv({ envReplacedKeys: ["EMAIL_USER", "EMAIL_PASSWORD", "EMAIL_FROM"] }),
   ).join("\n");
 
-  assert.match(report, /Override   : EMAIL_USER, EMAIL_FROM - Set in the process environment/);
-  assert.match(report, /the \.env value is ignored/);
-  // The rest of the configuration is not this report's business.
-  assert.doesNotMatch(report, /DATABASE_URL/);
+  // The file won, so this is a note about stale copies and not a fault.
+  assert.match(report, /Ignored    : EMAIL_USER, EMAIL_PASSWORD, EMAIL_FROM - Also set in the environment/);
+  assert.match(report, /those values are ignored/);
+  assert.doesNotMatch(report, /S3cret-pass/);
 
-  const single = formatMailReport(mailEnv({ envShadowedKeys: ["EMAIL_PASSWORD"] })).join("\n");
-  assert.match(single, /Override   : EMAIL_PASSWORD - Set in the process environment/);
+  // The rest of the configuration is not this report's business.
+  const other = formatMailReport(mailEnv({ envShadowedKeys: ["DATABASE_URL"] })).join("\n");
+  assert.doesNotMatch(other, /DATABASE_URL|Ignored/);
 });
 
-test("nothing is reported as overridden when nothing is", () => {
-  assert.doesNotMatch(formatMailReport(mailEnv()).join("\n"), /Override/);
+test("nothing is reported as ignored when nothing was", () => {
+  assert.doesNotMatch(formatMailReport(mailEnv()).join("\n"), /Ignored/);
 });
 
 test("a missing .env file is reported as such", () => {
@@ -96,7 +98,7 @@ test("a refused login is explained in terms of the mailbox and the password", ()
   assert.match(text, /mail\.educlub\.co\.ke:465\) refused the login for support@educlub\.co\.ke/);
   assert.match(text, /forwarder/);
   assert.match(text, /current password/);
-  assert.match(text, /process environment/);
+  assert.match(text, /after a restart/);
 });
 
 test("a 535 is recognised even when it arrives without the EAUTH code", () => {
@@ -166,17 +168,32 @@ test("startup logs what the process is using and that the login works", async ()
   assert.equal(byMessage.email_login_ok.user, "support@educlub.co.ke");
 });
 
-test("startup names every variable the process environment is overriding", async () => {
+test("startup names every setting where the process environment beat .env", async () => {
   const entries = await startupLog(
-    mailEnv({ envShadowedKeys: ["EMAIL_USER", "DATABASE_URL"] }),
+    mailEnv({ envShadowedKeys: ["DATABASE_URL", "JWT_SECRET"] }),
     { ok: true },
   );
   const warning = entries.find((entry) => entry.message === "env_overridden_by_process_environment");
 
   assert.equal(warning.level, "warn");
-  // Every variable, not only the mail ones: the same trap catches any of them.
-  assert.deepEqual(warning.keys, ["EMAIL_USER", "DATABASE_URL"]);
+  assert.deepEqual(warning.keys, ["DATABASE_URL", "JWT_SECRET"]);
   assert.equal(warning.envFile, "/srv/app/.env");
+});
+
+test("startup names the mail settings the environment also set, which .env overrode", async () => {
+  const entries = await startupLog(
+    mailEnv({ envReplacedKeys: ["EMAIL_USER", "EMAIL_PASSWORD", "EMAIL_FROM"] }),
+    { ok: true },
+  );
+  const note = entries.find((entry) => entry.message === "mail_settings_in_environment_ignored");
+
+  assert.equal(note.level, "warn");
+  assert.deepEqual(note.keys, ["EMAIL_USER", "EMAIL_PASSWORD", "EMAIL_FROM"]);
+  assert.match(note.reason, /Mail settings are read from \.env/);
+  assert.ok(
+    !entries.some((entry) => entry.message === "env_overridden_by_process_environment"),
+    "the file won, so nothing was overridden",
+  );
 });
 
 test("startup reports a refused login with the server's reply and what to check", async () => {
@@ -197,7 +214,7 @@ test("startup reports a refused login with the server's reply and what to check"
 
 test("nothing startup logs contains the password", async () => {
   const entries = await startupLog(
-    mailEnv({ emailPassword: '"S3cret-pass"', envShadowedKeys: ["EMAIL_PASSWORD"] }),
+    mailEnv({ emailPassword: '"S3cret-pass"', envReplacedKeys: ["EMAIL_PASSWORD"] }),
     { ok: false, code: "EAUTH", message: "Invalid login: 535 Incorrect authentication data" },
   );
 

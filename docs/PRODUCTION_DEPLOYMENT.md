@@ -100,17 +100,19 @@ Every mail setting is read from the environment; no address, sender name or host
 is built into the code. Each one is explained where it is set, in
 `backend/.env.production.example`.
 
-Keep each variable in exactly one place. `.env` in the application root is the
-file `scripts/deploy-cpanel-git.sh` requires and never overwrites. A variable set
-in the process environment instead - the Node.js panel's list, or the shell -
-beats the same name in `.env`, so a stale panel entry silently hides an edit made
-to the file. The application logs `env_overridden_by_process_environment`, naming
-every such variable, each time it starts. Restart the application after changing
-anything, then run `npm run email:verify` from the backend directory. It prints
-the settings it is using (never the password), then verifies the SMTP connection
-and authentication without sending a message; the startup log also records
-`email_login_ok` or `email_login_failed` for the environment the application
-really runs with.
+`.env` in the application root is where the settings live: the file
+`scripts/deploy-cpanel-git.sh` requires and never overwrites. For the mail
+settings it always wins. A stale copy in the Node.js panel's list, in a shell, or
+in a shell startup file is ignored, and the application logs
+`mail_settings_in_environment_ignored` naming each one, so editing `.env` is all
+it takes to change mailbox. Every other setting follows the usual rule, that a
+value in the process environment beats the same name in `.env`; the application
+logs `env_overridden_by_process_environment` naming those. Restart the
+application after changing anything, then run `npm run email:verify` from the
+backend directory. It prints the settings it is using (never the password), then
+verifies the SMTP connection and authentication without sending a message; the
+startup log also records `email_login_ok` or `email_login_failed` for the
+environment the application really runs with.
 
 A successful login does not prove delivery, so follow it with
 `npm run email:test -- you@example.com`, which sends one real message, and check

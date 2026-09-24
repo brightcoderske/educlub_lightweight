@@ -178,9 +178,9 @@ for attempt in {1..20}; do
     # can undo a release that is healthy, and the if keeps set -e from ending the
     # script on a refused login. This answers "the deployment succeeded but
     # email still does not work": it prints the mail settings actually in use
-    # (never the password), any variable the environment is overriding .env
-    # with, and the mail server's own reply. The deploy shell reads .env; the
-    # application's own log line at startup shows what Passenger gives it.
+    # (never the password), any stale mail setting the environment also carries
+    # (ignored: .env wins for mail), and the mail server's own reply. The
+    # application's own log line at startup shows the same for the running app.
     step "Checking outgoing mail"
     if ! npm run --silent email:verify; then
       echo "      mail is NOT working with the settings above. The release is running, but nothing that needs"
