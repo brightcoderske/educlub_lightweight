@@ -22,7 +22,11 @@ import { apiClient } from "lib/api";
 import { cancelPythonExecution, runPythonInBrowser } from "lib/pythonRunnerClient";
 import {
   attachPreviewAutoHeight,
+  attachPythonWebBridge,
   hasCodeWorkspace,
+  isPythonWebActivity,
+  pythonWebHtml,
+  pythonWebPreview,
   isPythonActivity,
   PREVIEW_MIN_HEIGHT,
   scriptsAllowed,
@@ -616,6 +620,7 @@ function ActivityBody({
   onCssChange,
   onJsChange,
   onRunCode,
+  onPythonWebRun,
   onSetReplyTarget,
   onSubmissionFileChange,
   onSubmissionTextChange,
@@ -628,9 +633,20 @@ function ActivityBody({
   const previewFrameRef = useRef(null);
   const content = activity?.content || {};
   const pythonActivity = isPythonActivity(content);
+  const pythonWeb = isPythonWebActivity(content);
+  // The latest run function, so page clicks always use the code as typed now
+  // without re-attaching the bridge on every keystroke.
+  const pythonWebRunRef = useRef(onPythonWebRun);
+  pythonWebRunRef.current = onPythonWebRun;
   const [questionIndex, setQuestionIndex] = useState(0);
   useEffect(() => setQuestionIndex(0), [activity.id]);
   useEffect(() => attachPreviewAutoHeight(previewFrameRef.current), [codePreviewHtml]);
+  useEffect(() => {
+    if (!pythonWeb || !codePreviewHtml) return undefined;
+    return attachPythonWebBridge(previewFrameRef.current, (request) =>
+      pythonWebRunRef.current(request)
+    );
+  }, [codePreviewHtml, pythonWeb]);
   useEffect(() => {
     // Each run starts from the floor; the frame reports its real height back.
     if (previewFrameRef.current) {
@@ -1154,14 +1170,21 @@ function ActivityBody({
       {activity.activity_type === "coding" && (
         <MDBox mt={3}>
           <MDTypography variant="button" fontWeight="bold">
-            {pythonActivity ? "Python Workspace" : "Code Workspace"}
+            {pythonActivity || pythonWeb ? "Python Workspace" : "Code Workspace"}
           </MDTypography>
           {pythonActivity && (
             <MDTypography variant="caption" color="text" display="block" mt={0.5} mb={1}>
               Write your complete Python program in this single editor, then run it below.
             </MDTypography>
           )}
-          {hasCodeWorkspace(content) ? (
+          {pythonWeb && (
+            <MDTypography variant="caption" color="text" display="block" mt={0.5} mb={1}>
+              Build the page in HTML and CSS, and write the program in Python. Select Run Python
+              to open your page, then click its buttons: each click runs your Python, and what it
+              prints appears on the page.
+            </MDTypography>
+          )}
+          {hasCodeWorkspace(content) || pythonWeb ? (
             <Grid container spacing={1.5} mt={0.25}>
               <Grid item xs={12} md={6}>
                 <MDInput
@@ -1244,6 +1267,27 @@ function ActivityBody({
               }}
             />
           )}
+          {pythonWeb && (
+            <MDInput
+              label="Python code"
+              placeholder="Write your Python program here…"
+              multiline
+              rows={14}
+              fullWidth
+              value={codeDraft}
+              onChange={(event) => onCodeChange(event.target.value)}
+              sx={{
+                mt: 1.5,
+                "& textarea": {
+                  fontFamily: "monospace",
+                  bgcolor: "#0f172a",
+                  color: "#e2e8f0",
+                  borderRadius: "8px",
+                  p: 1.5,
+                },
+              }}
+            />
+          )}
           {pythonActivity && (
             <MDInput
               label="Program input (optional)"
@@ -1265,7 +1309,7 @@ function ActivityBody({
             >
               {codeRunning
                 ? "Running Python…"
-                : pythonActivity
+                : pythonActivity || pythonWeb
                 ? "Run Python"
                 : "Run Code"}
             </MDButton>
@@ -1274,7 +1318,7 @@ function ActivityBody({
             </MDButton>
           </MDBox>
           <MDTypography variant="caption" color="text" display="block" mt={1.5} mb={0.5}>
-            {pythonActivity ? "Program output" : "Output"}
+            {pythonActivity || pythonWeb ? "Program output" : "Output"}
           </MDTypography>
           <MDBox
             component="pre"
@@ -1291,7 +1335,7 @@ function ActivityBody({
             }}
           >
             {codeOutput ||
-              (pythonActivity
+              (pythonActivity || pythonWeb
                 ? "Select Run Python to see your program output."
                 : "Select Run Code to reveal the output.")}
           </MDBox>
@@ -1301,7 +1345,7 @@ function ActivityBody({
               ref={previewFrameRef}
               title="Code preview"
               srcDoc={codePreviewHtml}
-              sandbox={scriptsAllowed(content) ? "allow-scripts" : ""}
+              sandbox={scriptsAllowed(content) || pythonWeb ? "allow-scripts" : ""}
               mt={1.5}
               width="100%"
               sx={{
@@ -1386,6 +1430,7 @@ ActivityBody.propTypes = {
   jsDraft: PropTypes.string.isRequired,
   codeOutput: PropTypes.string.isRequired,
   codePreviewHtml: PropTypes.string.isRequired,
+  onPythonWebRun: PropTypes.func.isRequired,
   onCodeChange: PropTypes.func.isRequired,
   onCodeInputChange: PropTypes.func.isRequired,
   onHtmlChange: PropTypes.func.isRequired,
@@ -2303,6 +2348,12 @@ function ModuleLearn() {
     if (!activeActivity) return;
     const language = activeActivity.content?.language || "javascript";
     setCodePreviewHtml("");
+    if (isPythonWebActivity(activeActivity.content || {})) {
+      // The page runs the Python itself - once as it loads, then on every click.
+      setCodePreviewHtml(pythonWebPreview(htmlDraft, cssDraft, ++pythonRunSequenceRef.current));
+      setCodeOutput("Your page is below. Click its buttons to run your Python.");
+      return;
+    }
     if (["html_css", "html_css_js", "html", "web"].includes(language.toLowerCase())) {
       const preview = webPreview(
         htmlDraft || codeDraft,
@@ -2339,6 +2390,30 @@ function ModuleLearn() {
       return;
     }
     setCodeOutput(`${language} remains teacher-reviewed in this release.`);
+  };
+
+  // A Python + HTML page wants its program run: a button was clicked, or the
+  // page has just loaded (clicked is then ""). Resolves to the HTML for #output.
+  const runPythonForPage = async ({ fields, clicked }) => {
+    const runSequence = ++pythonRunSequenceRef.current;
+    setCodeRunning(true);
+    try {
+      const result = await runPythonInBrowser(codeDraft, {
+        page: fields,
+        clicked,
+        onStatus: (status) => {
+          if (pythonRunSequenceRef.current === runSequence) setCodeOutput(status);
+        },
+      });
+      if (pythonRunSequenceRef.current === runSequence) setCodeOutput(result.output);
+      return pythonWebHtml(result);
+    } catch (runError) {
+      const message = runError?.message || "Python could not run this program.";
+      if (pythonRunSequenceRef.current === runSequence) setCodeOutput(message);
+      return pythonWebHtml({ error: message });
+    } finally {
+      if (pythonRunSequenceRef.current === runSequence) setCodeRunning(false);
+    }
   };
 
   const submitDiscussionReply = async () => {
@@ -2748,6 +2823,7 @@ function ModuleLearn() {
                       onJsChange={setJsDraft}
                       onDiscussionReplyChange={setDiscussionReply}
                       onRunCode={runCode}
+                      onPythonWebRun={runPythonForPage}
                       onSetReplyTarget={setReplyTarget}
                       onSubmissionFileChange={setSubmissionFile}
                       onSubmissionTextChange={setSubmissionText}

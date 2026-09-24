@@ -3,6 +3,8 @@ import {
   isPythonRunnerMessage,
   PYTHON_STARTUP_TIMEOUT_MS,
   pythonRunnerMessage,
+  sanitizeClicked,
+  sanitizePageFields,
 } from "../python-runner/protocol";
 
 let runner;
@@ -92,15 +94,21 @@ export function formatPythonResult(message) {
   );
 }
 
-export async function runPythonInBrowser(code, { inputs = [], onStatus } = {}) {
+export async function runPythonInBrowser(code, { inputs = [], page, clicked, onStatus } = {}) {
   const activeRunner = getRunner();
   onStatus?.("Preparing Python—this first load happens only once…");
   await activeRunner.ready;
   onStatus?.("Running Python safely…");
   const id = `python-${Date.now()}-${nextRequestId++}`;
   const resultPromise = new Promise((resolve) => activeRunner.pending.set(id, { resolve }));
+  const payload = { id, code: String(code || ""), inputs };
+  // Only Python + HTML runs carry page fields; plain Python runs stay unchanged.
+  if (page !== undefined) {
+    payload.page = Object.fromEntries(sanitizePageFields(page));
+    payload.clicked = sanitizeClicked(clicked);
+  }
   activeRunner.iframe.contentWindow.postMessage(
-    pythonRunnerMessage("run", { id, code: String(code || ""), inputs }),
+    pythonRunnerMessage("run", payload),
     activeRunner.origin
   );
   const result = await resultPromise;

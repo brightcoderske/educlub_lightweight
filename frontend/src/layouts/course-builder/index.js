@@ -1943,6 +1943,7 @@ function ActivityManagerDialog({
                   <option value="html_css_js">HTML/CSS/JavaScript</option>
                   <option value="javascript">JavaScript</option>
                   <option value="python">Python</option>
+                  <option value="python_html">Python + HTML page</option>
                   <option value="sql">SQL</option>
                   <option value="text">Pseudo code</option>
                 </MDInput>

@@ -6,6 +6,8 @@ import {
   learnerFacingError,
   PYTHON_MAX_SOURCE_LENGTH,
   pythonRunnerMessage,
+  sanitizeClicked,
+  sanitizePageFields,
 } from "./protocol";
 
 const PYODIDE_VERSION = "314.0.6";
@@ -50,7 +52,7 @@ del _educlub_make_import_guard
   return pyodidePromise;
 }
 
-async function runPython({ code, inputs = [] }) {
+async function runPython({ code, inputs = [], page, clicked }) {
   const source = String(code || "");
   if (!source.trim()) throw new Error("Add some Python code before selecting Run Python.");
   if (source.length > PYTHON_MAX_SOURCE_LENGTH) {
@@ -73,6 +75,15 @@ async function runPython({ code, inputs = [] }) {
 
   const globals = pyodide.globals.get("dict")();
   globals.set("__name__", "__main__");
+  let pageDict;
+  if (page !== undefined) {
+    // Python + HTML activities: the page's field values as a dict of text, and
+    // which button was clicked. Data only - built from sanitized string pairs,
+    // never a proxy onto anything JavaScript.
+    pageDict = pyodide.toPy(new Map(sanitizePageFields(page)));
+    globals.set("page", pageDict);
+    globals.set("clicked", sanitizeClicked(clicked));
+  }
   try {
     const result = await pyodide.runPythonAsync(source, {
       globals,
@@ -84,6 +95,7 @@ async function runPython({ code, inputs = [] }) {
     if (result && typeof result.destroy === "function") result.destroy();
     return { stdout, stderr, result: displayResult };
   } finally {
+    pageDict?.destroy();
     globals.destroy();
   }
 }

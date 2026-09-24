@@ -71,7 +71,7 @@ function startWorker() {
   });
 }
 
-function executePython({ id, code, inputs = [] }) {
+function executePython({ id, code, inputs = [], page, clicked }) {
   if (activeRun) {
     return Promise.resolve(
       pythonRunnerMessage("result", {
@@ -107,7 +107,13 @@ function executePython({ id, code, inputs = [] }) {
       startWorker();
     }, PYTHON_EXECUTION_TIMEOUT_MS);
     activeRun = { id, resolve, timer };
-    worker.postMessage(pythonRunnerMessage("run", { id, code, inputs }));
+    const payload = { id, code, inputs };
+    // Python + HTML pages send their field values; the worker sanitizes them again.
+    if (page !== undefined) {
+      payload.page = page;
+      payload.clicked = clicked;
+    }
+    worker.postMessage(pythonRunnerMessage("run", payload));
   });
 }
 
