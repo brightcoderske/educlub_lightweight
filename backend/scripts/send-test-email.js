@@ -7,7 +7,7 @@
  * to catch: a From address the mail account cannot authenticate for is accepted
  * by the server and then dropped or filed as spam by the recipient.
  *
- * Usage: node scripts/send-test-email.js you@example.com
+ * Usage: npm run email:test -- you@example.com
  */
 require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
 
@@ -16,7 +16,7 @@ const { deliver, getMailIdentity } = require("../src/utils/email");
 async function main() {
   const to = process.argv[2];
   if (!to || !to.includes("@")) {
-    console.error("Usage: node scripts/send-test-email.js you@example.com");
+    console.error("Usage: npm run email:test -- you@example.com");
     process.exit(1);
   }
 

@@ -371,8 +371,29 @@ function translateIndex(sql) {
   return out;
 }
 
+// MySQL cannot drop an index without being told which table it is on, and
+// PostgreSQL never says. The table is read from the CREATE INDEX for the same
+// name elsewhere in the schema, so the two statements cannot disagree.
+function translateDropIndex(sql, source) {
+  const name = (sql.match(/^DROP INDEX (?:IF EXISTS )?(\w+)/i) || [])[1];
+  if (!name) return sql;
+
+  const created = source.match(
+    new RegExp("CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS )?" + name + "\\s+ON\\s+(\\w+)", "i"),
+  );
+  if (!created) {
+    throw new Error(`DROP INDEX ${name}: no CREATE INDEX for it, so its table is unknown`);
+  }
+  return `DROP INDEX ${name} ON ${created[1]}`;
+}
 function translateAlter(sql) {
   let out = sql.replace(/ALTER TABLE IF EXISTS/i, "ALTER TABLE");
+  // PostgreSQL changes a column's type with ALTER COLUMN ... TYPE; MySQL
+  // restates the whole definition with MODIFY COLUMN.
+  out = out.replace(
+    /ALTER COLUMN (\w+) TYPE ([^;]+)/i,
+    "MODIFY COLUMN $1 $2",
+  );
   out = out.replace(/ADD COLUMN IF NOT EXISTS/i, "ADD COLUMN");
   // MySQL spells this DROP CHECK; MariaDB has no such syntax and keeps
   // DROP CONSTRAINT, which MySQL also accepts from 8.0.19. IF EXISTS is dropped
@@ -432,9 +453,10 @@ function promoteNamedColumnChecks(sql) {
   );
 }
 
-function translate(statement) {
+function translate(statement, source) {
   let out = statement;
   if (/^CREATE (UNIQUE )?INDEX/i.test(out)) out = translateIndex(out);
+  if (/^DROP INDEX/i.test(out)) out = translateDropIndex(out, source);
   if (/^ALTER TABLE/i.test(out)) out = translateAlter(out);
   if (/ON CONFLICT/i.test(out)) out = translateUpsert(out);
   if (/^UPDATE\s/i.test(out)) out = translateUpdateFrom(out);
@@ -468,7 +490,7 @@ function main() {
       dropped.set(rule.reason, (dropped.get(rule.reason) || 0) + 1);
       continue;
     }
-    kept.push(translate(bare) + ";");
+    kept.push(translate(bare, source) + ";");
   }
 
   assertTypesAreMysql(kept);

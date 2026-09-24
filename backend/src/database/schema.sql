@@ -3669,6 +3669,21 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_code_hash VARCHAR(64);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_code_attempts INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_code_created_at TIMESTAMP;
 
+-- Staff sign in with their email address as their username, so this column has
+-- to hold a whole email. It was VARCHAR(50): any address longer than that could
+-- not be stored at all, the account was never created, and that person had no
+-- way to sign in. Usernames are free-form - a name, or an email - so the column
+-- matches the email column.
+--
+-- The LOWER(username) index is dropped and rebuilt around the change because a
+-- MySQL functional index fixes its key length when it is created and refuses
+-- the wider column otherwise. In PostgreSQL this is simply a no-op rebuild.
+DROP INDEX IF EXISTS idx_users_lower_username;
+
+ALTER TABLE users ALTER COLUMN username TYPE VARCHAR(255);
+
+CREATE INDEX IF NOT EXISTS idx_users_lower_username ON users(LOWER(username));
+
 CREATE INDEX IF NOT EXISTS idx_school_admins_school ON school_admins(school_id);
 CREATE INDEX IF NOT EXISTS idx_courses_template ON courses(template_id);
 CREATE INDEX IF NOT EXISTS idx_course_modules_template_module ON course_modules(template_module_id);

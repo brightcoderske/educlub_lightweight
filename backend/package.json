@@ -9,6 +9,7 @@
     "test": "node --require ./test/setup-env.js --test test/*.test.js",
     "test:integration": "node --require ./test/setup-env.js --test test/integration/*.test.js",
     "email:verify": "node scripts/verify-email.js",
+    "email:test": "node scripts/send-test-email.js",
     "schema:ensure": "node scripts/ensure-startup-schema.js",
     "db:migrate": "node scripts/mysql-migration/apply-schema.js",
     "db:migrate:status": "node scripts/mysql-migration/apply-schema.js",
@@ -23,9 +24,7 @@
     "import:scratch-pathway": "node scripts/import-scratch-pathway.js",
     "db:apply-schema": "node scripts/mysql-migration/apply-schema.js",
     "db:translate-schema": "node scripts/mysql-migration/translate-schema.js",
-    "db:seed-admin": "node scripts/mysql-migration/seed-admin.js",
-    "mail:verify": "node scripts/verify-email.js",
-    "mail:test": "node scripts/send-test-email.js"
+    "db:seed-admin": "node scripts/mysql-migration/seed-admin.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",

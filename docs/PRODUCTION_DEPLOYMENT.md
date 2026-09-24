@@ -97,6 +97,16 @@ environment. After saving the variables and restarting the application, run
 `npm run email:verify` from the backend directory. It verifies the SMTP
 connection and authentication without sending a message.
 
+A successful login does not prove delivery, so follow it with
+`npm run email:test -- you@example.com`, which sends one real message, and check
+that it arrives in the inbox rather than the spam folder. `EMAIL_FROM` must be a
+mailbox on the same domain as `EMAIL_USER`: educlub.co.ke publishes
+`DMARC p=reject`, so a From address on any other domain is refused outright by
+the receiving server even though the send appears to succeed. The optional
+`EMAIL_REQUIRE_TLS`, `EMAIL_TLS_SERVERNAME` and `EMAIL_TLS_REJECT_UNAUTHORIZED`
+settings in `.env.production.example` cover hosts whose certificate does not
+match the mail hostname; mail.educlub.co.ke needs none of them.
+
 Restart the Node.js application, then verify:
 
 ```text

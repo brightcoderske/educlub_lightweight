@@ -1718,6 +1718,12 @@ ALTER TABLE users ADD COLUMN mfa_code_attempts INT NOT NULL DEFAULT 0;
 
 ALTER TABLE users ADD COLUMN mfa_code_created_at DATETIME;
 
+DROP INDEX idx_users_lower_username ON users;
+
+ALTER TABLE users MODIFY COLUMN username VARCHAR(255);
+
+CREATE INDEX idx_users_lower_username ON users((LOWER(username)));
+
 CREATE INDEX idx_school_admins_school ON school_admins(school_id);
 
 CREATE INDEX idx_courses_template ON courses(template_id);
