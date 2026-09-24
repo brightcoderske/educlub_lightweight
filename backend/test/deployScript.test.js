@@ -36,3 +36,29 @@ test("cPanel deployment migrates the database before restarting", () => {
     "migrations must finish before the application is restarted",
   );
 });
+
+test("cPanel deployment reports on outgoing mail without ever rolling back for it", () => {
+  // The deploy log is the only record an operator sees, and "deployed but email
+  // still does not work" is answered by the mail settings and the server's own
+  // reply appearing in it. A mail problem must never undo a healthy release, so
+  // the check runs after the rollback trap is cleared and cannot fail the script.
+  const trapClearedAt = deploymentScript.indexOf("trap - ERR");
+  const mailCheckAt = deploymentScript.indexOf("npm run --silent email:verify");
+  assert.ok(trapClearedAt > -1, "the trap is cleared once the release is healthy");
+  assert.ok(mailCheckAt > -1, "the deployment must check outgoing mail");
+  assert.ok(
+    trapClearedAt < mailCheckAt,
+    "the mail check runs after the rollback trap is cleared",
+  );
+  assert.match(
+    deploymentScript,
+    /if ! npm run --silent email:verify; then/,
+    "a refused mail login must be handled, not left to set -e",
+  );
+});
+
+test("every step the deployment announces is counted in TOTAL_STEPS", () => {
+  const announced = deploymentScript.match(/^\s*step "/gm) || [];
+  const declared = Number(deploymentScript.match(/^TOTAL_STEPS=(\d+)/m)[1]);
+  assert.equal(declared, announced.length);
+});

@@ -121,3 +121,23 @@ test("TLS settings for shared hosting come from the environment", () => {
   assert.equal(plain.tls, undefined);
   assert.equal(plain.requireTLS, undefined);
 });
+
+test("nothing is filled in from the code when .env leaves it out", () => {
+  // No built-in Reply-To and no built-in sender name. What is not configured is
+  // left out, so changing mailbox or domain is only ever an .env edit.
+  assert.deepEqual(
+    buildMailDefaults({ emailFrom: "support@educlub.co.ke", emailReplyTo: "" }),
+    { from: "support@educlub.co.ke" },
+  );
+});
+
+test("a sender that has to be realigned gets no name that .env did not give it", () => {
+  const identity = resolveMailIdentity({
+    emailFrom: "noreply@educlub.com",
+    emailUser: "school@gmail.com",
+  });
+
+  assert.equal(identity.aligned, false);
+  assert.equal(identity.from, "school@gmail.com");
+  assert.equal(identity.replyTo, "noreply@educlub.com");
+});

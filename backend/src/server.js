@@ -1,11 +1,13 @@
-require("dotenv").config();
+// First thing, so it is the read that gets to record whether the process
+// environment is overriding .env (see config/loadEnv).
+require("./config/loadEnv").loadEnv();
 const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
 const compression = require("compression");
 const crypto = require("node:crypto");
-const { info } = require("./utils/logger");
+const { info, warn } = require("./utils/logger");
 const { getDatabaseHealth } = require("./database/health");
 const { pool } = require("./config/db");
 
@@ -18,7 +20,8 @@ const {
   securityHeaders,
 } = require("./middleware/security.middleware");
 const { ensureStartupSchema } = require("./services/startupSchema.service");
-const { getMailIdentity } = require("./utils/email");
+const { verifyMailLogin } = require("./utils/email");
+const { reportMailStartup } = require("./utils/mailDiagnostics");
 
 // Import routes
 const authRoutes = require("./routes/auth.routes");
@@ -219,19 +222,10 @@ if (env.nodeEnv !== "test") {
     .then(() => {
       server = app.listen(PORT, () => {
         info("server_started", { port: PORT, environment: env.nodeEnv, standaloneLms: env.standaloneLmsEnabled });
-        // Mail that is sent as a domain the SMTP account cannot authenticate
-        // for is accepted by the transport and then filed as spam or refused by
-        // the receiving server, which looks exactly like "email is broken".
-        const mail = getMailIdentity();
-        info("email_identity", { from: mail.from, replyTo: mail.replyTo || null });
-        if (!mail.aligned) {
-          info("email_from_realigned", {
-            configuredFrom: mail.configuredFrom,
-            sendingAs: mail.authenticated,
-            reason:
-              "EMAIL_FROM is not the authenticated mailbox, so it is used as Reply-To instead. Verify it as an alias of EMAIL_USER to send from it.",
-          });
-        }
+        // Say which mail settings this process is really using, and whether it
+        // can log in with them. The log is the one place that shows the
+        // environment the application runs with rather than a shell's.
+        reportMailStartup({ env, log: { info, warn }, verifyLogin: verifyMailLogin });
       });
       server.requestTimeout = Number(process.env.HTTP_REQUEST_TIMEOUT_MS || 30_000);
       server.headersTimeout = Number(process.env.HTTP_HEADERS_TIMEOUT_MS || 35_000);

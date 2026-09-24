@@ -96,10 +96,10 @@ function validateProductionEnv(environment) {
     "EMAIL_FROM",
     environment.EMAIL_FROM || environment.EMAIL_USER,
   );
-  validateEmailAddress(
-    "EMAIL_REPLY_TO",
-    environment.EMAIL_REPLY_TO || "support@educlub.co.ke",
-  );
+  // Optional. Nothing is assumed when it is absent: there is simply no Reply-To.
+  if (environment.EMAIL_REPLY_TO) {
+    validateEmailAddress("EMAIL_REPLY_TO", environment.EMAIL_REPLY_TO);
+  }
 }
 
 module.exports = { validateProductionEnv };

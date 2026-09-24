@@ -56,10 +56,14 @@ npm ci --omit=dev
 
 ## 2. Configure Backend Variables
 
-Add every variable from `backend/.env.production.example` through the Node.js
-application's environment-variable panel. Replace every placeholder.
+Add every variable from `backend/.env.production.example` to `.env` in the
+application root. Replace every placeholder. Use `.env` rather than the Node.js
+panel's variable list: the deploy and migration scripts run from a shell where
+cPanel puts nothing in the environment, so they can only read `.env`, and a
+second copy in the panel would override it (see the note under the mail settings
+below).
 
-Generate a JWT secret locally and paste only the output into cPanel:
+Generate a JWT secret locally and paste only the output into `.env`:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(64).toString('base64url'))"
@@ -76,9 +80,9 @@ DB_POOL_MAX=4
 EMAIL_HOST=mail.educlub.co.ke
 EMAIL_PORT=465
 EMAIL_SECURE=true
-EMAIL_USER=noreply@educlub.co.ke
+EMAIL_USER=support@educlub.co.ke
 EMAIL_PASSWORD=REPLACE_WITH_EMAIL_PASSWORD
-EMAIL_FROM=eduClub <noreply@educlub.co.ke>
+EMAIL_FROM=eduClub <support@educlub.co.ke>
 EMAIL_REPLY_TO=support@educlub.co.ke
 ```
 
@@ -92,10 +96,22 @@ Never place `DATABASE_URL`, `JWT_SECRET`, email credentials, or Flutterwave
 secrets in Vercel because the React frontend would not use them and must not
 receive them.
 
-Keep the HostAfrica mailbox password only in the Node.js application
-environment. After saving the variables and restarting the application, run
-`npm run email:verify` from the backend directory. It verifies the SMTP
-connection and authentication without sending a message.
+Every mail setting is read from the environment; no address, sender name or host
+is built into the code. `EMAIL_USER` must be a real mailbox with a password (a
+forwarder cannot log in), and `EMAIL_FROM` and `EMAIL_REPLY_TO` are optional: with
+neither, mail goes out as `EMAIL_USER` with no Reply-To.
+
+Keep each variable in exactly one place. `.env` in the application root is the
+file `scripts/deploy-cpanel-git.sh` requires and never overwrites. A variable set
+in the process environment instead - the Node.js panel's list, or the shell -
+beats the same name in `.env`, so a stale panel entry silently hides an edit made
+to the file. The application logs `env_overridden_by_process_environment`, naming
+every such variable, each time it starts. Restart the application after changing
+anything, then run `npm run email:verify` from the backend directory. It prints
+the settings it is using (never the password), then verifies the SMTP connection
+and authentication without sending a message; the startup log also records
+`email_login_ok` or `email_login_failed` for the environment the application
+really runs with.
 
 A successful login does not prove delivery, so follow it with
 `npm run email:test -- you@example.com`, which sends one real message, and check
@@ -197,7 +213,12 @@ bash scripts/deploy-from-ssh.sh
 manifests into the application root, installs production dependencies in the
 account's Node.js environment, runs `npm run db:migrate`, touches
 `tmp/restart.txt` so Passenger reloads, and then polls
-`https://learn.educlub.co.ke/health` for up to 60 seconds.
+`https://learn.educlub.co.ke/health` for up to 60 seconds. Once the release is
+healthy it runs `npm run email:verify` and prints the result in the deploy log:
+the mail settings in use, any variable overriding `.env`, and the mail server's
+own reply. A failing mail check is reported but never rolls a healthy release
+back. The deployment does not change `.env`; the values it reports are the ones
+already on the server.
 
 It never touches `.env`, `uploads`, reports, school logos, or learner files. It
 backs up the previous release under `/home/codecham/educlub-backups`, keeps the

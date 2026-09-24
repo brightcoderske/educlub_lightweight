@@ -1,5 +1,7 @@
-require("dotenv").config();
+const { loadEnv } = require("./loadEnv");
 const { validateProductionEnv } = require("./validateProductionEnv");
+
+const envFile = loadEnv();
 
 const emailPort = parseInt(process.env.EMAIL_PORT, 10);
 const emailSecure =
@@ -57,16 +59,23 @@ module.exports = {
     "",
   flutterwaveBaseUrl:
     process.env.FLUTTERWAVE_BASE_URL || "https://api.flutterwave.com/v3",
+  // Where the settings were read from, so startup can say when a value in the
+  // process environment (a hosting panel, the shell) is beating the one in .env.
+  envFile: envFile.path,
+  envFileFound: envFile.found,
+  envShadowedKeys: envFile.shadowed,
   // Mail. Everything here comes from .env so moving between providers -
   // cPanel, a relay, anything - is a configuration change and never a code one.
+  // No address or sender name is built into the code as a fallback: with no
+  // EMAIL_FROM mail goes out as the mailbox that logs in, and with no
+  // EMAIL_REPLY_TO there is no Reply-To header at all.
   emailHost: process.env.EMAIL_HOST,
   emailPort,
   emailSecure,
   emailUser: process.env.EMAIL_USER,
   emailPassword: process.env.EMAIL_PASSWORD,
-  emailFrom:
-    process.env.EMAIL_FROM || `eduClub <${process.env.EMAIL_USER}>`,
-  emailReplyTo: process.env.EMAIL_REPLY_TO || "support@educlub.co.ke",
+  emailFrom: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+  emailReplyTo: process.env.EMAIL_REPLY_TO || "",
   // STARTTLS on port 587: refuse to carry on in plain text if the upgrade
   // fails. Ignored when EMAIL_SECURE is true, which is already encrypted.
   emailRequireTls: process.env.EMAIL_REQUIRE_TLS === "true",

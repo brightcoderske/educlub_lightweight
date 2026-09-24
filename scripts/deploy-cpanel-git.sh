@@ -25,7 +25,7 @@ fi
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
 STARTED_AT="$(date +%s)"
-TOTAL_STEPS=7
+TOTAL_STEPS=8
 STEP=0
 
 # cPanel shows this script's output as the deployment log, and it is the only
@@ -173,6 +173,19 @@ for attempt in {1..20}; do
       | cut -d' ' -f2- \
       | xargs -r rm -rf
     ok "healthy after ${attempt} attempt(s)"
+
+    # Informational only. The rollback trap is already cleared, so nothing here
+    # can undo a release that is healthy, and the if keeps set -e from ending the
+    # script on a refused login. This answers "the deployment succeeded but
+    # email still does not work": it prints the mail settings actually in use
+    # (never the password), any variable the environment is overriding .env
+    # with, and the mail server's own reply. The deploy shell reads .env; the
+    # application's own log line at startup shows what Passenger gives it.
+    step "Checking outgoing mail"
+    if ! npm run --silent email:verify; then
+      echo "      mail is NOT working with the settings above. The release itself is unaffected."
+    fi
+
     echo
     echo "=============================================="
     echo " DEPLOYMENT SUCCEEDED"

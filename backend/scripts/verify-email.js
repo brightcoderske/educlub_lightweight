@@ -1,15 +1,40 @@
-const nodemailer = require("nodemailer");
-const env = require("../src/config/env");
-const { buildTransportOptions } = require("../src/utils/emailConfig");
+#!/usr/bin/env node
+/**
+ * Proves the SMTP connection and login work, without sending anything.
+ *
+ * It opens by printing the settings it is using, and on failure it prints the
+ * server's own reply and what to check. Both matter more than the error code:
+ * "EAUTH" alone cannot tell a wrong password from settings that were never the
+ * ones intended.
+ *
+ * Usage: npm run email:verify
+ */
+const path = require("path");
+require("../src/config/loadEnv").loadEnv(path.resolve(__dirname, "../.env"));
 
-async function verifyEmail() {
-  const transporter = nodemailer.createTransport(buildTransportOptions(env));
-  await transporter.verify();
-  console.log("SMTP connection and authentication verified.");
+const env = require("../src/config/env");
+const { verifyMailLogin } = require("../src/utils/email");
+const {
+  describeMailSettings,
+  explainMailFailure,
+  formatMailReport,
+} = require("../src/utils/mailDiagnostics");
+
+async function main() {
+  console.log(formatMailReport(env).join("\n"));
+  console.log("");
+
+  const result = await verifyMailLogin();
+  if (result.ok) {
+    console.log("SMTP connection and authentication verified.");
+    return 0;
+  }
+
+  console.error(`SMTP verification failed [${result.code}]: ${result.message}`);
+  for (const line of explainMailFailure(result, describeMailSettings(env))) {
+    console.error(line);
+  }
+  return 1;
 }
 
-verifyEmail().catch((error) => {
-  const code = String(error?.code || "UNKNOWN").replace(/[^A-Z0-9_-]/gi, "");
-  console.error(`SMTP verification failed (${code || "UNKNOWN"}).`);
-  process.exit(1);
-});
+main().then((code) => process.exit(code));

@@ -72,6 +72,16 @@ test("rejects malformed production email addresses", () => {
   );
 });
 
+test("EMAIL_FROM and EMAIL_REPLY_TO are optional, and nothing is assumed in their place", () => {
+  // The mail code supplies no address of its own, so leaving these out is a
+  // valid configuration: mail goes out as EMAIL_USER with no Reply-To.
+  assert.doesNotThrow(() =>
+    validateProductionEnv(
+      productionEnv({ EMAIL_FROM: undefined, EMAIL_REPLY_TO: undefined }),
+    ),
+  );
+});
+
 test("rejects unsupported or inconsistent SMTP security settings", () => {
   assert.throws(
     () => validateProductionEnv(productionEnv({ EMAIL_PORT: "25" })),

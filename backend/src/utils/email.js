@@ -41,6 +41,25 @@ async function deliver(mailOptions, description) {
   }
 }
 
+/**
+ * Connects and logs in without sending anything. Never throws - the answer is in
+ * the result - so startup and the mail scripts can report it without a
+ * try/catch each. Uses the same transport as real mail, so it tests the
+ * settings the application is actually running with.
+ */
+async function verifyMailLogin() {
+  try {
+    await transporter.verify();
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      code: error.code || error.responseCode || "unknown",
+      message: error.message,
+    };
+  }
+}
+
 const getLastEmailFailure = () => lastFailure;
 const getMailIdentity = () => mailIdentity;
 
@@ -203,6 +222,7 @@ async function sendLearnerRegistrationAdminEmail({
 
 module.exports = {
   deliver,
+  verifyMailLogin,
   getLastEmailFailure,
   getMailIdentity,
   sendMFACode,

@@ -2,16 +2,27 @@
 /**
  * Sends one real email, to prove delivery end to end.
  *
- * `npm run mail:verify` only proves the SMTP login works. It cannot tell you
+ * `npm run email:verify` only proves the SMTP login works. It cannot tell you
  * that a message actually lands in an inbox, which is the failure this exists
  * to catch: a From address the mail account cannot authenticate for is accepted
  * by the server and then dropped or filed as spam by the recipient.
  *
+ * It opens by printing the settings it is using. A failed test is usually a
+ * test run with different settings from the ones being looked at, and the
+ * quickest way to see that is to have the output say what it used.
+ *
  * Usage: npm run email:test -- you@example.com
  */
-require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
+const path = require("path");
+require("../src/config/loadEnv").loadEnv(path.resolve(__dirname, "../.env"));
 
-const { deliver, getMailIdentity } = require("../src/utils/email");
+const env = require("../src/config/env");
+const { deliver, getMailIdentity, getLastEmailFailure } = require("../src/utils/email");
+const {
+  describeMailSettings,
+  explainMailFailure,
+  formatMailReport,
+} = require("../src/utils/mailDiagnostics");
 
 async function main() {
   const to = process.argv[2];
@@ -20,17 +31,10 @@ async function main() {
     process.exit(1);
   }
 
-  const identity = getMailIdentity();
-  console.log("Sending as :", identity.from);
-  console.log("Reply-To   :", identity.replyTo || "(none)");
-  if (!identity.aligned) {
-    console.log(
-      `Note       : EMAIL_FROM (${identity.configuredFrom}) is not the mailbox that ` +
-        `authenticates (${identity.authenticated}), so it is used as Reply-To instead. ` +
-        "Verify it as an alias with your mail provider to send from it.",
-    );
-  }
+  console.log(formatMailReport(env).join("\n"));
+  console.log("");
 
+  const identity = getMailIdentity();
   const sent = await deliver(
     {
       from: identity.from,
@@ -47,6 +51,9 @@ async function main() {
 
   if (!sent) {
     console.error("The transport refused the message. The error is logged above.");
+    for (const line of explainMailFailure(getLastEmailFailure(), describeMailSettings(env))) {
+      console.error(line);
+    }
     process.exit(1);
   }
   console.log("Accepted by the mail server. Check the inbox, and the spam folder.");

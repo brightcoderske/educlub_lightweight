@@ -10,12 +10,15 @@
  * "our emails are not arriving" looks like. The transport accepts the message,
  * the log says sent, and nobody receives it.
  *
- * With a normal cPanel mailbox (EMAIL_USER=noreply@educlub.co.ke, EMAIL_FROM
- * on the same domain) nothing below changes anything. It only steps in when the
- * two domains differ - sending through a Gmail account as @educlub.com, say -
- * where it sends as the mailbox that authenticated and keeps the configured
- * address as Reply-To, so replies still land in the right place. Set
+ * With a normal cPanel mailbox (EMAIL_USER a mailbox on the domain, EMAIL_FROM on
+ * that same domain) nothing below changes anything. It only steps in when the
+ * two domains differ - sending through a Gmail account as an address on another
+ * domain, say - where it sends as the mailbox that authenticated and keeps the
+ * configured address as Reply-To, so replies still land in the right place. Set
  * EMAIL_ALLOW_UNALIGNED_FROM=true to send exactly what EMAIL_FROM says.
+ *
+ * Nothing here supplies an address or a sender name of its own. Whatever is not
+ * in .env is left out rather than filled in from the code.
  */
 
 /** "eduClub <a@b.c>" -> { name: "eduClub", address: "a@b.c" } */
@@ -64,10 +67,7 @@ function resolveMailIdentity(env) {
 
   return {
     aligned: false,
-    from: formatAddress({
-      name: configured.name || "eduClub",
-      address: authenticated,
-    }),
+    from: formatAddress({ name: configured.name, address: authenticated }),
     replyTo: env.emailReplyTo || configured.address || undefined,
     configuredFrom: configured.address,
     authenticated,
