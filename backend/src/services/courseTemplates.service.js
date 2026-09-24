@@ -6,6 +6,14 @@ const {
 } = require("./courseTemplatePreview");
 const { sanitizeActivityContent } = require("../utils/richTextSanitizer");
 const { withTransaction } = require("../database/transaction");
+const {
+  claimRow,
+  freePosition,
+  differingFields,
+  isArchived,
+  MODULE_FIELDS,
+  ACTIVITY_FIELDS,
+} = require("./courseSync");
 
 function normalizeCourseCategory(category) {
   const normalized = String(category || "general")
@@ -643,9 +651,9 @@ async function getSchoolCourse(courseId, user = {}, runQuery = query) {
   return result.rows[0];
 }
 
-async function syncSchoolCourse(courseId, user = {}, runQuery = query) {
+async function applySync(courseId, user, runQuery) {
   const course = await getSchoolCourse(courseId, user, runQuery);
-  if (!course?.template_id)
+  if (!course || !course.template_id)
     throw new Error("This course is not linked to a template.");
 
   const template = await runQuery(
@@ -690,46 +698,74 @@ async function syncSchoolCourse(courseId, user = {}, runQuery = query) {
     "SELECT * FROM course_template_modules WHERE template_id = $1 ORDER BY position",
     [course.template_id],
   );
+  const schoolModules = await runQuery(
+    "SELECT * FROM course_modules WHERE course_id = $1",
+    [courseId],
+  );
+
+  const summary = {
+    modules: { added: 0, updated: 0, unchanged: 0, relinked: 0 },
+    activities: { added: 0, updated: 0, unchanged: 0, relinked: 0 },
+  };
+
+  // A template re-imported from a generated SQL file deletes its modules and
+  // inserts them again, so every id changes and the links school courses hold
+  // now point at rows that no longer exist. A stale link must count as no link
+  // at all, or matching skips the title fallback and inserts the whole template
+  // a second time - the very doubling this rewrite exists to stop. The link is
+  // written back when the row is matched, so this repairs itself each import.
+  const liveModuleIds = new Set(templateModules.rows.map((row) => Number(row.id)));
+  for (const row of schoolModules.rows) {
+    if (row.template_module_id && !liveModuleIds.has(Number(row.template_module_id))) {
+      row.template_module_id = null;
+    }
+  }
 
   for (const templateModule of templateModules.rows) {
-    let schoolModule = await runQuery(
-      `UPDATE course_modules
-       SET title = $1,
-           description = $2,
-           learning_outcomes = $3,
-           is_published = $4,
-           unlock_at = $5,
-           archived_at = NULL,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE course_id = $6
-         AND template_module_id = $7
-       RETURNING *`,
-      [
-        templateModule.title,
-        templateModule.description,
-        JSON.stringify(templateModule.learning_outcomes || []),
-        templateModule.is_published,
-        templateModule.unlock_at,
-        courseId,
-        templateModule.id,
-      ],
-    );
+    const match = claimRow(templateModule, schoolModules.rows, "template_module_id");
+    let moduleId;
 
-    if (!schoolModule.rows[0]) {
-      schoolModule = await runQuery(
+    if (match) {
+      moduleId = match.row.id;
+      const changed = differingFields(match.row, templateModule, MODULE_FIELDS);
+      const restoring = isArchived(match.row);
+      const relinking = match.matchedBy !== "link";
+
+      if (changed.length || restoring || relinking) {
+        await runQuery(
+          `UPDATE course_modules
+           SET template_module_id = $1,
+               title = $2,
+               description = $3,
+               learning_outcomes = $4,
+               is_published = $5,
+               unlock_at = $6,
+               archived_at = NULL,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $7`,
+          [
+            templateModule.id,
+            templateModule.title,
+            templateModule.description,
+            JSON.stringify(templateModule.learning_outcomes || []),
+            templateModule.is_published,
+            templateModule.unlock_at,
+            moduleId,
+          ],
+        );
+        if (relinking) summary.modules.relinked += 1;
+        if (changed.length || restoring) summary.modules.updated += 1;
+        else summary.modules.unchanged += 1;
+      } else {
+        summary.modules.unchanged += 1;
+      }
+    } else {
+      const inserted = await runQuery(
         `INSERT INTO course_modules (
            course_id, template_module_id, title, description, learning_outcomes,
            position, is_published, unlock_at
          )
-         VALUES (
-           $1, $2, $3, $4, $5,
-           CASE
-             WHEN EXISTS (SELECT 1 FROM course_modules WHERE course_id = $1 AND position = $6)
-             THEN (SELECT COALESCE(MAX(position), 0) + 1 FROM course_modules WHERE course_id = $1)
-             ELSE $6
-           END,
-           $7, $8
-         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [
           courseId,
@@ -737,11 +773,16 @@ async function syncSchoolCourse(courseId, user = {}, runQuery = query) {
           templateModule.title,
           templateModule.description,
           JSON.stringify(templateModule.learning_outcomes || []),
-          templateModule.position,
+          freePosition(schoolModules.rows, templateModule.position),
           templateModule.is_published,
           templateModule.unlock_at,
         ],
       );
+      moduleId = inserted.rows[0].id;
+      // Kept in the working set so the next template module sees this position
+      // as taken and cannot be handed the same one.
+      schoolModules.rows.push({ ...inserted.rows[0], __claimed: true });
+      summary.modules.added += 1;
     }
 
     const templateActivities = await runQuery(
@@ -751,62 +792,85 @@ async function syncSchoolCourse(courseId, user = {}, runQuery = query) {
        ORDER BY position`,
       [templateModule.id],
     );
+    const schoolActivities = await runQuery(
+      "SELECT * FROM learning_activities WHERE module_id = $1",
+      [moduleId],
+    );
+
+    // Same again for activities. An activity whose link belongs to a template
+    // activity that is no longer in this module is treated as unlinked, so the
+    // title can reunite it with its replacement.
+    const liveActivityIds = new Set(templateActivities.rows.map((row) => Number(row.id)));
+    for (const row of schoolActivities.rows) {
+      if (row.template_activity_id && !liveActivityIds.has(Number(row.template_activity_id))) {
+        row.template_activity_id = null;
+      }
+    }
 
     for (const templateActivity of templateActivities.rows) {
-      const updated = await runQuery(
-        `UPDATE learning_activities
-         SET title = $1,
-             activity_type = $2,
-             content = $3,
-             points = $4,
-             is_required = $5,
-             availability_mode = $6,
-             completion_rule = $7,
-             pass_score = $8,
-             is_published = $9,
-             archived_at = NULL,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE module_id = $10
-           AND template_activity_id = $11
-         RETURNING *`,
-        [
-          templateActivity.title,
-          templateActivity.activity_type,
-          JSON.stringify(templateActivity.content || {}),
-          templateActivity.points,
-          templateActivity.is_required,
-          templateActivity.availability_mode || "required",
-          templateActivity.completion_rule,
-          templateActivity.pass_score,
-          templateActivity.is_published,
-          schoolModule.rows[0].id,
-          templateActivity.id,
-        ],
+      const hit = claimRow(
+        templateActivity,
+        schoolActivities.rows,
+        "template_activity_id",
       );
 
-      if (!updated.rows[0]) {
-        await runQuery(
+      if (hit) {
+        const changed = differingFields(hit.row, templateActivity, ACTIVITY_FIELDS);
+        const restoring = isArchived(hit.row);
+        const relinking = hit.matchedBy !== "link";
+
+        if (changed.length || restoring || relinking) {
+          await runQuery(
+            `UPDATE learning_activities
+             SET template_activity_id = $1,
+                 title = $2,
+                 activity_type = $3,
+                 content = $4,
+                 points = $5,
+                 is_required = $6,
+                 availability_mode = $7,
+                 completion_rule = $8,
+                 pass_score = $9,
+                 is_published = $10,
+                 archived_at = NULL,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $11`,
+            [
+              templateActivity.id,
+              templateActivity.title,
+              templateActivity.activity_type,
+              JSON.stringify(templateActivity.content || {}),
+              templateActivity.points,
+              templateActivity.is_required,
+              templateActivity.availability_mode || "required",
+              templateActivity.completion_rule,
+              templateActivity.pass_score,
+              templateActivity.is_published,
+              hit.row.id,
+            ],
+          );
+          if (relinking) summary.activities.relinked += 1;
+          if (changed.length || restoring) summary.activities.updated += 1;
+          else summary.activities.unchanged += 1;
+        } else {
+          summary.activities.unchanged += 1;
+        }
+      } else {
+        const insertedActivity = await runQuery(
           `INSERT INTO learning_activities (
              module_id, template_activity_id, title, activity_type, content, points,
              position, is_required, availability_mode, completion_rule, pass_score, is_published
            )
-           VALUES (
-             $1, $2, $3, $4, $5, $6,
-             CASE
-               WHEN EXISTS (SELECT 1 FROM learning_activities WHERE module_id = $1 AND position = $7)
-               THEN (SELECT COALESCE(MAX(position), 0) + 1 FROM learning_activities WHERE module_id = $1)
-               ELSE $7
-             END,
-             $8, $9, $10, $11, $12
-           )`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           RETURNING *`,
           [
-            schoolModule.rows[0].id,
+            moduleId,
             templateActivity.id,
             templateActivity.title,
             templateActivity.activity_type,
             JSON.stringify(templateActivity.content || {}),
             templateActivity.points,
-            templateActivity.position,
+            freePosition(schoolActivities.rows, templateActivity.position),
             templateActivity.is_required,
             templateActivity.availability_mode || "required",
             templateActivity.completion_rule,
@@ -814,11 +878,53 @@ async function syncSchoolCourse(courseId, user = {}, runQuery = query) {
             templateActivity.is_published,
           ],
         );
+        schoolActivities.rows.push({ ...insertedActivity.rows[0], __claimed: true });
+        summary.activities.added += 1;
       }
     }
   }
 
-  return getSchoolCourse(courseId, user, runQuery);
+  // What the template does not account for. A row still carrying a template
+  // link that no template module claimed means the template dropped it; a row
+  // with no link was either written by the school or came from an older import.
+  // Neither is deleted here - that is the repair script's job, and it checks for
+  // learner work first - but an administrator pressing sync deserves to be told,
+  // because this is what makes a course look like it has grown a second half.
+  summary.notInTemplate = schoolModules.rows
+    .filter((row) => !row.__claimed && !isArchived(row))
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      was_from_template: Boolean(row.template_module_id),
+    }));
+
+  // The bug this replaced was silent and doubled a course, so it is worth
+  // refusing to commit one. Inside the transaction this throw undoes every
+  // write above it.
+  const linked = await runQuery(
+    `SELECT COUNT(*) AS linked_modules
+     FROM course_modules
+     WHERE course_id = $1
+       AND template_module_id IS NOT NULL
+       AND archived_at IS NULL`,
+    [courseId],
+  );
+  const linkedModules = Number((linked.rows[0] || {}).linked_modules || 0);
+  if (linkedModules > templateModules.rows.length) {
+    throw new Error(
+      `Sync aborted: the course would hold ${linkedModules} modules from a template that has ${templateModules.rows.length}. Nothing was changed.`,
+    );
+  }
+
+  const synced = await getSchoolCourse(courseId, user, runQuery);
+  return { ...synced, sync_summary: summary };
+}
+
+// Called straight from the controller, and from rollbackSchoolCourse with that
+// transaction already open.
+async function syncSchoolCourse(courseId, user = {}, runQuery = null) {
+  if (runQuery) return applySync(courseId, user, runQuery);
+  return withTransaction((client) => applySync(courseId, user, client.query.bind(client)));
 }
 
 async function rollbackSchoolCourse(courseId, user = {}) {

@@ -3368,13 +3368,38 @@ function CourseBuilder() {
     );
   };
 
+  // Sync used to report nothing at all, which is how a course could quietly
+  // double in size. It now says exactly what it touched.
+  const describeSync = (summary) => {
+    if (!summary) return "Template updates synced.";
+    const { modules = {}, activities = {}, notInTemplate = [] } = summary;
+    const counts = [
+      modules.updated ? `${modules.updated} module${modules.updated === 1 ? "" : "s"} updated` : "",
+      modules.added ? `${modules.added} added` : "",
+      activities.updated ? `${activities.updated} activities updated` : "",
+      activities.added ? `${activities.added} activities added` : "",
+    ].filter(Boolean);
+
+    const headline = counts.length
+      ? `Synced: ${counts.join(", ")}.`
+      : "Synced. Everything was already up to date.";
+    const extra = notInTemplate.length
+      ? ` ${notInTemplate.length} module${notInTemplate.length === 1 ? "" : "s"} in this course ${notInTemplate.length === 1 ? "is" : "are"} not in the template and ${notInTemplate.length === 1 ? "was" : "were"} left untouched.`
+      : "";
+    return headline + extra;
+  };
+
   const syncCourse = async (action) => {
     setSaving(true);
     setError("");
     setMessage("");
     try {
-      await apiClient.post(`/courses/${entityId}/${action}-template`, {});
-      setMessage(action === "sync" ? "Template updates synced." : "Template content restored.");
+      const result = await apiClient.post(`/courses/${entityId}/${action}-template`, {});
+      setMessage(
+        action === "sync"
+          ? describeSync(result && result.sync_summary)
+          : "Template content restored.",
+      );
       await loadBuilder();
     } catch (err) {
       setError(err.message);

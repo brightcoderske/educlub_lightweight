@@ -123,6 +123,9 @@ test("template rollback replaces visible structure without deleting learner hist
       };
     }
     if (sql.includes("FROM course_template_modules")) return { rows: [] };
+    // The post-sync guard counts what is now linked; with no template modules
+    // above, nothing should be.
+    if (sql.includes("AS linked_modules")) return { rows: [{ linked_modules: 0 }] };
     return { rows: [], rowCount: 1 };
   });
 
