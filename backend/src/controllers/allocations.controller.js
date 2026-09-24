@@ -1,4 +1,7 @@
 const { query } = require("../config");
+const { withTransaction } = require("../database/transaction");
+const { isUniqueViolation } = require("../utils/dbErrors");
+const { normalizeGrade } = require("../utils/grade");
 const academicService = require("../services/academic.service");
 const independentLearnersService = require("../services/independentLearners.service");
 const notificationsService = require("../services/notifications.service");
@@ -11,6 +14,15 @@ function isSchoolScopedStaff(user = {}) {
 function allocationErrorStatus(error) {
   if (error.status) return error.status;
   return /not assigned|cannot|outside/i.test(error.message || "") ? 403 : 500;
+}
+
+// A learner holds a course once per term, and the table enforces it. Meeting that
+// rule is the person's clash to resolve, not a server fault, so say what it is
+// rather than passing on the database's own wording as a 500.
+function alreadyAllocated(res, { term, academic_year: academicYear }) {
+  return res.status(409).json({
+    error: `That learner already has this course for ${term} ${academicYear}.`,
+  });
 }
 
 async function assertActiveAllocationTerm(term, academicYear) {
@@ -212,6 +224,7 @@ async function createAllocation(req, res) {
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    if (isUniqueViolation(error)) return alreadyAllocated(res, req.body);
     console.error("Create allocation error:", error);
     res
       .status(allocationErrorStatus(error))
@@ -326,6 +339,7 @@ async function updateAllocation(req, res) {
 
     res.json(updated);
   } catch (error) {
+    if (isUniqueViolation(error)) return alreadyAllocated(res, req.body);
     console.error("Update allocation error:", error);
     res
       .status(allocationErrorStatus(error))
@@ -376,6 +390,23 @@ async function deleteAllocation(req, res) {
   }
 }
 
+const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+/**
+ * Allocates a course to every learner in a grade (and stream) for the active term.
+ * A class is the learners who are not graduated and whose grade is the one chosen,
+ * however it was typed ("Grade 5", "grade 5", "5"): both sides go through
+ * normalizeGrade, so a grade that is not one matches nobody rather than everybody
+ * who has no grade.
+ *
+ * Nobody is allocated twice. A learner who already has the course for the term is
+ * left exactly as they are, so a completed course is never reset, and only one
+ * whose allocation was switched off is switched back on. The answer the person
+ * needs is "how many were new and how many were already there", which is why the
+ * work is done here and not in one INSERT ... SELECT: that statement cannot be
+ * given RETURNING on MySQL or MariaDB - the emulation adds an unqualified id that
+ * is ambiguous between the two tables, which made every bulk allocation fail.
+ */
 async function bulkAllocate(req, res) {
   try {
     const { grade, stream, course_id, term, academic_year } = req.body;
@@ -387,14 +418,22 @@ async function bulkAllocate(req, res) {
     if (!schoolId) {
       return res.status(400).json({ error: "School is required" });
     }
+    const chosenGrade = normalizeGrade(grade);
+    if (!chosenGrade) {
+      return res.status(400).json({ error: "Choose the grade to allocate." });
+    }
+    if (!course_id) {
+      return res.status(400).json({ error: "Choose the course to allocate." });
+    }
 
     await assertActiveAllocationTerm(term, academic_year);
 
     const courseResult = await query(
-      "SELECT id FROM courses WHERE id = $1 AND school_id = $2 AND is_active = true",
+      "SELECT id, name FROM courses WHERE id = $1 AND school_id = $2 AND is_active = true",
       [course_id, schoolId]
     );
-    if (!courseResult.rows[0]) {
+    const course = courseResult.rows[0];
+    if (!course) {
       return res
         .status(403)
         .json({ error: "Bulk allocation must use your school's adopted course version." });
@@ -406,71 +445,95 @@ async function bulkAllocate(req, res) {
       );
     }
 
-    const gradeMatchSql = `
-      (
-        LOWER(COALESCE(grade, '')) = LOWER($5)
-        OR regexp_replace(COALESCE(grade, ''), '[^0-9]', '') =
-           regexp_replace(COALESCE($5, ''), '[^0-9]', '')
-      )
-    `;
-    let queryText = `
-      INSERT INTO course_allocations (learner_id, course_id, term, academic_year, status)
-       SELECT id, $1, $2, $3, 'active'
-       FROM learners
-       WHERE school_id = $4 AND ${gradeMatchSql}
-    `;
-    const params = [course_id, term, academic_year, schoolId, grade];
-
-    if (stream) {
-      queryText += " AND stream = $6";
-      params.push(stream);
+    const roster = await query(
+      `SELECT id, grade FROM learners
+       WHERE school_id = $1 AND graduation_status <> 'graduated'${stream ? " AND stream = $2" : ""}`,
+      stream ? [schoolId, stream] : [schoolId]
+    );
+    const learnerIds = roster.rows
+      .filter((row) => normalizeGrade(row.grade) === chosenGrade)
+      .map((row) => row.id);
+    if (learnerIds.length === 0) {
+      return res.json({
+        message: "No learners matched the selected grade and stream.",
+        allocations: [],
+        matchedLearners: 0,
+        allocated: 0,
+        alreadyAllocated: 0,
+      });
     }
 
-    queryText += `
-      ON CONFLICT (learner_id, course_id, term, academic_year)
-      DO UPDATE SET
-        status = 'active',
-        completed_at = NULL
-      RETURNING *
-    `;
-
-    const matchCountResult = await query(
-      `SELECT COUNT(*)::int AS total
-       FROM learners
-       WHERE school_id = $1
-         AND (
-           LOWER(COALESCE(grade, '')) = LOWER($2)
-           OR regexp_replace(COALESCE(grade, ''), '[^0-9]', '') =
-              regexp_replace(COALESCE($2, ''), '[^0-9]', '')
-         )
-         ${stream ? "AND stream = $3" : ""}`,
-      stream ? [schoolId, grade, stream] : [schoolId, grade]
+    const existing = await query(
+      `SELECT id, learner_id, status
+       FROM course_allocations
+       WHERE course_id = $1 AND term = $2 AND academic_year = $3 AND learner_id = ANY($4)`,
+      [course.id, term, academic_year, learnerIds]
     );
+    const haveIt = new Set(existing.rows.map((row) => row.learner_id));
+    const toCreate = learnerIds.filter((id) => !haveIt.has(id));
+    const toSwitchOn = existing.rows.filter(
+      (row) => row.status === "inactive" || row.status === "dropped"
+    );
+    const alreadyAllocated = learnerIds.length - toCreate.length - toSwitchOn.length;
 
-    const result = await query(queryText, params);
+    await withTransaction(async (client) => {
+      if (toCreate.length > 0) {
+        const rows = toCreate.map((_, index) => `($${index + 4}, $1, $2, $3, 'active')`);
+        // DO NOTHING covers someone else allocating the same class at the same moment.
+        await client.query(
+          `INSERT INTO course_allocations (learner_id, course_id, term, academic_year, status)
+           VALUES ${rows.join(", ")}
+           ON CONFLICT (learner_id, course_id, term, academic_year) DO NOTHING`,
+          [course.id, term, academic_year, ...toCreate]
+        );
+      }
+      if (toSwitchOn.length > 0) {
+        await client.query(
+          `UPDATE course_allocations
+           SET status = 'active', completed_at = NULL
+           WHERE id = ANY($1)`,
+          [toSwitchOn.map((row) => row.id)]
+        );
+      }
+    });
 
-    if (result.rows.length > 0) {
+    const changedLearnerIds = [...toCreate, ...toSwitchOn.map((row) => row.learner_id)];
+    const allocations =
+      changedLearnerIds.length === 0
+        ? []
+        : (
+            await query(
+              `SELECT * FROM course_allocations
+               WHERE course_id = $1 AND term = $2 AND academic_year = $3 AND learner_id = ANY($4)`,
+              [course.id, term, academic_year, changedLearnerIds]
+            )
+          ).rows;
+
+    if (allocations.length > 0) {
       await notificationsService.notifyRole("school_admin", {
         school_id: schoolId,
         title: "Bulk course allocation",
-        message: `${result.rows.length} learners were allocated to a course.`,
+        message: `${plural(allocations.length, "learner")} allocated to ${course.name}.`,
         notification_type: "course_allocated",
         entity_type: "course_allocation",
       });
     }
 
-    const matchedLearners = Number(matchCountResult.rows[0]?.total || 0);
+    const already =
+      alreadyAllocated > 0
+        ? ` ${plural(alreadyAllocated, "learner")} already had it and ${alreadyAllocated === 1 ? "was" : "were"} left as they are.`
+        : "";
     const message =
-      matchedLearners === 0
-        ? "No learners matched the selected grade and stream."
-        : result.rows.length === 0
-        ? "All matching learners were already allocated to this course for the selected term."
-        : `Allocated ${result.rows.length} learners to course`;
+      allocations.length === 0
+        ? `All ${plural(learnerIds.length, "matching learner")} already had ${course.name} for ${term} ${academic_year}.`
+        : `Allocated ${plural(allocations.length, "learner")} to ${course.name}.${already}`;
 
-    res.status(201).json({
+    res.status(allocations.length > 0 ? 201 : 200).json({
       message,
-      allocations: result.rows,
-      matchedLearners,
+      allocations,
+      matchedLearners: learnerIds.length,
+      allocated: allocations.length,
+      alreadyAllocated,
     });
   } catch (error) {
     console.error("Bulk allocate error:", error);

@@ -93,6 +93,18 @@ function planInsert(sql, params) {
   const head = split.body.match(/^\s*INSERT\s+INTO\s+`?(\w+)`?\s*\(([^)]*)\)/i);
   if (!head) return null;
 
+  // An INSERT ... SELECT can write many rows, and only one can be read back this
+  // way. It used to be attempted anyway: the update list it appended,
+  // id = LAST_INSERT_ID(id), is ambiguous between the two tables, so the
+  // statement failed outright - and where it did not, one row was reported for
+  // however many were written. Refuse it, so the next one is caught in a test.
+  if (findTopLevel(split.body, "SELECT") !== -1 && findTopLevel(split.body, "VALUES") === -1) {
+    throw new Error(
+      "RETURNING cannot be emulated for INSERT ... SELECT, which can write many rows. " +
+        "Run the INSERT without RETURNING and read the rows back with a SELECT.",
+    );
+  }
+
   const table = head[1];
   const key = primaryKeyFor(table);
   const columns = head[2].split(",").map((c) => c.trim().replace(/`/g, ""));

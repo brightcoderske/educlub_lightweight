@@ -90,3 +90,24 @@ test("placeholder counting and keyword finding ignore string literals", () => {
   assert.equal(countPlaceholders("a = ? AND b = 'not a ? mark'"), 1);
   assert.equal(findTopLevel("SELECT 'WHERE' FROM t WHERE x = 1", "WHERE"), 22);
 });
+
+// Bulk allocation was an INSERT ... SELECT ... RETURNING. The emulation gave it
+// an update list of id = LAST_INSERT_ID(id), and the unqualified id is ambiguous
+// between the two tables, so every bulk allocation failed with a 500.
+test("RETURNING on an INSERT ... SELECT is refused, because only one of many rows could be read back", () => {
+  assert.throws(
+    () =>
+      planReturning(
+        "INSERT INTO course_allocations (learner_id, course_id) SELECT id, ? FROM learners WHERE school_id = ? ON DUPLICATE KEY UPDATE status = 'active' RETURNING *",
+        [1, 2],
+      ),
+    /RETURNING cannot be emulated for INSERT \.\.\. SELECT/,
+  );
+
+  // A plain insert of listed rows can still be read back, and so can a subselect
+  // that sits inside the VALUES.
+  assert.doesNotThrow(() => planReturning("INSERT INTO t (a, b) VALUES (?, ?) RETURNING *", [1, 2]));
+  assert.doesNotThrow(() =>
+    planReturning("INSERT INTO t (a, b) VALUES ((SELECT MAX(x) FROM y), ?) RETURNING *", [1]),
+  );
+});
