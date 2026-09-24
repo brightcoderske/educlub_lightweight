@@ -495,19 +495,19 @@ async function promoteLearners(req, res) {
       paramIndex++;
     }
 
-    // Keep the year tied to the resolved term rather than trusting a separate
-    // client value, so term and academic_year cannot disagree on the record.
-    const resolvedAcademicYear = promotionTerm
-      ? promotionTerm.academic_year
-      : academic_year;
-    if (resolvedAcademicYear) {
+    // The year is written only together with the term it belongs to, taken from
+    // that term and never from a separate client value, so the two cannot
+    // disagree on the record. Moving up a grade alone leaves the year as it is.
+    if (promotionTerm?.academic_year) {
       updates.push(`academic_year = $${paramIndex}`);
-      params.push(resolvedAcademicYear);
+      params.push(promotionTerm.academic_year);
       paramIndex++;
     }
 
     updates.push("updated_at = NOW()");
-    queryText += `${updates.join(", ")} WHERE school_id = $${paramIndex}`;
+    // Someone who has already graduated has left the school; moving a whole
+    // class on must not drag them into the next term with it.
+    queryText += `${updates.join(", ")} WHERE school_id = $${paramIndex} AND graduation_status <> 'graduated'`;
     params.push(schoolId);
     paramIndex++;
 
@@ -532,8 +532,12 @@ async function promoteLearners(req, res) {
     queryText += " RETURNING *";
 
     const result = await query(queryText, params);
+    const moved = [
+      promotionTerm && [promotionTerm.term, promotionTerm.academic_year].filter(Boolean).join(" "),
+      promotionGrade,
+    ].filter(Boolean);
     res.json({
-      message: `Updated ${result.rows.length} learners`,
+      message: `Moved ${result.rows.length} ${result.rows.length === 1 ? "learner" : "learners"} to ${moved.join(", ")}.`,
       learners: result.rows,
     });
   } catch (error) {

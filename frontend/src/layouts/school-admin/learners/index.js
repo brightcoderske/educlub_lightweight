@@ -15,6 +15,7 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import Alert from "@mui/material/Alert";
 import readXlsxFile from "read-excel-file";
 
 import MDBox from "components/MDBox";
@@ -26,6 +27,10 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import LearnerDetailModal from "components/LearnerDetailModal";
+import LearnerCredentialsDialog, {
+  credentialsFromCreatedLearner,
+} from "components/LearnerCredentialsDialog";
+import PromoteLearnersDialog from "./PromoteLearnersDialog";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
@@ -48,14 +53,8 @@ function SchoolAdminLearners() {
   const [learners, setLearners] = useState(() => cachedData?.learners || []);
   const [school, setSchool] = useState(() => cachedData?.school || null);
   const [form, setForm] = useState(emptyForm);
-  const [promotion, setPromotion] = useState({
-    learner_id: "",
-    grade: "",
-    stream: "",
-    next_grade: "",
-    next_term: "",
-    academic_year: new Date().getFullYear(),
-  });
+  // What to hand over after a learner is created: the username and default password.
+  const [credentials, setCredentials] = useState(null);
   // Which of the roster forms is open as a dialog: "add", "upload",
   // "graduate", or null for none. The table owns the full width otherwise.
   const [openForm, setOpenForm] = useState(null);
@@ -63,6 +62,8 @@ function SchoolAdminLearners() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [importMessage, setImportMessage] = useState("");
+  // What Bulk Graduate did, shown on the page once its dialog has closed.
+  const [promotionResult, setPromotionResult] = useState("");
   const [search, setSearch] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
   const [streamFilter, setStreamFilter] = useState("");
@@ -129,19 +130,12 @@ function SchoolAdminLearners() {
     new Set(learners.map((learner) => learner.stream).filter(Boolean))
   );
   const streams = school?.streams_config?.length ? school.streams_config : learnerStreams;
-  // Terms and academic years are owned by the Academic module. Nothing here may
-  // invent them: offering a term that was never created writes an orphan term
-  // string onto learner and allocation records.
-  const terms = academicTerms.map((item) => item.name);
-  const academicYears = [
-    ...new Set(academicTerms.map((item) => item.academic_year).filter(Boolean)),
-  ].sort();
-
   const handleCreate = async () => {
     setSaving(true);
     setError("");
     try {
-      await apiClient.post("/learners", form);
+      const created = await apiClient.post("/learners", form);
+      setCredentials(credentialsFromCreatedLearner(created, school?.name));
       setForm(emptyForm);
       await loadLearners(true);
       setOpenForm(null);
@@ -152,16 +146,13 @@ function SchoolAdminLearners() {
     }
   };
 
-  const handlePromote = async () => {
+  const handlePromote = async (payload) => {
     setSaving(true);
     setError("");
+    setPromotionResult("");
     try {
-      const payload = {
-        ...promotion,
-        learner_ids: promotion.learner_id ? [Number(promotion.learner_id)] : undefined,
-      };
-      delete payload.learner_id;
-      await apiClient.post("/learners/promote", payload);
+      const result = await apiClient.post("/learners/promote", payload);
+      setPromotionResult(result.message);
       await loadLearners(true);
       setOpenForm(null);
     } catch (err) {
@@ -443,166 +434,27 @@ function SchoolAdminLearners() {
               </DialogActions>
             </Dialog>
 
-            <Dialog
-              open={openForm === "graduate"}
-              onClose={() => setOpenForm(null)}
-              fullWidth
-              maxWidth="sm"
-            >
-              <DialogTitle>Bulk Graduate</DialogTitle>
-              <DialogContent dividers>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <MDInput
-                      select
-                      label="Specific Learner (optional)"
-                      fullWidth
-                      value={promotion.learner_id}
-                      onChange={(event) =>
-                        setPromotion((current) => ({ ...current, learner_id: event.target.value }))
-                      }
-                      InputLabelProps={{ shrink: true }}
-                      SelectProps={{ native: true }}
-                      helperText="Leave empty to match learners by grade and stream."
-                    >
-                      <option value="">All learners matching grade / stream</option>
-                      {learners.map((learner) => (
-                        <option key={learner.id} value={learner.id}>
-                          {learner.full_name} - {learner.grade || "No grade"}{" "}
-                          {learner.stream ? `(${learner.stream})` : ""}
-                        </option>
-                      ))}
-                    </MDInput>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <MDInput
-                      select
-                      label="Current Grade"
-                      fullWidth
-                      value={promotion.grade}
-                      onChange={(event) =>
-                        setPromotion((current) => ({ ...current, grade: event.target.value }))
-                      }
-                      InputLabelProps={{ shrink: true }}
-                      SelectProps={{ native: true }}
-                      disabled={Boolean(promotion.learner_id)}
-                      helperText="Used only when no specific learner is selected."
-                    >
-                      <option value="">Any grade</option>
-                      {grades.map((grade) => (
-                        <option key={grade} value={grade}>
-                          {grade}
-                        </option>
-                      ))}
-                    </MDInput>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <MDInput
-                      select
-                      label="Class / Stream"
-                      fullWidth
-                      value={promotion.stream}
-                      onChange={(event) =>
-                        setPromotion((current) => ({ ...current, stream: event.target.value }))
-                      }
-                      InputLabelProps={{ shrink: true }}
-                      SelectProps={{ native: true }}
-                      disabled={Boolean(promotion.learner_id)}
-                      helperText="Optional class filter."
-                    >
-                      <option value="">Any stream</option>
-                      {streams.map((stream) => (
-                        <option key={stream} value={stream}>
-                          {stream}
-                        </option>
-                      ))}
-                    </MDInput>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <MDInput
-                      select
-                      label="Next Grade"
-                      fullWidth
-                      value={promotion.next_grade}
-                      onChange={(event) =>
-                        setPromotion((current) => ({
-                          ...current,
-                          next_grade: event.target.value,
-                        }))
-                      }
-                      InputLabelProps={{ shrink: true }}
-                      SelectProps={{ native: true }}
-                      helperText="Leave empty if only changing term."
-                    >
-                      <option value="">Keep current grade</option>
-                      {grades.map((grade) => (
-                        <option key={grade} value={grade}>
-                          {grade}
-                        </option>
-                      ))}
-                    </MDInput>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <MDInput
-                      select
-                      label="Next Term"
-                      fullWidth
-                      value={promotion.next_term}
-                      onChange={(event) =>
-                        setPromotion((current) => ({ ...current, next_term: event.target.value }))
-                      }
-                      InputLabelProps={{ shrink: true }}
-                      SelectProps={{ native: true }}
-                      helperText="Leave empty if only changing grade."
-                    >
-                      <option value="">Keep current term</option>
-                      {terms.map((term) => (
-                        <option key={term} value={term}>
-                          {term}
-                        </option>
-                      ))}
-                    </MDInput>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <MDInput
-                      select
-                      label="Academic Year"
-                      fullWidth
-                      value={promotion.academic_year}
-                      onChange={(event) =>
-                        setPromotion((current) => ({
-                          ...current,
-                          academic_year: event.target.value,
-                        }))
-                      }
-                      InputLabelProps={{ shrink: true }}
-                      SelectProps={{ native: true }}
-                      helperText="Target academic year."
-                    >
-                      {academicYears.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                    </MDInput>
-                  </Grid>
-                </Grid>
-              </DialogContent>
-              <DialogActions>
-                <MDButton variant="text" color="secondary" onClick={() => setOpenForm(null)}>
-                  Cancel
-                </MDButton>
-                <MDButton
-                  variant="gradient"
-                  color="success"
-                  onClick={handlePromote}
-                  disabled={saving || (!promotion.next_grade && !promotion.next_term)}
-                >
-                  Graduate Learners
-                </MDButton>
-              </DialogActions>
-            </Dialog>
+            {openForm === "graduate" && (
+              <PromoteLearnersDialog
+                learners={learners}
+                grades={grades}
+                streams={streams}
+                academicTerms={academicTerms}
+                saving={saving}
+                error={error}
+                onConfirm={handlePromote}
+                onClose={() => setOpenForm(null)}
+              />
+            )}
           </>
+
+          {promotionResult && (
+            <Grid item xs={12}>
+              <Alert severity="success" onClose={() => setPromotionResult("")}>
+                {promotionResult}
+              </Alert>
+            </Grid>
+          )}
 
           <Grid item xs={12}>
             <Card>
@@ -806,6 +658,7 @@ function SchoolAdminLearners() {
           </MDButton>
         </DialogActions>
       </Dialog>
+      <LearnerCredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />
       <Footer />
     </DashboardLayout>
   );

@@ -149,11 +149,16 @@ async function createLearner(learnerData) {
     ]
   );
 
+  const account = userResult.rows[0];
   return {
     learner: learnerResult.rows[0],
-    user: userResult.rows[0],
-    username: username,
-    plainPassword: plainPassword, // Return this to send to the user via email
+    // Not the whole row: it carries the password hash, which nobody who is handed
+    // this result - the admin's browser, an import report - has any use for.
+    user: { id: account.id, email: account.email, username: account.username, role: account.role },
+    username,
+    // The default password, for the admin to give to the learner (on a printed
+    // card); the learner is made to change it at first sign-in.
+    plainPassword,
   };
 }
 

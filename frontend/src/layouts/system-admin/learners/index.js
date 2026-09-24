@@ -19,6 +19,9 @@ import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import LearnerDetailModal from "components/LearnerDetailModal";
+import LearnerCredentialsDialog, {
+  credentialsFromCreatedLearner,
+} from "components/LearnerCredentialsDialog";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 const emptyForm = {
@@ -39,6 +42,8 @@ function SystemAdminLearners() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!cachedData);
   const [message, setMessage] = useState("");
+  // What to hand over after a learner is created: the username and default password.
+  const [credentials, setCredentials] = useState(null);
   const [error, setError] = useState("");
   const [selectedLearnerId, setSelectedLearnerId] = useState(null);
   const [search, setSearch] = useState("");
@@ -88,7 +93,7 @@ function SystemAdminLearners() {
         second_name: form.second_name,
         third_name: form.third_name,
       });
-      setMessage(`Learner created. Username: ${result.username}`);
+      setCredentials(credentialsFromCreatedLearner(result, form.school?.name));
       setForm(emptyForm);
       await loadData(true);
     } catch (err) {
@@ -507,6 +512,7 @@ function SystemAdminLearners() {
         onClose={() => setSelectedLearnerId(null)}
         onResetPassword={resetLearnerPassword}
       />
+      <LearnerCredentialsDialog credentials={credentials} onClose={() => setCredentials(null)} />
       <Footer />
     </DashboardLayout>
   );
