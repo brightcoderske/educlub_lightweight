@@ -20,7 +20,7 @@ import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
 import MDTypography from "components/MDTypography";
-import PopulationTrend from "components/PopulationTrend";
+import EnrollmentTrend from "components/SchoolCustodyModal/EnrollmentTrend";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
 import { useAppPalette } from "lib/appTheme";
@@ -339,7 +339,7 @@ function SchoolCustodyModal({ open, onClose, school, onSchoolChanged }) {
 
         {tab === 0 && (
           <>
-            <PopulationTrend population={enrollments} loading={loading} />
+            <EnrollmentTrend population={enrollments} loading={loading} />
             <TableContainer sx={{ mt: 1.5, maxHeight: 260, overflowX: "auto" }}>
               <Table size="small" stickyHeader>
                 <TableHead sx={{ display: "table-header-group" }}>
