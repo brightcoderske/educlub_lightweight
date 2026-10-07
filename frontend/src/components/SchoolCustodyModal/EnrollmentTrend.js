@@ -14,11 +14,10 @@ function changeLabel(first, latest) {
 }
 
 /**
- * The school roll, term by term, for the custodian view - a system admin
- * checking a school's enrolment for billing rather than a club's growth.
- * It answers "are they growing?" the same way PopulationTrend used to,
- * kept here as its own component since AllocationTrend (in that spot now)
- * plots a different metric - course allocations, not a learner headcount.
+ * The school's learners, term by term, for the custodian view - a system admin
+ * checking a school's enrolment for billing rather than a club's growth. It
+ * counts the same learners as the invoice and the school's own LearnerTrend,
+ * but shows every term since the school's first rather than the latest six.
  */
 function EnrollmentTrend({ population, loading }) {
   const palette = useAppPalette();

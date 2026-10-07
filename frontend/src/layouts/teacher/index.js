@@ -21,7 +21,7 @@ import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
 import { useAppPalette } from "lib/appTheme";
-import AllocationTrend from "components/PopulationTrend";
+import LearnerTrend from "components/PopulationTrend";
 
 const CACHE_KEY = "teacher-dashboard";
 
@@ -34,7 +34,7 @@ function TeacherDashboard() {
     courses: [],
     recentSubmissions: [],
     currentSchedule: [],
-    allocationTrend: [],
+    learnerTrend: [],
   });
   const [loading, setLoading] = useState(true);
 
@@ -126,7 +126,7 @@ function TeacherDashboard() {
 
         <Grid container spacing={1.5}>
           <Grid item xs={12} md={5} lg={4}>
-            <AllocationTrend terms={data.allocationTrend} loading={loading} />
+            <LearnerTrend terms={data.learnerTrend} loading={loading} />
           </Grid>
 
           <Grid item xs={12} md={7} lg={8}>

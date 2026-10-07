@@ -1,10 +1,12 @@
 const { query } = require("../config");
 const { withTransaction } = require("../database/transaction");
 const { getBillingIdentity } = require("./billingIdentity.service");
+const { countLearnersInTerm } = require("./schoolPopulation.service");
 
 /**
- * Schools are billed per enrolled learner per term, at a rate the custodian
- * sets per school.
+ * Schools are billed per learner per term, at a rate the custodian sets per
+ * school. Who counts in a term is countLearnersInTerm's rule, the same one the
+ * school's own dashboard charts.
  *
  * A school with no rate is not free - it is "not billed through eduClub". Those
  * produce a statement (the counts, no money) rather than a priced invoice, so
@@ -13,17 +15,6 @@ const { getBillingIdentity } = require("./billingIdentity.service");
 function billable(school) {
   const rate = Number(school?.invoice_rate_per_learner);
   return Number.isFinite(rate) && rate > 0 ? rate : null;
-}
-
-/** Learners a school had enrolled in one term. This is the billable quantity. */
-async function countEnrolled(schoolId, term, academicYear) {
-  const result = await query(
-    `SELECT COUNT(*) AS learner_count
-     FROM learners
-     WHERE school_id = $1 AND term = $2 AND academic_year = $3 AND is_active = true`,
-    [schoolId, term, academicYear],
-  );
-  return Number(result.rows[0]?.learner_count) || 0;
 }
 
 async function getSchool(schoolId) {
@@ -43,7 +34,7 @@ async function previewInvoice(schoolId, term, academicYear) {
   }
 
   const rate = billable(school);
-  const learnerCount = await countEnrolled(schoolId, term, academicYear);
+  const learnerCount = await countLearnersInTerm(schoolId, term, academicYear);
   const identity = await getBillingIdentity();
 
   // VAT applies only when eduClub is registered for it. An unregistered
@@ -221,7 +212,6 @@ async function setInvoiceStatus(invoiceId, status, { method, reference } = {}) {
 
 module.exports = {
   billable,
-  countEnrolled,
   previewInvoice,
   issueInvoice,
   listInvoices,

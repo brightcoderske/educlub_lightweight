@@ -22,55 +22,48 @@ function growthLabel(previous, latest) {
   if (previous == null) return { text: "First term on record", color: "text" };
   if (previous === 0) {
     return latest === 0
-      ? { text: "Still no allocations this term", color: "text" }
+      ? { text: "Still no learners this term", color: "text" }
       : { text: "Up from zero last term", color: "success" };
   }
-  const change = Math.round(((latest - previous) / previous) * 100);
-  if (change === 0) return { text: "Same as last term", color: "text" };
+  const difference = latest - previous;
+  if (difference === 0) return { text: "Same as last term", color: "text" };
+  const percent = Math.round((Math.abs(difference) / previous) * 100);
   return {
-    text: `${change > 0 ? "Up" : "Down"} ${Math.abs(change)}% vs last term`,
-    color: change > 0 ? "success" : "error",
+    text: `${difference > 0 ? "Up" : "Down"} ${Math.abs(difference)} (${percent}%) vs last term`,
+    color: difference > 0 ? "success" : "error",
   };
 }
 
+// "T2 '26": six terms span two or three years, so the term alone repeats.
 function termLabel(term) {
-  return String(term.term).replace(/^Term\s*/i, "T");
+  const year = String(term.academic_year).slice(-2);
+  return `${String(term.term).replace(/^Term\s*/i, "T")} '${year}`;
 }
 
 /**
- * Club growth, term by term: how many course allocations were made each
- * term (the current one plus up to 5 before it), as a line so an upward
- * trend reads as a rising line rather than same-height bars.
- *
- * Allocation counts are used rather than a live headcount because a
- * learner's `term` field moves forward the moment they're promoted - a
- * headcount keyed off that field collapses every past term to whoever
- * hasn't been promoted yet, which is not the size that term actually was.
+ * Club growth, term by term: how many learners the school had each term (the
+ * current one plus up to 5 before it), as a line so an upward trend reads as a
+ * rising line rather than same-height bars. The counting rule lives with the
+ * query, in getLearnerTrend.
  */
-function AllocationTrend({ terms, loading }) {
+function LearnerTrend({ terms, loading }) {
   const palette = useAppPalette();
   const [hoverIndex, setHoverIndex] = useState(null);
-  const series = terms || [];
+  const series = useMemo(() => terms || [], [terms]);
   const latest = series[series.length - 1];
   const previous = series.length > 1 ? series[series.length - 2] : null;
 
   const points = useMemo(() => {
     if (series.length < 2) return null;
-    const counts = series.map((term) => term.allocation_count);
-    const min = Math.min(...counts);
-    const max = Math.max(...counts);
-    const span = max - min;
+    const max = Math.max(...series.map((term) => term.learner_count));
     return series.map((term, index) => ({
       // Centered in each term's slot rather than run edge-to-edge, so the
       // points line up with the labels below them.
       x: ((index + 0.5) / series.length) * VIEWBOX_WIDTH,
-      // Padded 10-90% of the viewBox height: the line never touches the card
-      // edges, and a flat series (min === max) draws as a flat line instead
-      // of dividing by zero.
-      y:
-        span === 0
-          ? VIEWBOX_HEIGHT / 2
-          : VIEWBOX_HEIGHT * 0.9 - ((term.allocation_count - min) / span) * VIEWBOX_HEIGHT * 0.8,
+      // Measured from zero, so going from 20 to 25 learners climbs a fifth rather than
+      // the full height of the card. Kept within 10-90% of the viewBox height
+      // so the line never touches the card edges.
+      y: VIEWBOX_HEIGHT * 0.9 - (max === 0 ? 0 : term.learner_count / max) * VIEWBOX_HEIGHT * 0.8,
       term,
     }));
   }, [series]);
@@ -82,7 +75,7 @@ function AllocationTrend({ terms, loading }) {
       },${VIEWBOX_HEIGHT} Z`
     : "";
 
-  const growth = latest ? growthLabel(previous?.allocation_count, latest.allocation_count) : null;
+  const growth = latest ? growthLabel(previous?.learner_count, latest.learner_count) : null;
 
   return (
     <Card sx={{ height: "100%" }}>
@@ -98,21 +91,20 @@ function AllocationTrend({ terms, loading }) {
 
         {loading ? (
           <MDTypography variant="caption" color="text">
-            Loading term allocations…
+            Loading learners per term…
           </MDTypography>
         ) : series.length === 0 ? (
           <MDTypography variant="caption" color="text">
-            No courses have been allocated in a term yet. The trend appears once your
-            first term has an allocation.
+            No learners yet. The trend appears once your first term has a learner.
           </MDTypography>
         ) : (
           <>
             <MDBox display="flex" alignItems="baseline" gap={1}>
               <MDTypography variant="h4" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
-                {latest.allocation_count}
+                {latest.learner_count}
               </MDTypography>
               <MDTypography variant="caption" color="text">
-                allocation{latest.allocation_count === 1 ? "" : "s"} in {latest.term}{" "}
+                learner{latest.learner_count === 1 ? "" : "s"} in {latest.term}{" "}
                 {latest.academic_year}
               </MDTypography>
             </MDBox>
@@ -160,9 +152,9 @@ function AllocationTrend({ terms, loading }) {
                       key={`${p.term.academic_year}-${p.term.term}-hit`}
                       flex={1}
                       tabIndex={0}
-                      title={`${p.term.term} ${p.term.academic_year}: ${p.term.allocation_count} allocation${
-                        p.term.allocation_count === 1 ? "" : "s"
-                      }`}
+                      title={`${p.term.term} ${p.term.academic_year}: ${
+                        p.term.learner_count
+                      } learner${p.term.learner_count === 1 ? "" : "s"}`}
                       onMouseEnter={() => setHoverIndex(index)}
                       onMouseLeave={() => setHoverIndex(null)}
                       onFocus={() => setHoverIndex(index)}
@@ -180,7 +172,7 @@ function AllocationTrend({ terms, loading }) {
                     variant="caption"
                     sx={{ fontSize: ".62rem", fontWeight: 700, display: "block" }}
                   >
-                    {term.allocation_count}
+                    {term.learner_count}
                   </MDTypography>
                   <MDTypography variant="caption" color="text" sx={{ fontSize: ".58rem" }}>
                     {termLabel(term)}
@@ -195,18 +187,18 @@ function AllocationTrend({ terms, loading }) {
   );
 }
 
-AllocationTrend.propTypes = {
+LearnerTrend.propTypes = {
   terms: PropTypes.arrayOf(
     PropTypes.shape({
       academic_year: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
       term: PropTypes.string,
-      allocation_count: PropTypes.number,
+      learner_count: PropTypes.number,
       is_current: PropTypes.bool,
     })
   ),
   loading: PropTypes.bool,
 };
 
-AllocationTrend.defaultProps = { terms: [], loading: false };
+LearnerTrend.defaultProps = { terms: [], loading: false };
 
-export default AllocationTrend;
+export default LearnerTrend;

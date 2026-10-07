@@ -9,7 +9,7 @@ const teacherAssignmentsService = require("../services/teacherAssignments.servic
 const academicService = require("../services/academic.service");
 const { normalizeGrade } = require("../utils/grade");
 const streakService = require("../services/streak.service");
-const { getAllocationTrend } = require("../services/schoolPopulation.service");
+const { getLearnerTrend } = require("../services/schoolPopulation.service");
 const userEmailService = require("../services/userEmail.service");
 const { respondWithError } = require("../utils/httpErrors");
 
@@ -298,10 +298,10 @@ async function getPopulation(req, res) {
       return res.json([]);
     }
 
-    res.json(await getAllocationTrend(schoolId));
+    res.json(await getLearnerTrend(schoolId));
   } catch (error) {
-    console.error("Get school allocation trend error:", error);
-    res.status(500).json({ error: "Failed to load school allocation trend" });
+    console.error("Get school learner trend error:", error);
+    res.status(500).json({ error: "Failed to load school learner trend" });
   }
 }
 

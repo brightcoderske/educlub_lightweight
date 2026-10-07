@@ -16,7 +16,7 @@ import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
 import { useAppPalette } from "lib/appTheme";
-import AllocationTrend from "components/PopulationTrend";
+import LearnerTrend from "components/PopulationTrend";
 
 function SchoolAdminDashboard() {
   const [loadErrors, setLoadErrors] = useState([]);
@@ -33,7 +33,7 @@ function SchoolAdminDashboard() {
   });
   const [recentActivity, setRecentActivity] = useState([]);
   const [currentTerm, setCurrentTerm] = useState(null);
-  const [termAllocations, setTermAllocations] = useState([]);
+  const [termLearners, setTermLearners] = useState([]);
   const [loading, setLoading] = useState(true);
   const palette = useAppPalette();
   const cacheKey = `school-admin:${user?.schoolId}:dashboard`;
@@ -55,7 +55,7 @@ function SchoolAdminDashboard() {
         setStats({ ...(cached.stats || stats), courses: "—" });
         setRecentActivity(cached.recentActivity || []);
         setCurrentTerm(cached.currentTerm || null);
-        setTermAllocations(cached.termAllocations || []);
+        setTermLearners(cached.termLearners || []);
         setLoading(false);
       }
       try {
@@ -67,8 +67,8 @@ function SchoolAdminDashboard() {
             load("/courses/count"),
             load("/academic/terms"),
           ]);
-        const allocationTrendRes = await apiClient.get("/learners/population").catch(() => []);
-        setTermAllocations(Array.isArray(allocationTrendRes) ? allocationTrendRes : []);
+        const learnerTrendRes = await apiClient.get("/learners/population").catch(() => []);
+        setTermLearners(Array.isArray(learnerTrendRes) ? learnerTrendRes : []);
         const todayTerm = await apiClient.get("/academic/terms/current").catch(() => null);
         const completionSummary = await apiClient
           .get(
@@ -112,7 +112,7 @@ function SchoolAdminDashboard() {
           stats: nextStats,
           recentActivity: allocationsRes?.slice(0, 4) || [],
           currentTerm: todayTerm,
-          termAllocations: Array.isArray(allocationTrendRes) ? allocationTrendRes : [],
+          termLearners: Array.isArray(learnerTrendRes) ? learnerTrendRes : [],
         });
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
@@ -238,7 +238,7 @@ function SchoolAdminDashboard() {
 
         <Grid container spacing={1.5}>
           <Grid item xs={12} md={5} lg={4}>
-            <AllocationTrend terms={termAllocations} loading={loading} />
+            <LearnerTrend terms={termLearners} loading={loading} />
           </Grid>
 
           <Grid item xs={12} md={7} lg={4}>
