@@ -16,12 +16,13 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import NotInTermNotice from "components/NotInTermNotice";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
 
 function SchoolAdminAllocations() {
-  const { user, isSchoolAdmin } = useAuth();
+  const { user, isSchoolAdmin, isTeacher } = useAuth();
   const [learners, setLearners] = useState([]);
   const [courses, setCourses] = useState([]);
   const [allocations, setAllocations] = useState([]);
@@ -48,6 +49,7 @@ function SchoolAdminAllocations() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [notInTerm, setNotInTerm] = useState([]);
   const cacheKey = `school-admin:${user?.schoolId}:allocations`;
 
   const activeTermName = currentTerm?.name || "Term 1";
@@ -151,6 +153,7 @@ function SchoolAdminAllocations() {
         academic_year: activeAcademicYear,
       });
       setMessage(result.message);
+      setNotInTerm(result.notInTerm || []);
       await loadData(true);
     } catch (err) {
       setError(err.message);
@@ -292,7 +295,7 @@ function SchoolAdminAllocations() {
                       onChange={(event) => setForm({ ...form, learner_id: event.target.value })}
                       SelectProps={{ native: true }}
                     >
-                      <option value="" />
+                      <option value="">Choose a learner</option>
                       {learnerOptions.map((learner) => (
                         <option value={learner.id} key={learner.id}>
                           {learner.full_name} - {learner.grade || "No grade"}{" "}
@@ -310,7 +313,7 @@ function SchoolAdminAllocations() {
                       onChange={(event) => setForm({ ...form, course_id: event.target.value })}
                       SelectProps={{ native: true }}
                     >
-                      <option value="" />
+                      <option value="">Choose a course</option>
                       {courses.map((course) => (
                         <option value={course.id} key={course.id}>
                           {course.name}
@@ -374,7 +377,7 @@ function SchoolAdminAllocations() {
                       onChange={(event) => setBulkForm({ ...bulkForm, grade: event.target.value })}
                       SelectProps={{ native: true }}
                     >
-                      <option value="" />
+                      <option value="">Choose a grade</option>
                       {grades.map((grade) => (
                         <option key={grade} value={grade}>
                           {grade}
@@ -410,7 +413,7 @@ function SchoolAdminAllocations() {
                       }
                       SelectProps={{ native: true }}
                     >
-                      <option value="" />
+                      <option value="">Choose a course</option>
                       {courses.map((course) => (
                         <option value={course.id} key={course.id}>
                           {course.name}
@@ -454,6 +457,13 @@ function SchoolAdminAllocations() {
                     Allocate Grade / Class
                   </MDButton>
                 </MDBox>
+                <NotInTermNotice
+                  learners={notInTerm}
+                  term={activeTermName}
+                  academicYear={activeAcademicYear}
+                  canPromote={!isTeacher()}
+                  onPromoted={bulkAllocate}
+                />
               </MDBox>
             </Card>
           </Grid>

@@ -5,6 +5,7 @@ import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
 import MDTypography from "components/MDTypography";
+import NotInTermNotice from "components/NotInTermNotice";
 
 export default function AssessmentTermTools({
   grades,
@@ -17,6 +18,8 @@ export default function AssessmentTermTools({
   syncForm,
   setSyncForm,
   bulkAllocate,
+  notInTerm,
+  canPromote,
   syncResults,
 }) {
   return (
@@ -46,7 +49,7 @@ export default function AssessmentTermTools({
             onChange={(event) => setBulkForm({ ...bulkForm, grade: event.target.value })}
             SelectProps={{ native: true }}
           >
-            <option value="" />
+            <option value="">Choose a grade</option>
             {grades.map((grade) => (
               <option key={grade} value={grade}>
                 {grade}
@@ -80,7 +83,7 @@ export default function AssessmentTermTools({
             onChange={(event) => setBulkForm({ ...bulkForm, course_id: event.target.value })}
             SelectProps={{ native: true }}
           >
-            <option value="" />
+            <option value="">Choose an activity</option>
             {courses.map((course) => (
               <option key={course.id} value={course.id}>
                 {course.name}
@@ -110,9 +113,7 @@ export default function AssessmentTermTools({
             label="Academic Year"
             fullWidth
             value={bulkForm.academic_year}
-            onChange={(event) =>
-              setBulkForm({ ...bulkForm, academic_year: event.target.value })
-            }
+            onChange={(event) => setBulkForm({ ...bulkForm, academic_year: event.target.value })}
             SelectProps={{ native: true }}
           >
             {academicYears.map((year) => (
@@ -155,9 +156,7 @@ export default function AssessmentTermTools({
             label="Sync Year"
             fullWidth
             value={syncForm.academic_year}
-            onChange={(event) =>
-              setSyncForm({ ...syncForm, academic_year: event.target.value })
-            }
+            onChange={(event) => setSyncForm({ ...syncForm, academic_year: event.target.value })}
             SelectProps={{ native: true }}
           >
             {academicYears.map((year) => (
@@ -182,6 +181,13 @@ export default function AssessmentTermTools({
           </MDButton>
         </Grid>
       </Grid>
+      <NotInTermNotice
+        learners={notInTerm}
+        term={bulkForm.term}
+        academicYear={bulkForm.academic_year}
+        canPromote={canPromote}
+        onPromoted={bulkAllocate}
+      />
     </MDBox>
   );
 }

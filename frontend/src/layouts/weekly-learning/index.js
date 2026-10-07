@@ -45,7 +45,7 @@ const WeeklyMatrix = lazy(() => import("components/WeeklyMatrix"));
 const MyWeeklyProgress = lazy(() => import("components/MyWeeklyProgress"));
 
 function WeeklyLearning() {
-  const { user, isSystemAdmin, isSchoolAdmin, isLearner } = useAuth();
+  const { user, isSystemAdmin, isSchoolAdmin, isLearner, isTeacher } = useAuth();
   const palette = useAppPalette();
   // Weekly typing and quizzes belong to the school that runs them: its own
   // staff author, publish, review and delete them for their own learners. The
@@ -89,6 +89,7 @@ function WeeklyLearning() {
     return () => cancelAnimationFrame(frame);
   }, [authoringScrollRequest, authoringPanel]);
   const [message, setMessage] = useState("");
+  const [notInTerm, setNotInTerm] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [autoOpenedTestId, setAutoOpenedTestId] = useState("");
@@ -1187,6 +1188,7 @@ function WeeklyLearning() {
     try {
       const response = await apiClient.post("/allocations/bulk", bulkForm);
       setMessage(response.message);
+      setNotInTerm(response.notInTerm || []);
       await loadData();
     } catch (err) {
       setError(err.message || "Could not allocate typing/quizzes.");
@@ -1379,6 +1381,8 @@ function WeeklyLearning() {
                         syncForm={syncForm}
                         setSyncForm={setSyncForm}
                         bulkAllocate={bulkAllocate}
+                        notInTerm={notInTerm}
+                        canPromote={!isTeacher()}
                         syncResults={syncResults}
                       />
                     ) : null

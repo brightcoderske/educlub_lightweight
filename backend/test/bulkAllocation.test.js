@@ -27,13 +27,14 @@ async function answer(text, params = []) {
   }
   // The school's roster, narrowed to a stream when one was asked for. Which of them
   // are in the chosen grade is the controller's decision, so it is not made here.
-  if (/^SELECT id, grade FROM learners WHERE school_id = \$1 AND graduation_status <> 'graduated'/.test(sql)) {
+  // Which of them are in the chosen term is decided there too.
+  if (/^SELECT id, full_name, grade, stream, term, academic_year FROM learners WHERE school_id = \$1 AND graduation_status <> 'graduated'/.test(sql)) {
     const [schoolId, stream] = params;
-    assert.equal(/AND stream = \$2$/.test(sql), stream !== undefined, "a stream is filtered on exactly when one was given");
+    assert.equal(/AND stream = \$2 ORDER BY full_name$/.test(sql), stream !== undefined, "a stream is filtered on exactly when one was given");
     return rows(
       state.learners
         .filter((l) => l.school_id === Number(schoolId) && l.graduation_status !== "graduated" && (!stream || l.stream === stream))
-        .map((l) => ({ id: l.id, grade: l.grade })),
+        .map(({ id, full_name, grade, stream: s, term, academic_year }) => ({ id, full_name, grade, stream: s, term, academic_year })),
     );
   }
   if (/^SELECT id, learner_id, status FROM course_allocations/.test(sql)) {
@@ -102,7 +103,12 @@ function reset() {
     { id: 7, school_id: 2, grade: null, stream: "A" }, // no grade recorded
     { id: 8, school_id: 2, grade: "PP5", stream: "A" }, // ends in a 5, but is not Grade 5
     { id: 9, school_id: 2, grade: "Grade 5", stream: "A", graduation_status: "graduated" },
-  ];
+  ].map((learner) => ({
+    full_name: `Learner ${learner.id}`,
+    term: TERM.name,
+    academic_year: TERM.academic_year,
+    ...learner,
+  }));
   state.allocations = [];
   state.statements = [];
   state.nextId = 1;
@@ -194,9 +200,10 @@ test("only the chosen stream is allocated", async () => {
 
 test("the class is found however its grade was typed, and only that class", async () => {
   reset();
+  const inTerm = { term: TERM.name, academic_year: TERM.academic_year };
   state.learners.push(
-    { id: 10, school_id: 2, grade: " grade 5 ", stream: "A" },
-    { id: 11, school_id: 2, grade: "GRADE5", stream: "A" },
+    { id: 10, school_id: 2, grade: " grade 5 ", stream: "A", ...inTerm },
+    { id: 11, school_id: 2, grade: "GRADE5", stream: "A", ...inTerm },
   );
 
   const res = await bulk({ user: admin, body: body({ grade: "5" }) });
@@ -243,6 +250,50 @@ test("a class with nobody in it says so instead of failing", async () => {
   assert.equal(res.body.message, "No learners matched the selected grade and stream.");
   assert.equal(res.body.matchedLearners, 0);
   assert.equal(state.allocations.length, 0);
+});
+
+test("a learner not yet promoted into the term is left out and named", async () => {
+  reset();
+  Object.assign(state.learners.find((l) => l.id === 2), { term: "Term 2" });
+  Object.assign(state.learners.find((l) => l.id === 3), { term: null, academic_year: null });
+  Object.assign(state.learners.find((l) => l.id === 4), { academic_year: 2025 }); // Term 3, but last year's
+
+  const res = await bulk({ user: admin, body: body() });
+
+  assert.deepEqual(state.allocations.map((a) => a.learner_id), [1], "only the learner placed in Term 3 2026");
+  assert.equal(res.body.allocated, 1);
+  assert.deepEqual(
+    res.body.notInTerm.map((l) => [l.id, l.full_name, l.term, l.academic_year]),
+    [
+      [2, "Learner 2", "Term 2", 2026],
+      [3, "Learner 3", null, null],
+      [4, "Learner 4", "Term 3", 2025],
+    ],
+  );
+  assert.equal(
+    res.body.message,
+    "Allocated 1 learner to Robotics 1. 3 learners are not in Term 3 2026 yet and were left out.",
+  );
+});
+
+test("a class nobody in which has been promoted allocates nobody, and says why", async () => {
+  reset();
+  for (const learner of state.learners) learner.term = "Term 2";
+
+  const res = await bulk({ user: admin, body: body() });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(state.allocations.length, 0);
+  assert.equal(res.body.notInTerm.length, 4);
+  assert.equal(res.body.message, "Nobody was allocated. 4 learners are not in Term 3 2026 yet and were left out.");
+});
+
+test("a class all in the term reports nobody left out", async () => {
+  reset();
+
+  const res = await bulk({ user: admin, body: body() });
+
+  assert.deepEqual(res.body.notInTerm, []);
 });
 
 test("the grade and the course have to be chosen", async () => {

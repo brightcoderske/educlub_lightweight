@@ -399,6 +399,12 @@ const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
  * normalizeGrade, so a grade that is not one matches nobody rather than everybody
  * who has no grade.
  *
+ * Only learners placed in the active term are allocated. One still on an earlier
+ * term has not been promoted, and allocating them anyway would have them learn
+ * this term while the roll says they are in the last one. They are left out and
+ * named in `notInTerm`, so whoever is allocating can promote them and run it
+ * again.
+ *
  * Nobody is allocated twice. A learner who already has the course for the term is
  * left exactly as they are, so a completed course is never reset, and only one
  * whose allocation was switched off is switched back on. The answer the person
@@ -446,20 +452,32 @@ async function bulkAllocate(req, res) {
     }
 
     const roster = await query(
-      `SELECT id, grade FROM learners
-       WHERE school_id = $1 AND graduation_status <> 'graduated'${stream ? " AND stream = $2" : ""}`,
+      `SELECT id, full_name, grade, stream, term, academic_year FROM learners
+       WHERE school_id = $1 AND graduation_status <> 'graduated'${stream ? " AND stream = $2" : ""}
+       ORDER BY full_name`,
       stream ? [schoolId, stream] : [schoolId]
     );
-    const learnerIds = roster.rows
-      .filter((row) => normalizeGrade(row.grade) === chosenGrade)
-      .map((row) => row.id);
+    const inGrade = roster.rows.filter((row) => normalizeGrade(row.grade) === chosenGrade);
+    const inTerm = (row) =>
+      String(row.term || "") === String(term) &&
+      String(row.academic_year || "") === String(academic_year);
+    const learnerIds = inGrade.filter(inTerm).map((row) => row.id);
+    const notInTerm = inGrade.filter((row) => !inTerm(row));
+    const leftOut =
+      notInTerm.length > 0
+        ? ` ${plural(notInTerm.length, "learner")} ${notInTerm.length === 1 ? "is" : "are"} not in ${term} ${academic_year} yet and ${notInTerm.length === 1 ? "was" : "were"} left out.`
+        : "";
     if (learnerIds.length === 0) {
       return res.json({
-        message: "No learners matched the selected grade and stream.",
+        message:
+          notInTerm.length > 0
+            ? `Nobody was allocated.${leftOut}`
+            : "No learners matched the selected grade and stream.",
         allocations: [],
         matchedLearners: 0,
         allocated: 0,
         alreadyAllocated: 0,
+        notInTerm,
       });
     }
 
@@ -525,8 +543,8 @@ async function bulkAllocate(req, res) {
         : "";
     const message =
       allocations.length === 0
-        ? `All ${plural(learnerIds.length, "matching learner")} already had ${course.name} for ${term} ${academic_year}.`
-        : `Allocated ${plural(allocations.length, "learner")} to ${course.name}.${already}`;
+        ? `All ${plural(learnerIds.length, "matching learner")} already had ${course.name} for ${term} ${academic_year}.${leftOut}`
+        : `Allocated ${plural(allocations.length, "learner")} to ${course.name}.${already}${leftOut}`;
 
     res.status(allocations.length > 0 ? 201 : 200).json({
       message,
@@ -534,6 +552,7 @@ async function bulkAllocate(req, res) {
       matchedLearners: learnerIds.length,
       allocated: allocations.length,
       alreadyAllocated,
+      notInTerm,
     });
   } catch (error) {
     console.error("Bulk allocate error:", error);
