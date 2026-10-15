@@ -19,6 +19,7 @@ const {
 } = require("./codingChallenges.service");
 const moduleFeedbackService = require("./moduleFeedback.service");
 const teacherAssignmentsService = require("./teacherAssignments.service");
+const academicService = require("./academic.service");
 const certificatesService = require("./certificates.service");
 const { normalizeActivityGrade } = require("./gradingPolicy");
 const { answersMatch } = require("./quizAnswerPolicy");
@@ -1628,19 +1629,107 @@ async function assertActivityReviewAccess(activityId, user = {}) {
   return activity;
 }
 
+const REVIEWABLE_ALLOCATION = "ca.status IN ('active', 'in_progress', 'completed')";
+
+/**
+ * The terms a teacher can review a course by: every term the course was
+ * allocated in, plus the current one so a new term is choosable before anyone
+ * is allocated. The current term is the one the same date-based rule picks
+ * everywhere else (the regular term whose dates include today).
+ */
+async function getReviewTerms(courseId) {
+  const [result, active] = await Promise.all([
+    query(
+      `SELECT t.id, t.name, t.start_date, t.end_date, ay.year AS academic_year
+       FROM terms t
+       JOIN academic_years ay ON ay.id = t.academic_year_id
+       WHERE EXISTS (
+         SELECT 1 FROM course_allocations ca
+         WHERE ca.course_id = $1::integer
+           AND ca.term = t.name
+           AND ca.academic_year = ay.year
+       )
+       ORDER BY t.start_date DESC`,
+      [courseId]
+    ),
+    academicService.getActiveTerm("regular"),
+  ]);
+  const terms = result.rows;
+  if (active && !terms.some((term) => term.id === active.id)) {
+    terms.unshift(active);
+  }
+  return { terms, current: active ? terms.find((term) => term.id === active.id) : null };
+}
+
+/**
+ * Review shows one term's learners at a time. A learner is in a term if the
+ * course was allocated to them in it, or if they did this activity's work in
+ * its dates: course access does not end with the term, so a class left on last
+ * term's allocation still hands in work that needs marking now.
+ */
 async function getActivityReview(activityId, user = {}, filters = {}) {
   const activity = await assertActivityReviewAccess(activityId, user);
   const limit = toPositiveInteger(filters.limit, 50, 100);
   const offset = toPositiveInteger(filters.offset, 0);
+  const search = String(filters.search || "").trim().slice(0, 100);
+  const learnerId = Number.parseInt(filters.learner_id, 10);
+
+  const { terms, current } = await getReviewTerms(activity.course_id);
+  // `all` reaches every term; otherwise a named term, defaulting to the current.
+  const allTerms = filters.term_id === "all" || (!filters.term_id && !current);
+  const selected = allTerms
+    ? null
+    : terms.find((term) => String(term.id) === String(filters.term_id)) || current;
+
+  const params = [activityId, activity.course_id];
+  const bind = (value) => `$${params.push(value)}`;
+
+  let inTerm = "";
+  if (selected) {
+    const name = bind(selected.name);
+    const year = bind(selected.academic_year);
+    const start = bind(selected.start_date);
+    const end = bind(selected.end_date);
+    inTerm = `AND (
+      EXISTS (
+        SELECT 1 FROM course_allocations ca
+        WHERE ca.learner_id = l.id AND ca.course_id = $2::integer
+          AND ${REVIEWABLE_ALLOCATION}
+          AND ca.term = ${name} AND ca.academic_year = ${year}
+      )
+      OR EXISTS (
+        SELECT 1 FROM activity_submissions w
+        WHERE w.learner_id = l.id AND w.activity_id = $1::integer
+          AND DATE(w.submitted_at) BETWEEN ${start} AND ${end}
+      )
+      OR EXISTS (
+        SELECT 1 FROM quiz_attempts w
+        WHERE w.learner_id = l.id AND w.activity_id = $1::integer
+          AND DATE(w.submitted_at) BETWEEN ${start} AND ${end}
+      )
+    )`;
+  }
+  // A typed % or _ is a letter to find, not a wildcard.
+  const searchPattern = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
+  const matching = [
+    search && `AND l.full_name ILIKE ${bind(searchPattern)}`,
+    Number.isFinite(learnerId) && `AND l.id = ${bind(learnerId)}::integer`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  // One row per learner however many terms they were allocated in.
+  const learnersWhere = `l.is_active = true
+       AND EXISTS (
+         SELECT 1 FROM course_allocations ca
+         WHERE ca.learner_id = l.id AND ca.course_id = $2::integer
+           AND ${REVIEWABLE_ALLOCATION}
+       )
+       ${inTerm} ${matching}`;
 
   const totalResult = await query(
-    `SELECT COUNT(*)::integer AS total
-     FROM course_allocations ca
-     JOIN learners l ON l.id = ca.learner_id
-     WHERE ca.course_id = $1::integer
-       AND ca.status IN ('active', 'in_progress', 'completed')
-       AND l.is_active = true`,
-    [activity.course_id]
+    `SELECT COUNT(*)::integer AS total FROM learners l WHERE ${learnersWhere}`,
+    params
   );
 
   const learnersResult = await query(
@@ -1673,8 +1762,7 @@ async function getActivityReview(activityId, user = {}, filters = {}) {
             qa.score AS quiz_score,
             qa.feedback AS quiz_feedback,
             qa.submitted_at AS quiz_submitted_at
-     FROM course_allocations ca
-     JOIN learners l ON l.id = ca.learner_id
+     FROM learners l
      LEFT JOIN activity_progress ap
        ON ap.learner_id = l.id
       AND ap.activity_id = $1::integer
@@ -1692,13 +1780,11 @@ async function getActivityReview(activityId, user = {}, filters = {}) {
        ORDER BY latest.attempt_number DESC, latest.id DESC
        LIMIT 1
      )
-     WHERE ca.course_id = $2::integer
-       AND ca.status IN ('active', 'in_progress', 'completed')
-       AND l.is_active = true
+     WHERE ${learnersWhere}
      ORDER BY COALESCE(s.submitted_at, qa.submitted_at, ap.updated_at) DESC NULLS LAST,
-              l.full_name
-     LIMIT $3::integer OFFSET $4::integer`,
-    [activityId, activity.course_id, limit, offset]
+              l.full_name, l.id
+     LIMIT ${bind(limit)}::integer OFFSET ${bind(offset)}::integer`,
+    params
   );
 
   return {
@@ -1715,6 +1801,13 @@ async function getActivityReview(activityId, user = {}, filters = {}) {
       pass_score: activity.pass_score,
     },
     learners: learnersResult.rows,
+    terms: terms.map((term) => ({
+      id: term.id,
+      name: term.name,
+      academic_year: term.academic_year,
+      is_current: term.id === current?.id,
+    })),
+    term_id: selected ? selected.id : "all",
     paging: {
       total: totalResult.rows[0]?.total || 0,
       limit,

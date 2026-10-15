@@ -2157,18 +2157,72 @@ function renderSubmissionContent(row) {
   );
 }
 
+// The marking form for each learner row, filled from what is already graded
+// or auto-marked.
+function gradeFormsFor(learners, questions) {
+  const forms = {};
+  learners.forEach((learner) => {
+    const earnedPoints = earnedPointsFromFeedback(learner.quiz_feedback);
+    const questionMarks =
+      learner.question_marks && Object.keys(learner.question_marks).length
+        ? learner.question_marks
+        : questionMarksFromFeedback(learner.quiz_feedback, questions);
+    forms[learner.learner_id] = {
+      score:
+        learner.grade_score !== null && learner.grade_score !== undefined
+          ? learner.grade_score
+          : earnedPoints,
+      question_marks: questionMarks,
+      performance_level: learner.performance_level || "",
+      teacher_remarks: learner.teacher_remarks || "",
+    };
+  });
+  return forms;
+}
+
+function reviewUrl(activityId, { termId, search, offset, learnerId } = {}) {
+  const params = new URLSearchParams();
+  if (termId) params.set("term_id", termId);
+  if (search) params.set("search", search);
+  if (offset) params.set("offset", offset);
+  if (learnerId) params.set("learner_id", learnerId);
+  const queryString = params.toString();
+  return `/courses/activities/${activityId}/review${queryString ? `?${queryString}` : ""}`;
+}
+
 function ActivityReviewDialog({
   gradeForms,
   loading,
+  loadingMore,
   onChangeGrade,
+  onChangeSearch,
+  onChangeTerm,
   onClose,
+  onLoadMore,
   onSaveGrade,
   open,
   review,
   saving,
+  search,
 }) {
   const activity = review?.activity;
   const learners = review?.learners || [];
+  const terms = review?.terms || [];
+  const total = review?.paging?.total || 0;
+  const [searchText, setSearchText] = useState("");
+
+  useEffect(() => {
+    if (open) setSearchText("");
+  }, [open]);
+
+  // Typing waits for a pause before asking the server, so a class of thousands
+  // is searched once per word rather than once per key.
+  useEffect(() => {
+    if (searchText.trim() === search) return undefined;
+    const timer = setTimeout(() => onChangeSearch(searchText.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [searchText, search, onChangeSearch]);
+
   const questions = Array.isArray(activity?.content?.questions) ? activity.content.questions : [];
 
   return (
@@ -2185,13 +2239,45 @@ function ActivityReviewDialog({
         </MDBox>
       </DialogTitle>
       <DialogContent dividers sx={{ bgcolor: "#f8fafc" }}>
+        {review && (
+          <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
+            <Grid item xs={12} sm={5}>
+              <MDInput
+                select
+                label="Term"
+                fullWidth
+                value={review.term_id}
+                onChange={(event) => onChangeTerm(event.target.value)}
+                SelectProps={{ native: true }}
+              >
+                {terms.map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.name} {term.academic_year}
+                    {term.is_current ? " (current)" : ""}
+                  </option>
+                ))}
+                <option value="all">All terms</option>
+              </MDInput>
+            </Grid>
+            <Grid item xs={12} sm={7}>
+              <MDInput
+                label="Search learners by name"
+                fullWidth
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+              />
+            </Grid>
+          </Grid>
+        )}
         {loading ? (
           <MDTypography variant="body2" color="text">
             Loading learner work...
           </MDTypography>
         ) : learners.length === 0 ? (
           <MDTypography variant="body2" color="text">
-            No learners are allocated to this course yet.
+            {search
+              ? "No learners match that name in this term."
+              : "No learners are allocated to this course in this term."}
           </MDTypography>
         ) : (
           <MDBox display="flex" flexDirection="column" gap={1.5}>
@@ -2367,6 +2453,22 @@ function ActivityReviewDialog({
                 </Card>
               );
             })}
+            {learners.length < total && (
+              <MDBox display="flex" alignItems="center" justifyContent="center" gap={1.5}>
+                <MDTypography variant="caption" color="text">
+                  Showing {learners.length} of {total} learners
+                </MDTypography>
+                <MDButton
+                  variant="outlined"
+                  color="info"
+                  size="small"
+                  disabled={loadingMore}
+                  onClick={onLoadMore}
+                >
+                  {loadingMore ? "Loading..." : "Load more"}
+                </MDButton>
+              </MDBox>
+            )}
           </MDBox>
         )}
       </DialogContent>
@@ -2389,8 +2491,12 @@ ActivityReviewDialog.propTypes = {
     })
   ).isRequired,
   loading: PropTypes.bool.isRequired,
+  loadingMore: PropTypes.bool.isRequired,
   onChangeGrade: PropTypes.func.isRequired,
+  onChangeSearch: PropTypes.func.isRequired,
+  onChangeTerm: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
+  onLoadMore: PropTypes.func.isRequired,
   onSaveGrade: PropTypes.func.isRequired,
   open: PropTypes.bool.isRequired,
   review: PropTypes.shape({
@@ -2405,8 +2511,12 @@ ActivityReviewDialog.propTypes = {
       title: PropTypes.string,
     }),
     learners: PropTypes.arrayOf(PropTypes.shape({})),
+    paging: PropTypes.shape({ total: PropTypes.number }),
+    term_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    terms: PropTypes.arrayOf(PropTypes.shape({})),
   }),
   saving: PropTypes.bool.isRequired,
+  search: PropTypes.string.isRequired,
 };
 
 ActivityReviewDialog.defaultProps = {
@@ -2708,6 +2818,11 @@ function CourseBuilder() {
   const [activityReview, setActivityReview] = useState(null);
   const [activityReviewLoading, setActivityReviewLoading] = useState(false);
   const [activityReviewSaving, setActivityReviewSaving] = useState(false);
+  const [reviewLoadingMore, setReviewLoadingMore] = useState(false);
+  const [reviewSearch, setReviewSearch] = useState("");
+  // Counts review requests so a slow answer to an old search cannot overwrite
+  // the answer to the newer one.
+  const reviewRequest = useRef(0);
   const [gradeForms, setGradeForms] = useState({});
   const [courseForm, setCourseForm] = useState({});
   const [moduleEditForm, setModuleEditForm] = useState(emptyModule(1));
@@ -3008,39 +3123,88 @@ function CourseBuilder() {
 
   const openActivityReview = async (courseModule, activity) => {
     if (!activity) return;
+    const requestId = ++reviewRequest.current;
     setSelectedModuleId(courseModule.id);
     setSelectedActivityId(activity.id);
     setActivityReviewOpen(true);
     setActivityReviewLoading(true);
     setActivityReview(null);
+    setReviewSearch("");
     setError("");
     closeMenus();
     try {
-      const response = await apiClient.get(`/courses/activities/${activity.id}/review`);
+      // No term asked for: the server answers with the current term.
+      const response = await apiClient.get(reviewUrl(activity.id));
+      if (requestId !== reviewRequest.current) return;
       setActivityReview(response);
-      const forms = {};
-      const questions = response.activity?.content?.questions || [];
-      (response.learners || []).forEach((learner) => {
-        const earnedPoints = earnedPointsFromFeedback(learner.quiz_feedback);
-        const questionMarks =
-          learner.question_marks && Object.keys(learner.question_marks).length
-            ? learner.question_marks
-            : questionMarksFromFeedback(learner.quiz_feedback, questions);
-        forms[learner.learner_id] = {
-          score:
-            learner.grade_score !== null && learner.grade_score !== undefined
-              ? learner.grade_score
-              : earnedPoints,
-          question_marks: questionMarks,
-          performance_level: learner.performance_level || "",
-          teacher_remarks: learner.teacher_remarks || "",
-        };
-      });
-      setGradeForms(forms);
+      setGradeForms(
+        gradeFormsFor(response.learners || [], response.activity?.content?.questions || [])
+      );
     } catch (err) {
+      if (requestId !== reviewRequest.current) return;
       setError(err.message || "Failed to load review.");
     } finally {
-      setActivityReviewLoading(false);
+      if (requestId === reviewRequest.current) setActivityReviewLoading(false);
+    }
+  };
+
+  // Picking another term or searching starts the list again from the top. Marks
+  // already typed for learners who were on screen are kept.
+  const refilterReview = async ({ termId = activityReview?.term_id, search = reviewSearch }) => {
+    const activityId = activityReview?.activity?.id;
+    if (!activityId) return;
+    const requestId = ++reviewRequest.current;
+    setActivityReviewLoading(true);
+    setReviewSearch(search);
+    setError("");
+    try {
+      const response = await apiClient.get(reviewUrl(activityId, { termId, search }));
+      if (requestId !== reviewRequest.current) return;
+      setActivityReview(response);
+      setGradeForms((current) => ({
+        ...gradeFormsFor(response.learners || [], response.activity?.content?.questions || []),
+        ...current,
+      }));
+    } catch (err) {
+      if (requestId !== reviewRequest.current) return;
+      setError(err.message || "Failed to load review.");
+    } finally {
+      if (requestId === reviewRequest.current) setActivityReviewLoading(false);
+    }
+  };
+
+  const loadMoreReview = async () => {
+    const activityId = activityReview?.activity?.id;
+    if (!activityId) return;
+    setReviewLoadingMore(true);
+    setError("");
+    try {
+      const response = await apiClient.get(
+        reviewUrl(activityId, {
+          termId: activityReview.term_id,
+          search: reviewSearch,
+          offset: activityReview.learners.length,
+        })
+      );
+      setActivityReview((current) => {
+        const shown = new Set(current.learners.map((row) => row.learner_id));
+        return {
+          ...current,
+          learners: [
+            ...current.learners,
+            ...response.learners.filter((row) => !shown.has(row.learner_id)),
+          ],
+          paging: response.paging,
+        };
+      });
+      setGradeForms((current) => ({
+        ...gradeFormsFor(response.learners, response.activity?.content?.questions || []),
+        ...current,
+      }));
+    } catch (err) {
+      setError(err.message || "Failed to load more learners.");
+    } finally {
+      setReviewLoadingMore(false);
     }
   };
 
@@ -3069,8 +3233,20 @@ function CourseBuilder() {
         performance_level: form.performance_level,
         teacher_remarks: form.teacher_remarks,
       });
-      const refreshed = await apiClient.get(`/courses/activities/${activityId}/review`);
-      setActivityReview(refreshed);
+      // Only the marked learner is fetched again, so every page already loaded
+      // stays on screen.
+      const refreshed = await apiClient.get(
+        reviewUrl(activityId, { termId: activityReview.term_id, learnerId: row.learner_id })
+      );
+      const updated = refreshed.learners?.[0];
+      if (updated) {
+        setActivityReview((current) => ({
+          ...current,
+          learners: current.learners.map((existing) =>
+            existing.learner_id === updated.learner_id ? updated : existing
+          ),
+        }));
+      }
       setMessage("Learner grade saved.");
     } catch (err) {
       setError(err.message || "Failed to save grade.");
@@ -4495,11 +4671,16 @@ function CourseBuilder() {
         <ActivityReviewDialog
           gradeForms={gradeForms}
           loading={activityReviewLoading}
+          loadingMore={reviewLoadingMore}
           open={activityReviewOpen}
           review={activityReview}
           saving={activityReviewSaving}
+          search={reviewSearch}
           onChangeGrade={updateGradeForm}
+          onChangeSearch={(search) => refilterReview({ search })}
+          onChangeTerm={(termId) => refilterReview({ termId })}
           onClose={() => setActivityReviewOpen(false)}
+          onLoadMore={loadMoreReview}
           onSaveGrade={saveLearnerGrade}
         />
       </MDBox>
