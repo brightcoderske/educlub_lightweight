@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
@@ -31,11 +31,16 @@ import {
   PREVIEW_MIN_HEIGHT,
   scriptsAllowed,
   selectActivityContent,
-  starterCode,
-  starterParts,
+  starterWorkspace,
   webPreview,
 } from "./activityContent";
+import { useActivityDraft } from "./activityDraft";
+import DraftStatus from "./DraftStatus";
+import PanelResizer, { useSidebarWidth } from "./PanelResizer";
 import { findActivityNavigation, resolveInitialActivity } from "../learningNavigation";
+
+// The editor is most of this page's weight and only coding activities use it.
+const CodeEditor = lazy(() => import("components/CodeEditor"));
 import { courseOverviewPath, moduleLearningPath } from "../previewNavigation";
 
 function done(status) {
@@ -628,6 +633,7 @@ function ActivityBody({
   onDiscussionReplyChange,
   onSubmitDiscussionReply,
   onSubmitQuiz,
+  draftStatus,
 }) {
   const [previewImage, setPreviewImage] = useState("");
   const previewFrameRef = useRef(null);
@@ -1164,6 +1170,7 @@ function ActivityBody({
           >
             Submit Work
           </MDButton>
+          {draftStatus}
         </MDBox>
       )}
 
@@ -1179,115 +1186,75 @@ function ActivityBody({
           )}
           {pythonWeb && (
             <MDTypography variant="caption" color="text" display="block" mt={0.5} mb={1}>
-              Build the page in HTML and CSS, and write the program in Python. Select Run Python
-              to open your page, then click its buttons: each click runs your Python, and what it
+              Build the page in HTML and CSS, and write the program in Python. Select Run Python to
+              open your page, then click its buttons: each click runs your Python, and what it
               prints appears on the page.
             </MDTypography>
           )}
-          {hasCodeWorkspace(content) || pythonWeb ? (
-            <Grid container spacing={1.5} mt={0.25}>
-              <Grid item xs={12} md={6}>
-                <MDInput
-                  label="HTML"
-                  multiline
-                  rows={12}
-                  fullWidth
-                  value={htmlDraft}
-                  onChange={(event) => onHtmlChange(event.target.value)}
-                  sx={{
-                    "& textarea": {
-                      fontFamily: "monospace",
-                      bgcolor: "#0f172a",
-                      color: "#e2e8f0",
-                      borderRadius: "8px",
-                      p: 1.5,
-                    },
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <MDInput
-                  label="CSS"
-                  multiline
-                  rows={12}
-                  fullWidth
-                  value={cssDraft}
-                  onChange={(event) => onCssChange(event.target.value)}
-                  sx={{
-                    "& textarea": {
-                      fontFamily: "monospace",
-                      bgcolor: "#172554",
-                      color: "#e2e8f0",
-                      borderRadius: "8px",
-                      p: 1.5,
-                    },
-                  }}
-                />
-              </Grid>
-              {scriptsAllowed(content) && (
-                <Grid item xs={12}>
-                  <MDInput
-                    label="JavaScript"
-                    multiline
-                    rows={10}
-                    fullWidth
-                    value={jsDraft}
-                    onChange={(event) => onJsChange(event.target.value)}
-                    sx={{
-                      "& textarea": {
-                        fontFamily: "monospace",
-                        bgcolor: "#111827",
-                        color: "#fde68a",
-                        borderRadius: "8px",
-                        p: 1.5,
-                      },
-                    }}
+          <Suspense
+            fallback={
+              <MDTypography variant="caption" color="text" display="block" my={2}>
+                Loading the code editor…
+              </MDTypography>
+            }
+          >
+            {hasCodeWorkspace(content) || pythonWeb ? (
+              <Grid container spacing={1.5} mt={0.25}>
+                <Grid item xs={12} md={6}>
+                  <CodeEditor
+                    label="HTML"
+                    language="html"
+                    rows={12}
+                    value={htmlDraft}
+                    onChange={onHtmlChange}
                   />
                 </Grid>
-              )}
-            </Grid>
-          ) : (
-            <MDInput
-              label={pythonActivity ? "Python code" : "Code"}
-              placeholder={pythonActivity ? "Write your Python program here…" : undefined}
-              multiline
-              rows={pythonActivity ? 14 : 10}
-              fullWidth
-              value={codeDraft}
-              onChange={(event) => onCodeChange(event.target.value)}
-              sx={{
-                mt: 1,
-                "& textarea": {
-                  fontFamily: "monospace",
-                  bgcolor: "#0f172a",
-                  color: "#e2e8f0",
-                  borderRadius: "8px",
-                  p: 1.5,
-                },
-              }}
-            />
-          )}
-          {pythonWeb && (
-            <MDInput
-              label="Python code"
-              placeholder="Write your Python program here…"
-              multiline
-              rows={14}
-              fullWidth
-              value={codeDraft}
-              onChange={(event) => onCodeChange(event.target.value)}
-              sx={{
-                mt: 1.5,
-                "& textarea": {
-                  fontFamily: "monospace",
-                  bgcolor: "#0f172a",
-                  color: "#e2e8f0",
-                  borderRadius: "8px",
-                  p: 1.5,
-                },
-              }}
-            />
-          )}
+                <Grid item xs={12} md={6}>
+                  <CodeEditor
+                    label="CSS"
+                    language="css"
+                    rows={12}
+                    value={cssDraft}
+                    onChange={onCssChange}
+                  />
+                </Grid>
+                {scriptsAllowed(content) && (
+                  <Grid item xs={12}>
+                    <CodeEditor
+                      label="JavaScript"
+                      language="javascript"
+                      rows={10}
+                      value={jsDraft}
+                      onChange={onJsChange}
+                    />
+                  </Grid>
+                )}
+              </Grid>
+            ) : (
+              <MDBox mt={1}>
+                <CodeEditor
+                  label={pythonActivity ? "Python code" : "Code"}
+                  language={pythonActivity ? "python" : "html"}
+                  placeholder={pythonActivity ? "Write your Python program here…" : ""}
+                  rows={pythonActivity ? 14 : 10}
+                  value={codeDraft}
+                  onChange={onCodeChange}
+                />
+              </MDBox>
+            )}
+            {pythonWeb && (
+              <MDBox mt={1.5}>
+                <CodeEditor
+                  label="Python code"
+                  language="python"
+                  placeholder="Write your Python program here…"
+                  rows={14}
+                  value={codeDraft}
+                  onChange={onCodeChange}
+                />
+              </MDBox>
+            )}
+          </Suspense>
           {pythonActivity && (
             <MDInput
               label="Program input (optional)"
@@ -1317,6 +1284,7 @@ function ActivityBody({
               Submit Code
             </MDButton>
           </MDBox>
+          {draftStatus}
           <MDTypography variant="caption" color="text" display="block" mt={1.5} mb={0.5}>
             {pythonActivity || pythonWeb ? "Program output" : "Output"}
           </MDTypography>
@@ -1444,6 +1412,7 @@ ActivityBody.propTypes = {
   onSubmissionTextChange: PropTypes.func.isRequired,
   onSubmitDiscussionReply: PropTypes.func.isRequired,
   onSubmitQuiz: PropTypes.func.isRequired,
+  draftStatus: PropTypes.node,
   onSubmitWork: PropTypes.func.isRequired,
   quizResult: PropTypes.object,
   replyTarget: PropTypes.object,
@@ -1454,6 +1423,7 @@ ActivityBody.propTypes = {
 
 ActivityBody.defaultProps = {
   storageScope: "",
+  draftStatus: null,
   discussion: null,
   quizResult: null,
   replyTarget: null,
@@ -1955,6 +1925,7 @@ function ModuleLearn() {
   const templatePreviewMode = previewMode && pathname.startsWith("/system-admin");
   const entityId = templatePreviewMode ? templateId : courseId;
   const contentTopRef = useRef(null);
+  const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
   const completionRef = useRef(null);
   const pythonRunSequenceRef = useRef(0);
   const [data, setData] = useState(null);
@@ -2150,17 +2121,15 @@ function ModuleLearn() {
     setReplyTarget(null);
     setSubmissionText("");
     setSubmissionFile(null);
-    setCodeDraft(starterCode(activeActivity?.content || {}));
-    const initialInput =
-      activeActivity?.content?.sample_input || activeActivity?.content?.stdin || "";
-    setCodeInput(Array.isArray(initialInput) ? initialInput.join("\n") : String(initialInput));
+    const starter = starterWorkspace(activeActivity?.content || {});
+    setCodeDraft(starter.code);
+    setCodeInput(starter.input);
     pythonRunSequenceRef.current += 1;
     cancelPythonExecution();
     setCodeRunning(false);
-    const parts = starterParts(activeActivity?.content || {});
-    setHtmlDraft(parts.html);
-    setCssDraft(parts.css);
-    setJsDraft(parts.js || "");
+    setHtmlDraft(starter.html);
+    setCssDraft(starter.css);
+    setJsDraft(starter.js);
     setCodeOutput("");
     setCodePreviewHtml("");
     setLearnerAiOpen(false);
@@ -2187,6 +2156,36 @@ function ModuleLearn() {
       if (interval) clearInterval(interval);
     };
   }, [activeActivity?.id]);
+
+  const codingActivity = activeActivity?.activity_type === "coding";
+  const draftStarter = useMemo(
+    () => (codingActivity ? starterWorkspace(activeActivity?.content || {}) : { text: "" }),
+    [activeActivity?.id]
+  );
+  const applyDraftWork = (work) => {
+    if (work.code !== undefined) setCodeDraft(work.code);
+    if (work.html !== undefined) setHtmlDraft(work.html);
+    if (work.css !== undefined) setCssDraft(work.css);
+    if (work.js !== undefined) setJsDraft(work.js);
+    if (work.input !== undefined) setCodeInput(work.input);
+    if (work.text !== undefined) setSubmissionText(work.text);
+  };
+  const activityDraft = useActivityDraft({
+    activityId: activeActivity?.id,
+    activityType: activeActivity?.activity_type,
+    learnerId: data?.learner?.id,
+    enabled: !previewMode,
+    work: codingActivity
+      ? { code: codeDraft, html: htmlDraft, css: cssDraft, js: jsDraft, input: codeInput }
+      : { text: submissionText },
+    starter: draftStarter,
+    applyWork: applyDraftWork,
+  });
+  const startOver = () => {
+    if (window.confirm("Start over with the starter code? Your current work will be replaced.")) {
+      applyDraftWork(draftStarter);
+    }
+  };
 
   useEffect(() => {
     if (!activeActivityId) return;
@@ -2682,8 +2681,14 @@ function ModuleLearn() {
           ))}
         </MDBox>
 
-        <Grid container spacing={2.5}>
-          <Grid item xs={12} md={3} sx={{ display: { xs: "none", md: "block" } }}>
+        <MDBox display="flex">
+          <MDBox
+            sx={{
+              display: { xs: "none", md: "block" },
+              flex: `0 0 ${sidebarWidth}px`,
+              minWidth: 0,
+            }}
+          >
             <Card
               sx={{
                 bgcolor: "#11162f",
@@ -2693,6 +2698,11 @@ function ModuleLearn() {
                   color: "#dedbf1",
                   borderColor: "#383655",
                   textAlign: "left",
+                  // Long titles wrap onto a second line instead of being
+                  // squeezed onto one.
+                  whiteSpace: "normal",
+                  lineHeight: 1.35,
+                  py: 0.75,
                 },
                 "& .MuiButton-root.Mui-disabled": { color: "#85859f" },
               }}
@@ -2744,9 +2754,11 @@ function ModuleLearn() {
                 </MDBox>
               </MDBox>
             </Card>
-          </Grid>
+          </MDBox>
 
-          <Grid item xs={12} md={9}>
+          <PanelResizer width={sidebarWidth} onResize={setSidebarWidth} />
+
+          <MDBox flex={1} minWidth={0}>
             <Card ref={contentTopRef}>
               <MDBox p={{ xs: 2.5, md: 4 }}>
                 {activeActivity ? (
@@ -2830,6 +2842,14 @@ function ModuleLearn() {
                       onSubmitDiscussionReply={submitDiscussionReply}
                       onSubmitQuiz={submitQuiz}
                       onSubmitWork={submitWork}
+                      draftStatus={
+                        <DraftStatus
+                          status={activityDraft.status}
+                          onLoadNewest={activityDraft.loadNewest}
+                          onKeepMine={activityDraft.keepMine}
+                          onStartOver={codingActivity ? startOver : undefined}
+                        />
+                      }
                     />
                     <MDBox
                       display="flex"
@@ -2903,8 +2923,8 @@ function ModuleLearn() {
                 />
               </MDBox>
             )}
-          </Grid>
-        </Grid>
+          </MDBox>
+        </MDBox>
       </MDBox>
       {!previewMode && activeActivity?.activity_type !== "quiz" && (
         <LearnerAiPanel

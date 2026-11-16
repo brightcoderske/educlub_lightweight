@@ -11,7 +11,7 @@ test("withTransaction keeps all work on one client and commits", async () => {
     return "done";
   }, { client, isolationLevel: "serializable" });
   assert.equal(result, "done");
-  assert.deepEqual(calls, ["BEGIN", "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE", "INSERT INTO example VALUES (1)", "COMMIT"]);
+  assert.deepEqual(calls, ["SET TRANSACTION ISOLATION LEVEL SERIALIZABLE", "BEGIN", "INSERT INTO example VALUES (1)", "COMMIT"]);
 });
 
 test("withTransaction rolls back and preserves the original failure", async () => {

@@ -1,4 +1,5 @@
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const router = express.Router();
 const coursesController = require("../controllers/courses.controller");
 const {
@@ -8,6 +9,20 @@ const {
 } = require("../middleware");
 
 const canManageCourse = requireRole("system_admin", "school_admin", "teacher");
+
+// Autosave is counted per learner rather than per IP, and server.js keeps it
+// out of the shared /api limit: a whole class sits behind one school IP and
+// would otherwise run that limit dry within minutes of typing. The page saves
+// at most every ten seconds, so this only stops a runaway client.
+const draftSaveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  keyGenerator: (req) => `draft:${req.user.userId}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) =>
+    res.status(429).json({ error: "Saving too often. Your work will save again in a moment." }),
+});
 
 router.get("/", authenticateToken, coursesController.getAllCourses);
 router.get("/count", authenticateToken, coursesController.getCourseCount);
@@ -107,6 +122,19 @@ router.post(
   "/activities/:activityId/submissions",
   authenticateToken,
   coursesController.submitActivityWork,
+);
+router.get(
+  "/activities/:activityId/work",
+  authenticateToken,
+  requireRole("learner"),
+  coursesController.getActivityWork,
+);
+router.put(
+  "/activities/:activityId/draft",
+  authenticateToken,
+  requireRole("learner"),
+  draftSaveLimiter,
+  coursesController.saveActivityDraft,
 );
 router.get(
   "/activities/:activityId/review",

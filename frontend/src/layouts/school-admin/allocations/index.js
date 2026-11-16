@@ -8,6 +8,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Chip from "@mui/material/Chip";
+import Autocomplete from "@mui/material/Autocomplete";
 
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
@@ -21,6 +22,13 @@ import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
 
+const learnerLabel = (learner) =>
+  `${learner.full_name} - ${learner.grade || "No grade"}${
+    learner.stream ? ` (${learner.stream})` : ""
+  }`;
+
+const periodKey = (academicYear, term) => `${academicYear || ""}|${term || ""}`;
+
 function SchoolAdminAllocations() {
   const { user, isSchoolAdmin, isTeacher } = useAuth();
   const [learners, setLearners] = useState([]);
@@ -29,6 +37,9 @@ function SchoolAdminAllocations() {
   const [school, setSchool] = useState(null);
   const [currentTerm, setCurrentTerm] = useState(null);
   const [allocationSearch, setAllocationSearch] = useState("");
+  // "current" follows the active term once it has loaded; earlier terms are
+  // one choice away instead of mixed into the list.
+  const [periodFilter, setPeriodFilter] = useState("current");
   const [expandedGroup, setExpandedGroup] = useState("");
   const [form, setForm] = useState({
     learner_id: "",
@@ -185,29 +196,62 @@ function SchoolAdminAllocations() {
     ? school.grades_config
     : Array.from({ length: 12 }, (_, index) => `Grade ${index + 1}`);
   const streams = school?.streams_config?.length ? school.streams_config : learnerStreams;
+  const periods = useMemo(() => {
+    const seen = new Map();
+    allocations.forEach((allocation) => {
+      const key = periodKey(allocation.academic_year, allocation.term);
+      if (!seen.has(key)) {
+        seen.set(key, {
+          key,
+          label: `${allocation.term || "No term"} ${allocation.academic_year || ""}`.trim(),
+          academic_year: Number(allocation.academic_year) || 0,
+          term: allocation.term || "",
+        });
+      }
+    });
+    return [...seen.values()].sort(
+      (a, b) => b.academic_year - a.academic_year || b.term.localeCompare(a.term)
+    );
+  }, [allocations]);
+  // Between terms there is no active term, so the default falls back to the
+  // latest term that has allocations rather than to every term at once.
+  const latestPeriod = periods.find((period) => period.academic_year) || periods[0];
+  const currentPeriod = currentTerm?.name
+    ? periodKey(activeAcademicYear, activeTermName)
+    : latestPeriod?.key || "";
+  const currentPeriodLabel = currentTerm?.name
+    ? `This term (${activeTermName} ${activeAcademicYear})`
+    : `Latest term (${latestPeriod?.label || ""})`;
+  const selectedPeriod = periodFilter === "current" ? currentPeriod : periodFilter;
+
   const groupedAllocations = useMemo(() => {
     const groups = new Map();
-    allocations.forEach((allocation) => {
-      const key = [
-        allocation.course_id,
-        allocation.academic_year || "",
-        allocation.term || "",
-      ].join("|");
-      const current = groups.get(key) || {
-        key,
-        course_id: allocation.course_id,
-        course_name: allocation.course_name,
-        term: allocation.term,
-        academic_year: allocation.academic_year,
-        learners: [],
-        active: 0,
-        completed: 0,
-      };
-      current.learners.push(allocation);
-      if (allocation.status === "completed") current.completed += 1;
-      if (allocation.status !== "completed") current.active += 1;
-      groups.set(key, current);
-    });
+    allocations
+      .filter(
+        (allocation) =>
+          !selectedPeriod || periodKey(allocation.academic_year, allocation.term) === selectedPeriod
+      )
+      .forEach((allocation) => {
+        const key = [
+          allocation.course_id,
+          allocation.academic_year || "",
+          allocation.term || "",
+        ].join("|");
+        const current = groups.get(key) || {
+          key,
+          course_id: allocation.course_id,
+          course_name: allocation.course_name,
+          term: allocation.term,
+          academic_year: allocation.academic_year,
+          learners: [],
+          active: 0,
+          completed: 0,
+        };
+        current.learners.push(allocation);
+        if (allocation.status === "completed") current.completed += 1;
+        if (allocation.status !== "completed") current.active += 1;
+        groups.set(key, current);
+      });
     const search = allocationSearch.trim().toLowerCase();
     return [...groups.values()]
       .filter((group) => {
@@ -221,7 +265,7 @@ function SchoolAdminAllocations() {
           `${b.course_name} ${b.academic_year} ${b.term}`
         )
       );
-  }, [allocationSearch, allocations]);
+  }, [allocationSearch, allocations, selectedPeriod]);
 
   const learnerOptions = learners.filter((learner) => {
     const gradeMatches = !form.grade || learner.grade === form.grade;
@@ -287,22 +331,28 @@ function SchoolAdminAllocations() {
                     </MDInput>
                   </Grid>
                   <Grid item xs={12}>
-                    <MDInput
-                      select
-                      label="Learner"
-                      fullWidth
-                      value={form.learner_id}
-                      onChange={(event) => setForm({ ...form, learner_id: event.target.value })}
-                      SelectProps={{ native: true }}
-                    >
-                      <option value="">Choose a learner</option>
-                      {learnerOptions.map((learner) => (
-                        <option value={learner.id} key={learner.id}>
-                          {learner.full_name} - {learner.grade || "No grade"}{" "}
-                          {learner.stream ? `(${learner.stream})` : ""}
-                        </option>
-                      ))}
-                    </MDInput>
+                    <Autocomplete
+                      options={learnerOptions}
+                      getOptionLabel={learnerLabel}
+                      isOptionEqualToValue={(option, value) => option.id === value.id}
+                      value={
+                        learnerOptions.find(
+                          (learner) => String(learner.id) === String(form.learner_id)
+                        ) || null
+                      }
+                      onChange={(_, learner) =>
+                        setForm({ ...form, learner_id: learner ? learner.id : "" })
+                      }
+                      noOptionsText="No learner matches that name"
+                      renderInput={(params) => (
+                        <MDInput
+                          {...params}
+                          label="Learner"
+                          placeholder="Type a name to search"
+                          InputLabelProps={{ ...params.InputLabelProps, shrink: true }}
+                        />
+                      )}
+                    />
                   </Grid>
                   <Grid item xs={12}>
                     <MDInput
@@ -475,9 +525,29 @@ function SchoolAdminAllocations() {
                   Current Allocations
                 </MDTypography>
                 <Grid container spacing={2} mb={2}>
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={4}>
                     <MDInput
-                      label="Search course, term, or year"
+                      select
+                      label="Term"
+                      fullWidth
+                      value={periodFilter}
+                      onChange={(event) => setPeriodFilter(event.target.value)}
+                      SelectProps={{ native: true }}
+                    >
+                      {currentPeriod && <option value="current">{currentPeriodLabel}</option>}
+                      <option value="">All terms</option>
+                      {periods
+                        .filter((period) => period.key !== currentPeriod)
+                        .map((period) => (
+                          <option key={period.key} value={period.key}>
+                            {period.label}
+                          </option>
+                        ))}
+                    </MDInput>
+                  </Grid>
+                  <Grid item xs={12} md={8}>
+                    <MDInput
+                      label="Search course"
                       fullWidth
                       value={allocationSearch}
                       onChange={(event) => setAllocationSearch(event.target.value)}
@@ -498,7 +568,9 @@ function SchoolAdminAllocations() {
                   <MDTypography variant="body2">Loading allocations...</MDTypography>
                 ) : groupedAllocations.length === 0 ? (
                   <MDTypography variant="body2" color="text">
-                    No allocations yet.
+                    {selectedPeriod && allocations.length
+                      ? "No allocations for this term. Choose All terms to see earlier ones."
+                      : "No allocations yet."}
                   </MDTypography>
                 ) : (
                   <TableContainer>

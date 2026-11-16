@@ -1,4 +1,6 @@
 const coursesService = require("../services/courses.service");
+const activityDrafts = require("../services/activityDrafts.service");
+const { respondWithError } = require("../utils/httpErrors");
 const { writeModulePdf } = require("../services/modulePdf.service");
 const flutterwave = require("../services/flutterwave.service");
 const fs = require("fs/promises");
@@ -342,6 +344,25 @@ async function submitActivityWork(req, res) {
     res
       .status(400)
       .json({ error: error.message || "Failed to submit activity work" });
+  }
+}
+
+async function getActivityWork(req, res) {
+  try {
+    res.json(await activityDrafts.getActivityWork(req.params.activityId, req.user));
+  } catch (error) {
+    respondWithError(res, error, "Failed to load saved work");
+  }
+}
+
+async function saveActivityDraft(req, res) {
+  try {
+    res.json(await activityDrafts.saveActivityDraft(req.params.activityId, req.user, req.body));
+  } catch (error) {
+    if (error.statusCode === 409) {
+      return res.status(409).json({ error: error.message, draft: error.draft });
+    }
+    respondWithError(res, error, "Failed to save work");
   }
 }
 
@@ -714,6 +735,8 @@ module.exports = {
   addDiscussionReply,
   submitQuiz,
   submitActivityWork,
+  getActivityWork,
+  saveActivityDraft,
   getActivityReview,
   gradeActivityForLearner,
   uploadActivityImage,

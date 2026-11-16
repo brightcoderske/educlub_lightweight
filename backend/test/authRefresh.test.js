@@ -21,6 +21,17 @@ test("refresh uses rotating hashed server-side sessions without requiring an acc
   assert.match(service, /token_reuse/);
 });
 
+test("a refresh moments after its token rotated is a second tab, not theft", () => {
+  const { rotatedMomentsAgo } = require("../src/services/session.service");
+  const now = Date.parse("2026-11-16T09:00:00Z");
+  const at = (secondsAgo) => new Date(now - secondsAgo * 1000).toISOString();
+
+  assert.equal(rotatedMomentsAgo({ revoke_reason: "rotated", revoked_at: at(5) }, now), true);
+  assert.equal(rotatedMomentsAgo({ revoke_reason: "rotated", revoked_at: at(120) }, now), false);
+  assert.equal(rotatedMomentsAgo({ revoke_reason: "logout", revoked_at: at(5) }, now), false);
+  assert.equal(rotatedMomentsAgo({ revoke_reason: "token_reuse", revoked_at: at(5) }, now), false);
+});
+
 // The attempt limit is asserted by behaviour in mfaSignIn.test.js.
 test("MFA codes are hashed and compared in constant time", () => {
   const service = fs.readFileSync(path.join(__dirname, "../src/services/auth.service.js"), "utf8");

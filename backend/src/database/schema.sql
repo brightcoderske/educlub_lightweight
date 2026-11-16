@@ -3708,3 +3708,19 @@ CREATE INDEX IF NOT EXISTS idx_feedback_threads_learner ON feedback_threads(lear
 CREATE INDEX IF NOT EXISTS idx_notifications_school_created ON notifications(school_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_competition_payments_learner_competition ON competition_payments(learner_id, competition_id);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_replacement ON user_sessions(replaced_by_session_id);
+
+-- A learner's work in progress on one activity: what the code editors and
+-- answer boxes held when the page last autosaved. Kept apart from
+-- activity_submissions, which is what the learner chose to hand in and what
+-- teachers grade. revision increases on every save, so a stale tab cannot
+-- overwrite newer work saved from another tab or device.
+CREATE TABLE IF NOT EXISTS activity_drafts (
+  id SERIAL PRIMARY KEY,
+  learner_id INTEGER NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+  activity_id INTEGER NOT NULL REFERENCES learning_activities(id) ON DELETE CASCADE,
+  content JSONB NOT NULL DEFAULT '{}'::jsonb,
+  revision INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(learner_id, activity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_activity_drafts_activity ON activity_drafts(activity_id);

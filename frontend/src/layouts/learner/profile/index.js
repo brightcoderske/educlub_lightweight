@@ -22,11 +22,12 @@ import { getUserDisplayName, getUserPhotoUrl } from "lib/userDisplay";
 import { useAppPalette } from "lib/appTheme";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { fetchOwnLearner } from "lib/ownLearner";
 
 function LearnerProfile() {
   const navigate = useNavigate();
   const palette = useAppPalette();
-  const { user, isLearner, resetPassword, updateProfilePhoto } = useAuth();
+  const { user, isLearner, resetPassword, updateProfilePhoto, rememberEmail } = useAuth();
   const photoInput = useRef(null);
   const [photoPreview, setPhotoPreview] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -113,15 +114,12 @@ function LearnerProfile() {
     if (isLearner()) {
       loadProfile();
     }
-  }, [user?.email]);
+  }, [user?.id]);
 
   const loadProfile = async () => {
     setError("");
     try {
-      const learners = await apiClient.get(
-        `/learners?email=${encodeURIComponent(user?.email || "")}`
-      );
-      const currentLearner = learners[0];
+      const currentLearner = await fetchOwnLearner();
       setLearner(currentLearner || null);
       setGrade(currentLearner?.grade || "");
       setEmail(currentLearner?.email || "");
@@ -159,6 +157,7 @@ function LearnerProfile() {
       const updated = await apiClient.put(`/learners/${learner.id}`, { email });
       setLearner(updated);
       setEmail(updated.email || "");
+      rememberEmail(updated.email);
       setMessage("Your email address is saved. Password reset links will go there.");
     } catch (err) {
       setError(err.message);

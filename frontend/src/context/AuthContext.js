@@ -4,6 +4,7 @@ import PropTypes from "prop-types";
 import API_BASE_URL from "lib/apiBase";
 import { apiClient, parseApiResponse } from "lib/api";
 import { AUTH_EXPIRED_EVENT } from "lib/session";
+import { flushPendingWork } from "lib/pendingWork";
 
 const AuthContext = createContext(null);
 
@@ -59,6 +60,17 @@ export const AuthProvider = ({ children }) => {
       return updated;
     });
     return result;
+  };
+
+  // The session copy of the user is what the navbar, certificates and support
+  // links show, so a saved email change has to reach it as well.
+  const rememberEmail = (email) => {
+    setUser((current) => {
+      if (!current || !email) return current;
+      const updated = { ...current, email };
+      localStorage.setItem("user", JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const getOnboardingPath = (nextUser) => {
@@ -223,6 +235,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    // Unsaved editor work goes to the server while the session is still valid.
+    await flushPendingWork();
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: "POST",
@@ -341,6 +355,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     resetPassword,
     updateProfilePhoto,
+    rememberEmail,
     markConsentAccepted,
     hasPermission,
     isSystemAdmin,

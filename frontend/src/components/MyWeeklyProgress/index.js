@@ -11,6 +11,7 @@ import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { fetchOwnLearner } from "lib/ownLearner";
 
 // Staff read the cohort as learners-by-week. A learner only ever has their own
 // single row there, so their view flips the axes: one row per week, which reads
@@ -48,18 +49,16 @@ function MyWeeklyProgress() {
       setLoading(true);
       setError("");
       try {
-        const [learners, currentTerm] = await Promise.all([
-          apiClient.get(`/learners?email=${encodeURIComponent(user?.email || "")}`),
+        const [learner, currentTerm] = await Promise.all([
+          fetchOwnLearner(),
           apiClient.get("/academic/terms/current").catch(() => null),
         ]);
-        const learner = Array.isArray(learners) ? learners[0] : null;
         if (!learner || !currentTerm?.name) {
           setRows([]);
           return;
         }
 
-        const year =
-          currentTerm.academic_year || new Date(currentTerm.start_date).getFullYear();
+        const year = currentTerm.academic_year || new Date(currentTerm.start_date).getFullYear();
         setPeriod({ term: currentTerm.name, academicYear: year });
 
         const summary = await apiClient
@@ -73,8 +72,8 @@ function MyWeeklyProgress() {
       }
     };
 
-    if (user?.email) load();
-  }, [user?.email]);
+    if (user?.id) load();
+  }, [user?.id]);
 
   const weeks = useMemo(
     () => [...rows].sort((left, right) => left.week_number - right.week_number),

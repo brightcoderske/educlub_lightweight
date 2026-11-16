@@ -8,12 +8,16 @@ import { MaterialUIControllerProvider } from "../context";
 import LearnerProfile from "../layouts/learner/profile";
 import { apiClient } from "../lib/api";
 
+const mockRememberEmail = jest.fn();
 jest.mock("../context/AuthContext", () => ({
   useAuth: () => ({
-    user: { id: 9, role: "learner", email: "annamani@learners.educlub.local", full_name: "Anna Mani" },
+    // The session's email is deliberately not the record's: the page must still
+    // find the learner, which is what broke after an earlier email change.
+    user: { id: 9, role: "learner", email: "old.address@gmail.com", full_name: "Anna Mani" },
     isLearner: () => true,
     resetPassword: jest.fn(),
     updateProfilePhoto: jest.fn(),
+    rememberEmail: mockRememberEmail,
   }),
 }));
 jest.mock("../lib/api", () => ({
@@ -77,8 +81,11 @@ test("a learner can replace the placeholder address their account was created wi
     Simulate.click(saveButton);
   });
 
+  expect(apiClient.get).toHaveBeenCalledWith("/learners");
   expect(apiClient.put).toHaveBeenCalledWith("/learners/4", { email: "anna.mani@gmail.com" });
   expect(container.textContent).toMatch(/Your email address is saved/i);
+  // The session copy follows, so the navbar and certificates show the new address.
+  expect(mockRememberEmail).toHaveBeenCalledWith("anna.mani@gmail.com");
 
   await act(async () => root.unmount());
   container.remove();

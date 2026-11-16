@@ -22,6 +22,12 @@ function translate(sql, params = []) {
   let out = "";
   let index = 0;
   const order = [];
+  // Positions in `order` whose placeholder was written `$n::text` or
+  // `$n::varchar`. The cast itself is dropped below, so a number bound there
+  // has to be sent as a string instead: MariaDB compares the bare number in
+  // NULLIF(2026, '') as DECIMAL, and strict mode turns the resulting
+  // "Truncated incorrect DECIMAL value: ''" warning into a failed write.
+  const asText = new Set();
 
   while (index < sql.length) {
     const char = sql[index];
@@ -95,6 +101,7 @@ function translate(sql, params = []) {
         digits += sql[cursor];
         cursor += 1;
       }
+      if (/^::(text|varchar)\b/i.test(sql.slice(cursor, cursor + 10))) asText.add(order.length);
       order.push(Number(digits) - 1);
       out += "?";
       index = cursor;
@@ -124,7 +131,12 @@ function translate(sql, params = []) {
   // parameters pass through as given. Without this, such a statement would be
   // sent with an empty parameter list and fail as a syntax error.
   const reordered =
-    order.length === 0 && params.length > 0 ? params : order.map((position) => params[position]);
+    order.length === 0 && params.length > 0
+      ? params
+      : order.map((position, slot) => {
+          const value = params[position];
+          return asText.has(slot) && typeof value === "number" ? String(value) : value;
+        });
 
   // An empty array would render as `IN ()`, which is a syntax error. PostgreSQL's
   // `= ANY('{}')` matches no rows, and `IN (NULL)` is the MySQL spelling of that.

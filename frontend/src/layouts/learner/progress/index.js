@@ -21,6 +21,7 @@ import { LearnerHero } from "components/DashboardIdentity";
 import { useAppPalette } from "lib/appTheme";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { fetchOwnLearner } from "lib/ownLearner";
 
 function progressColor(value) {
   if (Number(value) <= 50) return "warning";
@@ -116,8 +117,8 @@ function LearnerProgress() {
       setLoading(true);
       setError("");
       try {
-        const [learners, termsRes, currentTerm] = await Promise.all([
-          apiClient.get(`/learners?email=${encodeURIComponent(user?.email)}`),
+        const [learner, termsRes, currentTerm] = await Promise.all([
+          fetchOwnLearner(),
           apiClient.get("/academic/terms").catch(() => []),
           apiClient.get("/academic/terms/current").catch(() => null),
         ]);
@@ -131,7 +132,6 @@ function LearnerProgress() {
           setTerm(selectedTerm);
           setAcademicYear(selectedAcademicYear);
         }
-        const learner = learners[0];
         if (!learner) {
           setSummary([]);
           setCourseProgress([]);
@@ -156,10 +156,10 @@ function LearnerProgress() {
       }
     };
 
-    if (isLearner() && user?.email) {
+    if (isLearner() && user?.id) {
       loadProgress();
     }
-  }, [user?.email, term, academicYear]);
+  }, [user?.id, term, academicYear]);
 
   if (!isLearner()) {
     return <MDBox p={2}>Access denied. Learner only.</MDBox>;

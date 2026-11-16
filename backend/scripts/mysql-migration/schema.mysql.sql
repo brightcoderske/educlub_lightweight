@@ -1772,4 +1772,18 @@ CREATE INDEX idx_competition_payments_learner_competition ON competition_payment
 
 CREATE INDEX idx_user_sessions_replacement ON user_sessions(replaced_by_session_id);
 
+CREATE TABLE IF NOT EXISTS activity_drafts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  learner_id INT NOT NULL,
+  activity_id INT NOT NULL,
+  content JSON NOT NULL DEFAULT ('{}'),
+  revision INT NOT NULL DEFAULT 1,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(learner_id, activity_id),
+  FOREIGN KEY (learner_id) REFERENCES learners(id) ON DELETE CASCADE,
+  FOREIGN KEY (activity_id) REFERENCES learning_activities(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_activity_drafts_activity ON activity_drafts(activity_id);
+
 SET FOREIGN_KEY_CHECKS = 1;

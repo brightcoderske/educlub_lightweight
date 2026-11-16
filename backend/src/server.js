@@ -96,6 +96,8 @@ const limiter = rateLimit({
   legacyHeaders: false,
   message: "Too many requests from this IP, please try again later.",
   handler: rateLimitJsonHandler,
+  // Autosave has its own per-learner limit in courses.routes.js.
+  skip: (req) => req.method === "PUT" && /^\/courses\/activities\/\d+\/draft$/.test(req.path),
 });
 
 app.use("/api", limiter);

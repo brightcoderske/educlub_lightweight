@@ -30,43 +30,67 @@ async function createSession(userId, context = {}) {
   return insertSession({ query }, userId, context, crypto.randomUUID());
 }
 
+// Two tabs whose access tokens run out together both refresh with the same
+// cookie. The second arrives a moment after the first rotated it, and treating
+// that as theft would sign the learner out of every tab mid-lesson.
+const CONCURRENT_REFRESH_GRACE_MS = 30_000;
+
+function rotatedMomentsAgo(session, now = Date.now()) {
+  return session.revoke_reason === "rotated"
+    && now - new Date(session.revoked_at).getTime() <= CONCURRENT_REFRESH_GRACE_MS;
+}
+
 async function rotateSession(token, context = {}) {
   if (!token) throw new Error("Refresh token required.");
   const outcome = await withTransaction(async (client) => {
+    // Plain FOR UPDATE: MariaDB has no FOR UPDATE OF <table>. It also locks the
+    // users row, which nothing else holds for long.
     const result = await client.query(
-      `SELECT us.id, us.user_id, us.token_family_id, us.expires_at, us.revoked_at,
+      `SELECT us.id, us.user_id, us.token_family_id, us.expires_at, us.revoked_at, us.revoke_reason,
+              successor.revoked_at AS replacement_revoked_at,
               u.role, u.school_id, u.username, u.is_active
        FROM user_sessions us JOIN users u ON u.id = us.user_id
-       WHERE us.refresh_token_hash = $1 FOR UPDATE OF us`,
+       LEFT JOIN user_sessions successor ON successor.id = us.replaced_by_session_id
+       WHERE us.refresh_token_hash = $1 FOR UPDATE`,
       [hashToken(token)],
     );
     const current = result.rows[0];
     if (!current) throw new Error("Invalid refresh token.");
     if (!current.is_active) return { failure: "User account is no longer active." };
+    const issue = async () => ({
+      ...(await insertSession(client, current.user_id, context, current.token_family_id)),
+      userId: current.user_id,
+      authContext: { userId: current.user_id, role: current.role, schoolId: current.school_id, username: current.username },
+    });
+    const expired = new Date(current.expires_at) <= new Date();
+    // The family must still be live: once reuse has revoked it, the grace
+    // window must not hand out a fresh session to whoever holds the old token.
+    if (current.revoked_at && rotatedMomentsAgo(current) && !current.replacement_revoked_at && !expired) {
+      return issue();
+    }
     if (current.revoked_at) {
+      // MySQL applies SET assignments left to right, so revoke_reason is set
+      // first, while revoked_at still tells untouched rows from revoked ones.
       await client.query(
-        `UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, NOW()),
-         revoke_reason = CASE WHEN revoked_at IS NULL THEN 'token_reuse' ELSE revoke_reason END
+        `UPDATE user_sessions SET
+         revoke_reason = CASE WHEN revoked_at IS NULL THEN 'token_reuse' ELSE revoke_reason END,
+         revoked_at = COALESCE(revoked_at, NOW())
          WHERE token_family_id = $1`,
         [current.token_family_id],
       );
       return { failure: "Refresh token reuse detected. Please sign in again." };
     }
-    if (new Date(current.expires_at) <= new Date()) {
+    if (expired) {
       await client.query("UPDATE user_sessions SET revoked_at = NOW(), revoke_reason = 'expired' WHERE id = $1", [current.id]);
       return { failure: "Session has expired." };
     }
-    const replacement = await insertSession(client, current.user_id, context, current.token_family_id);
+    const replacement = await issue();
     await client.query(
       `UPDATE user_sessions SET revoked_at = NOW(), revoke_reason = 'rotated',
        replaced_by_session_id = $2, last_used_at = NOW() WHERE id = $1`,
       [current.id, replacement.id],
     );
-    return {
-      ...replacement,
-      userId: current.user_id,
-      authContext: { userId: current.user_id, role: current.role, schoolId: current.school_id, username: current.username },
-    };
+    return replacement;
   }, { isolationLevel: "SERIALIZABLE" });
   if (outcome.failure) throw new Error(outcome.failure);
   return outcome;
@@ -90,4 +114,6 @@ async function revokeAllSessions(userId, reason = "security_change") {
   );
 }
 
-module.exports = { createSession, rotateSession, revokeSession, revokeAllSessions, hashToken, lifetimeMs };
+module.exports = {
+  createSession, rotateSession, revokeSession, revokeAllSessions, hashToken, lifetimeMs, rotatedMomentsAgo,
+};

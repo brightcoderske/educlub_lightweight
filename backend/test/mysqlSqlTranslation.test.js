@@ -95,6 +95,20 @@ test("an empty array binds as IN (NULL) rather than the syntax error IN ()", () 
   assert.deepEqual(params, [[null]]);
 });
 
+test("a number bound to $n::text is sent as text, as PostgreSQL would have", () => {
+  // MariaDB compares a bare 2026 with '' as DECIMAL, and strict mode turns the
+  // "Truncated incorrect DECIMAL value" warning into a failed quiz save.
+  const { sql, params } = translate(
+    "VALUES (NULLIF($1::text, '')::integer, NULLIF($2::varchar(10), ''), $3::integer, $1)",
+    [2026, 7, 5],
+  );
+  assert.equal(sql, "VALUES (NULLIF(?, ''), NULLIF(?, ''), ?, ?)");
+  // Only the occurrences written as text change; the same value elsewhere stays a number.
+  assert.deepEqual(params, ["2026", "7", 5, 2026]);
+  // Nothing else is touched: null stays null so NULLIF still yields NULL.
+  assert.deepEqual(translate("NULLIF($1::text, '')", [null]).params, [null]);
+});
+
 test("interval literals are rewritten to MySQL's keyword form", () => {
   assert.equal(
     translate("WHERE created_at >= NOW() - INTERVAL '1 hour'", []).sql,
@@ -196,6 +210,7 @@ const MYSQL8_ONLY = [
   [/\bJSON_OVERLAPS\s*\(/i, "JSON_OVERLAPS() - MySQL 8 only"],
   [/\bJSON_SCHEMA_VALID\s*\(/i, "JSON_SCHEMA_VALID() - MySQL 8 only"],
   [/\bLATERAL\s+\(/i, "LATERAL - MySQL 8.0.14+, not in MariaDB"],
+  [/\bFOR\s+UPDATE\s+OF\s+\w+/i, "FOR UPDATE OF <table> - MySQL 8 only; MariaDB takes plain FOR UPDATE"],
 ];
 
 function sourceFiles(dir, found = []) {
