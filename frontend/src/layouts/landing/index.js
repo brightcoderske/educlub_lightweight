@@ -183,6 +183,7 @@ function RegistrationLanding() {
   const [submitting, setSubmitting] = useState(false);
   const [courseCount, setCourseCount] = useState(0);
   const [registrationOpen, setRegistrationOpen] = useState(false);
+  const [listsStatus, setListsStatus] = useState("idle");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -275,28 +276,6 @@ function RegistrationLanding() {
     upsertLink("canonical", canonicalUrl);
     updateStructuredData(window.location.origin);
 
-    apiClient
-      .get("/public/schools")
-      .then(setSchools)
-      .catch(() => setError("Could not load registered schools."));
-    apiClient
-      .get("/public/terms")
-      .then((rows) => {
-        const termRows = Array.isArray(rows) ? rows : [];
-        setTerms(termRows);
-        const defaultTerm =
-          termRows.find((term) => term.is_current) ||
-          termRows.find((term) => term.is_active) ||
-          termRows[0];
-        if (defaultTerm) {
-          setForm((current) => ({
-            ...current,
-            term_id: current.term_id || String(defaultTerm.id),
-          }));
-        }
-      })
-      .catch(() => setError("Could not load academic terms."));
-
     let current = 0;
     const counter = setInterval(() => {
       current += 1;
@@ -314,6 +293,48 @@ function RegistrationLanding() {
       setRegistrationOpen(true);
     }
   }, [pathname]);
+
+  // The school and term lists are fetched when the form opens, not on every
+  // visit to the landing page. A failed load says so: empty dropdowns used to
+  // read "No schools currently accepting self-registration", which is untrue
+  // when the request simply did not get through.
+  const loadRegistrationLists = async () => {
+    setListsStatus("loading");
+    try {
+      const [schoolRows, termRows] = await Promise.all([
+        apiClient.get("/public/schools"),
+        apiClient.get("/public/terms"),
+      ]);
+      const loadedTerms = Array.isArray(termRows) ? termRows : [];
+      setSchools(Array.isArray(schoolRows) ? schoolRows : []);
+      setTerms(loadedTerms);
+      const defaultTerm =
+        loadedTerms.find((term) => term.is_current) ||
+        loadedTerms.find((term) => term.is_active) ||
+        loadedTerms[0];
+      if (defaultTerm) {
+        setForm((current) => ({
+          ...current,
+          term_id: current.term_id || String(defaultTerm.id),
+        }));
+      }
+      setListsStatus("ready");
+    } catch {
+      setListsStatus("failed");
+    }
+  };
+
+  useEffect(() => {
+    if (registrationOpen && ["idle", "failed"].includes(listsStatus)) {
+      loadRegistrationLists();
+    }
+  }, [registrationOpen]);
+
+  const listPlaceholder = (items, what, choose, none) => {
+    if (listsStatus === "loading" || listsStatus === "idle") return `Loading ${what}…`;
+    if (listsStatus === "failed") return `Could not load ${what}`;
+    return items.length ? choose : none;
+  };
 
   useEffect(() => {
     // Friendly marketing URLs share one component and scroll to stable section anchors.
@@ -450,9 +471,12 @@ function RegistrationLanding() {
               onChange={(e) => setField("school_id", e.target.value)}
             >
               <option value="">
-                {schools.length
-                  ? "Choose school"
-                  : "No schools currently accepting self-registration"}
+                {listPlaceholder(
+                  schools,
+                  "schools",
+                  "Choose school",
+                  "No schools currently accepting self-registration"
+                )}
               </option>
               {schools.map((school) => (
                 <option key={school.id} value={school.id}>
@@ -484,7 +508,9 @@ function RegistrationLanding() {
             InputLabelProps={{ shrink: true }}
             onChange={(e) => setField("term_id", e.target.value)}
           >
-            <option value="">{terms.length ? "Choose term" : "No academic terms available"}</option>
+            <option value="">
+              {listPlaceholder(terms, "terms", "Choose term", "No academic terms available")}
+            </option>
             {terms.map((term) => (
               <option key={term.id} value={term.id}>
                 {term.term_label || `${term.academic_year} - ${term.name}`}
@@ -592,7 +618,17 @@ function RegistrationLanding() {
           Complete before registering: {missingRequirements.join("; ")}.
         </MDTypography>
       )}
-      {schools.length === 0 && (
+      {listsStatus === "failed" && (
+        <MDBox mt={1} display="flex" alignItems="center" gap={1} flexWrap="wrap" role="alert">
+          <MDTypography variant="caption" color="error">
+            The school and term lists could not load. Check your internet connection.
+          </MDTypography>
+          <MDButton size="small" variant="outlined" color="info" onClick={loadRegistrationLists}>
+            Try again
+          </MDButton>
+        </MDBox>
+      )}
+      {listsStatus === "ready" && schools.length === 0 && (
         <MDTypography variant="caption" color="text" display="block" mt={1}>
           Ask your school administrator to enable learner self-registration for your school.
         </MDTypography>
