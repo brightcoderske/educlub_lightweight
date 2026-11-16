@@ -5,6 +5,17 @@ const { error } = require("../utils/logger");
 function errorHandler(err, req, res, _next) {
   error("request_failed", { requestId: req.requestId, code: err.code, name: err.name, message: err.message, stack: process.env.NODE_ENV === "development" ? err.stack : undefined });
 
+  // The body parser's own failures. Answering 500 told a learner whose upload
+  // was too big that the server had broken.
+  if (err.type === "entity.too.large") {
+    const message = "That file is too large to upload. Choose a file under 4 MB.";
+    return res.status(413).json({ success: false, code: "PAYLOAD_TOO_LARGE", error: message, message, errors: null, requestId: req.requestId });
+  }
+  if (err.type === "entity.parse.failed") {
+    const message = "The request could not be read. Please try again.";
+    return res.status(400).json({ success: false, code: "BAD_REQUEST", error: message, message, errors: null, requestId: req.requestId });
+  }
+
   if (err.name === 'ValidationError') {
     return res.status(400).json({ success: false, code: "VALIDATION_ERROR", message: err.message, errors: err.errors || null, requestId: req.requestId });
   }

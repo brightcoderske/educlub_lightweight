@@ -8,7 +8,7 @@ import MDButton from "components/MDButton";
 import CoverLayout from "examples/LayoutContainers/CoverLayout";
 import bgImage from "assets/images/bg-reset-cover.jpeg";
 import API_BASE_URL from "lib/apiBase";
-import { parseApiResponse } from "lib/api";
+import { fetchWithRetry, parseApiResponse } from "lib/api";
 
 function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -24,7 +24,7 @@ function ForgotPassword() {
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/password-reset/request`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/auth/password-reset/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

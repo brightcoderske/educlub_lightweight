@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
 import API_BASE_URL from "lib/apiBase";
-import { apiClient, parseApiResponse } from "lib/api";
+import { apiClient, fetchWithRetry, parseApiResponse } from "lib/api";
 import { AUTH_EXPIRED_EVENT } from "lib/session";
 import { flushPendingWork } from "lib/pendingWork";
 
@@ -175,7 +175,7 @@ export const AuthProvider = ({ children }) => {
         ? null
         : localStorage.getItem("trustedDeviceToken");
 
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -206,7 +206,7 @@ export const AuthProvider = ({ children }) => {
 
   const verify2FA = async (tempToken, code, rememberDevice = false) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/2fa/verify`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/auth/2fa/verify`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -258,7 +258,7 @@ export const AuthProvider = ({ children }) => {
 
   const resetPassword = async (oldPassword, newPassword) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/auth/reset-password`, {
         method: "POST",
         credentials: "include",
         headers: {

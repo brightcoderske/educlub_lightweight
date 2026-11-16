@@ -9,6 +9,35 @@ import {
 
 let refreshPromise = null;
 
+export const NETWORK_ERROR_MESSAGE =
+  "Could not reach eduClub. Check your internet connection, then try again.";
+// A school connection drops for a moment far more often than the server is
+// down, so reads are retried before the learner is told anything.
+const READ_RETRY_DELAYS_MS = [800, 2000];
+
+// fetch() rejects only when no answer arrived at all: the connection dropped,
+// a firewall stopped it, or the server was restarting. The browser's own text
+// for that ("Failed to fetch") tells a learner nothing.
+export async function fetchWithRetry(url, options, retryDelays = [], wait = defaultWait) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      if (attempt >= retryDelays.length) {
+        const networkError = new Error(NETWORK_ERROR_MESSAGE);
+        networkError.network = true;
+        networkError.cause = error;
+        throw networkError;
+      }
+      await wait(retryDelays[attempt]);
+    }
+  }
+}
+
+function defaultWait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function parseApiResponse(response) {
   const contentType = response.headers.get("content-type") || "";
 
@@ -64,10 +93,11 @@ class ApiClient {
     if (!token) return null;
 
     const secondsRemaining = tokenSecondsRemaining(token);
-    if (!force && secondsRemaining !== null && secondsRemaining > 0 && !shouldRefreshToken(token)) return null;
+    if (!force && secondsRemaining !== null && secondsRemaining > 0 && !shouldRefreshToken(token))
+      return null;
     if (refreshPromise) return refreshPromise;
 
-    refreshPromise = fetch(`${this.baseUrl}/auth/refresh`, {
+    refreshPromise = fetchWithRetry(`${this.baseUrl}/auth/refresh`, {
       method: "POST",
       headers: this.getHeaders(),
       credentials: "include",
@@ -99,7 +129,12 @@ class ApiClient {
       options.body = JSON.stringify(data);
     }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, options);
+    // Only reads are repeated: a write that did arrive must not land twice.
+    const response = await fetchWithRetry(
+      `${this.baseUrl}${endpoint}`,
+      options,
+      method === "GET" ? READ_RETRY_DELAYS_MS : []
+    );
     return this.parseResponse(response);
   }
 
@@ -109,11 +144,11 @@ class ApiClient {
 
   async download(endpoint) {
     await this.refreshSessionIfNeeded();
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: "GET",
-      headers: this.getHeaders(),
-      credentials: "include",
-    });
+    const response = await fetchWithRetry(
+      `${this.baseUrl}${endpoint}`,
+      { method: "GET", headers: this.getHeaders(), credentials: "include" },
+      READ_RETRY_DELAYS_MS
+    );
 
     if (!response.ok) {
       return this.parseResponse(response);

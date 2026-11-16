@@ -273,7 +273,9 @@ function LearnerDashboard() {
       applyDashboardData(nextData, { showFeatured: false });
     } catch (err) {
       if (version !== requestVersion.current) return;
-      setError("Failed to fetch courses");
+      // Say why: "no connection", a server error and an expired session each
+      // need something different from the learner or their teacher.
+      setError(`Your courses could not load. ${err.message || ""}`.trim());
       console.error(err);
     } finally {
       if (version === requestVersion.current) {
