@@ -20,6 +20,7 @@ const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 
 const mysql = require("mysql2/promise");
+const { dropColumnCheckStatement } = require("./columnChecks");
 
 function arg(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
@@ -165,6 +166,25 @@ async function reasonToSkip(db, statement) {
   return null;
 }
 
+// What actually runs for `statement` on this server. On MariaDB a CHECK
+// written on a column belongs to the column and cannot be dropped by name, so
+// that DROP becomes a redefinition of the column without it (columnChecks.js).
+async function forThisServer(db, statement) {
+  if (!isMariaDb) return statement;
+  const dropCheck = statement.match(/^ALTER TABLE (\w+)\s+DROP (?:CHECK|CONSTRAINT) (\w+)\s*$/i);
+  if (!dropCheck) return statement;
+  const [table, name] = [dropCheck[1], dropCheck[2]];
+  const [rows] = await db.query(
+    `SELECT 1 FROM information_schema.CHECK_CONSTRAINTS
+     WHERE CONSTRAINT_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND LEVEL = 'Column'
+     LIMIT 1`,
+    [CONFIG.database, table, name],
+  );
+  if (!rows.length) return statement;
+  const [created] = await db.query(`SHOW CREATE TABLE \`${table}\``);
+  return dropColumnCheckStatement(table, created[0]["Create Table"], name);
+}
+
 // MariaDB has never supported indexing an expression - it offers generated
 // columns instead - so the three LOWER() indexes the translation produces are
 // rejected outright there. They are an optimisation for case-insensitive email
@@ -225,7 +245,13 @@ async function main() {
         continue;
       }
       try {
-        await db.query(statement);
+        await db.query(await forThisServer(db, statement));
+        // A rule that is still there after its DROP would leave the old limit
+        // in force with the run reporting success, so it counts as a failure.
+        const dropped = statement.match(/^ALTER TABLE (\w+)\s+DROP (?:CHECK|CONSTRAINT) (\w+)/i);
+        if (dropped && (await constraintExists(db, dropped[1], dropped[2]))) {
+          throw new Error(`Constraint ${dropped[2]} is still on ${dropped[1]} after dropping it`);
+        }
         applied += 1;
       } catch (error) {
         retry.push({ statement, message: error.message });
