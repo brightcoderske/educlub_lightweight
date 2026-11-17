@@ -202,8 +202,12 @@ if [[ "$NEED_BUILD" == "1" ]]; then
   attempt=1
   # At the process limit a build can freeze instead of failing, and only a failure is retried, so a
   # build still running after 10 minutes (one normally takes one or two) is stopped and counts as one.
-  until (cd "$FRONTEND" && export BUILD_OUT_DIR=build.next RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=2 \
-           NODE_OPTIONS="--max-old-space-size=${BUILD_MEMORY_MB:-1024}" \
+  # Every thread pool the build starts is capped, because CPU pinning does not limit them all: Rolldown
+  # (Vite's Rust bundler) runs Rayon and a Tokio runtime, esbuild runs Go, and Node runs V8's and libuv's
+  # pools. Uncapped, one build used 55 of the account's ~100 threads and froze beside Healthfield.
+  until (cd "$FRONTEND" && export BUILD_OUT_DIR=build.next RAYON_NUM_THREADS=1 TOKIO_WORKER_THREADS=1 \
+           GOMAXPROCS=1 UV_THREADPOOL_SIZE=2 \
+           NODE_OPTIONS="--max-old-space-size=${BUILD_MEMORY_MB:-1024} --v8-pool-size=2" \
          && timeout -k 10 600 ${PIN[@]+"${PIN[@]}"} node node_modules/vite/bin/vite.js build \
          && timeout -k 10 300 node scripts/generate-public-seo.js); do
     if (( attempt >= 3 )); then die "The website build failed 3 times."; fi
@@ -284,20 +288,24 @@ mkdir -p "$BACKEND/tmp"
 touch "$BACKEND/tmp/restart.txt"
 
 # Passenger starts the app on the first request after a restart, so this check is also what starts it.
-# It asks the public address and also this server directly (127.0.0.1, which the web server answers for
-# every site on it). Before DNS points here (a first deploy), the public address still reaches the old
-# host, so only the direct answer can show the new version. The direct request skips the certificate
-# check: it connects to this server itself, which may not have its certificate yet.
+# It asks the public address and also this server directly. Before DNS points here (a first deploy), the
+# public address still reaches the old host, so only the direct answer can show the new version.
+# cPanel binds each site to its account's IP address, so the direct request goes there: 127.0.0.1 only
+# reaches the server's default site, which answers a cPanel 404 for every path. The IP is SITE_IP when
+# set, otherwise the one cPanel records for the site, otherwise 127.0.0.1. The direct request skips the
+# certificate check: it connects to this server itself, which may not have its certificate yet.
 SITE_HOST="${SITE_URL#*://}"
 SITE_HOST="${SITE_HOST%%/*}"
+SITE_IP="${SITE_IP:-$(sed -n 's/^ip: *//p' "/var/cpanel/userdata/$(id -un)/$SITE_HOST" 2>/dev/null | head -1 || true)}"
+SITE_IP="${SITE_IP:-127.0.0.1}"
 health_commit() { sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p'; }
 running_commit() {
   local found
   found="$(curl -fsS --max-time 10 "$SITE_URL/health" 2>/dev/null | health_commit || true)"
   [[ "$found" == "$NEW" ]] && { echo "$found"; return; }
-  curl -fsSk --max-time 10 --resolve "$SITE_HOST:443:127.0.0.1" "https://$SITE_HOST/health" 2>/dev/null | health_commit || true
+  curl -fsSk --max-time 10 --resolve "$SITE_HOST:443:$SITE_IP" "https://$SITE_HOST/health" 2>/dev/null | health_commit || true
 }
-say "Checking $SITE_URL/health for ${NEW:0:7}..."
+say "Checking $SITE_URL/health for ${NEW:0:7} (directly at $SITE_IP)..."
 running=""
 for _ in $(seq 1 18); do
   running="$(running_commit)"
