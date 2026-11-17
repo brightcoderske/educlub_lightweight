@@ -23,6 +23,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
+import { coverageColor, openedShare } from "lib/activityCoverage";
 
 const ROWS_PER_PAGE_OPTIONS = [8, 16, 32];
 
@@ -235,7 +236,12 @@ function SchoolAdminProgress() {
       "Class",
       "Stream",
       "Course",
-      ...modules.flatMap(([number, name]) => [`Mod ${number} - ${name}`, `Mod ${number} Band`]),
+      ...modules.flatMap(([number, name]) => [
+        `Mod ${number} - ${name}`,
+        `Mod ${number} Band`,
+        `Mod ${number} Opened`,
+      ]),
+      "Overall Opened",
       "Overall Completion",
       "Overall Mark",
       "Overall Rubric",
@@ -250,8 +256,14 @@ function SchoolAdminProgress() {
         ...modules.flatMap(([number]) => {
           const module = byNumber.get(number);
           const band = moduleBand(module);
-          return [module ? `${module.score_percent}%` : "-", band.full || band.label];
+          const share = openedShare(module);
+          return [
+            module ? `${module.score_percent}%` : "-",
+            band.full || band.label,
+            module ? `${share.opened}/${share.total} (${share.percent}%)` : "-",
+          ];
         }),
+        `${openedShare(row).percent}%`,
         `${row.completion_percent}%`,
         `${row.score_percent}%`,
         row.grade_label,
@@ -471,6 +483,7 @@ function SchoolAdminProgress() {
                   const byNumber = new Map(
                     (row.modules || []).map((module) => [module.module_number, module])
                   );
+                  const overall = openedShare(row);
 
                   return (
                     <TableRow key={row.learner_id} hover>
@@ -493,9 +506,19 @@ function SchoolAdminProgress() {
                       {modules.map(([number]) => {
                         const module = byNumber.get(number);
                         const band = moduleBand(module);
+                        const share = openedShare(module);
+                        // The badge is the mark; the bar is how much of the module
+                        // the learner has opened, so one finished activity out of
+                        // ten reads 10%, not 100%.
                         return (
                           <TableCell key={number} align="center" sx={{ minWidth: 110 }}>
-                            <Tooltip title={band.full || band.label}>
+                            <Tooltip
+                              title={
+                                module
+                                  ? `${band.full || band.label} - mark ${module.score_percent}%`
+                                  : band.full || band.label
+                              }
+                            >
                               <Chip
                                 label={band.label}
                                 size="small"
@@ -505,10 +528,8 @@ function SchoolAdminProgress() {
                             </Tooltip>
                             <MDBox mt={0.5}>
                               <MDProgress
-                                value={Number(module?.score_percent || 0)}
-                                color={
-                                  module ? performanceColor(module.score_percent) : "secondary"
-                                }
+                                value={share.percent}
+                                color={coverageColor(share.percent)}
                                 variant="gradient"
                                 sx={{ height: 4 }}
                               />
@@ -517,7 +538,9 @@ function SchoolAdminProgress() {
                                 color="text"
                                 sx={{ fontSize: "0.65rem" }}
                               >
-                                {module ? `${module.score_percent}%` : "-"}
+                                {module
+                                  ? `${share.opened}/${share.total} opened · ${share.percent}%`
+                                  : "-"}
                               </MDTypography>
                             </MDBox>
                           </TableCell>
@@ -525,16 +548,22 @@ function SchoolAdminProgress() {
                       })}
                       <TableCell sx={{ minWidth: 140 }}>
                         <MDTypography variant="button" fontWeight="medium">
-                          {row.score_percent}%
+                          Mark {row.score_percent}%
                         </MDTypography>
                         <MDProgress
-                          value={Number(row.score_percent || 0)}
-                          color={performanceColor(row.score_percent)}
+                          value={overall.percent}
+                          color={coverageColor(overall.percent)}
                           variant="gradient"
                           sx={{ height: 4 }}
                         />
-                        <MDTypography variant="caption" color="text" sx={{ fontSize: "0.65rem" }}>
-                          {row.completed_modules}/{row.total_modules} modules complete
+                        <MDTypography
+                          variant="caption"
+                          color="text"
+                          display="block"
+                          sx={{ fontSize: "0.65rem" }}
+                        >
+                          {overall.percent}% opened · {row.completed_modules}/
+                          {row.total_modules} modules
                         </MDTypography>
                       </TableCell>
                     </TableRow>

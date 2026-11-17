@@ -204,6 +204,8 @@ function assembleCourseProgress(course, rows) {
         name: row.activity_title,
         type: row.activity_type,
         availability_mode: row.availability_mode,
+        // Any progress row means the learner has opened it: opening writes one.
+        opened: row.progress_status !== "not_started",
         completed: ["completed", "graded"].includes(row.progress_status),
         score_percent: row.score === null ? null : clampPercent(row.score),
       });
@@ -221,6 +223,7 @@ function assembleCourseProgress(course, rows) {
     const completedActivities = requiredActivities.filter(
       (activity) => activity.completed
     ).length;
+    const openedActivities = requiredActivities.filter((activity) => activity.opened).length;
     const scoredActivities = requiredActivities.filter(
       (activity) => activity.score_percent !== null
     );
@@ -238,6 +241,12 @@ function assembleCourseProgress(course, rows) {
       completed_activities: completedActivities,
       progress_percent:
         totalActivities > 0 ? clampPercent((completedActivities / totalActivities) * 100) : 0,
+      // How much of the module the learner has reached, apart from how well they
+      // did: the mark averages only what was attempted, so one finished reading
+      // activity marks a ten-activity module 100%.
+      opened_activities: openedActivities,
+      opened_percent:
+        totalActivities > 0 ? clampPercent((openedActivities / totalActivities) * 100) : 0,
       score_percent: clampPercent(score),
       grade_label: gradeLabel(score),
       try_more_total: optionalActivities.length,
@@ -250,6 +259,7 @@ function assembleCourseProgress(course, rows) {
     (sum, module) => sum + module.completed_activities,
     0
   );
+  const openedActivities = modules.reduce((sum, module) => sum + module.opened_activities, 0);
   const completedModules = modules.filter(
     (module) => module.total_activities > 0 && module.completed_activities >= module.total_activities
   ).length;
@@ -263,6 +273,10 @@ function assembleCourseProgress(course, rows) {
     course_name: course.name,
     completion_percent:
       totalActivities > 0 ? clampPercent((completedActivities / totalActivities) * 100) : 0,
+    total_activities: totalActivities,
+    opened_activities: openedActivities,
+    opened_percent:
+      totalActivities > 0 ? clampPercent((openedActivities / totalActivities) * 100) : 0,
     score_percent: clampPercent(score),
     grade_label: gradeLabel(score),
     completed_modules: completedModules,
@@ -486,6 +500,9 @@ async function getSchoolCourseProgress({
       course_id: progress.course_id,
       course_name: progress.course_name,
       completion_percent: progress.completion_percent,
+      opened_activities: progress.opened_activities,
+      total_activities: progress.total_activities,
+      opened_percent: progress.opened_percent,
       score_percent: progress.score_percent,
       grade_label: progress.grade_label,
       completed_modules: progress.completed_modules,
