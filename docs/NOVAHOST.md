@@ -19,7 +19,7 @@ Everything lives in one folder, `~/apps/educlub`:
 ~/apps/educlub/runner/           document root of runner.educlub.co.ke: the Python runner only
 ~/apps/educlub/backend/.env      the one settings file: never committed, never touched by a deploy
 ~/apps/educlub/backend/uploads/  logos, banners, activity images, learners' files (kept across deploys)
-~/apps/educlub/frontend/build/   the built website, served by the app
+~/apps/educlub/frontend/build/   the website, built by GitHub and served by the app
 ~/apps/educlub/backups/          database backups the deploy takes before a migration (newest 14 kept)
 ```
 
@@ -164,8 +164,8 @@ The saved picture addresses still name the old server; step 4 fixes them once th
 
 ## Step 4. First deploy, checked before anyone is sent there
 
-This step installs the packages, builds the website (pinned to two CPUs, so the account's process limit
-is not hit), checks the database is complete, fills `~/apps/educlub/runner`, restarts the app and waits
+This step installs the backend packages, downloads the website GitHub built (see "The website is built
+on GitHub" below), checks the database is complete, fills `~/apps/educlub/runner`, restarts the app and waits
 until it reports the deployed commit. DNS still points elsewhere, so the deploy asks the app on this
 server directly. Then it changes the saved picture addresses from `https://learn.educlub.co.ke/uploads/...`
 to `/uploads/...` (it reports "Nothing to do" if they are already done), checks the mailbox login, and
@@ -178,8 +178,7 @@ there is no log file yet, so it runs once however often cron fires:
 [ -e ~/educlub-step4.log ] || (cd ~/apps/educlub && bash scripts/deploy.sh --force --yes && cd backend && . "$(ls -d ~/nodevenv/apps/educlub/backend/*/bin/activate | sort -V | tail -1)" && echo "--- pictures" && node scripts/rewrite-upload-urls.js --apply && echo "--- email" && node scripts/verify-email.js; echo "--- health"; ip=$(sed -n 's/^ip: *//p' /var/cpanel/userdata/$(id -un)/educlub.co.ke); curl -s --max-time 20 --resolve educlub.co.ke:80:${ip:-127.0.0.1} http://educlub.co.ke/health/ready; echo; echo FINISHED) > ~/educlub-step4.log 2>&1
 ```
 
-Open `~/educlub-step4.log` in *File Manager* and refresh it until the last line reads `FINISHED` (the
-website build takes several minutes). Then **delete the cron job**. To run it again, delete the log first.
+Open `~/educlub-step4.log` in *File Manager* and refresh it until the last line reads `FINISHED`. Then **delete the cron job**. To run it again, delete the log first.
 
 *With a Terminal*, run the same commands one at a time:
 
@@ -241,7 +240,18 @@ cd ~/apps/educlub && bash scripts/deploy.sh
 ```
 
 It lists the new commits and asks before doing anything. Then it does only what those commits need: a
-backend change is just a restart; packages are reinstalled only when their lock file changed; the website
-is rebuilt only when `frontend/` changed, beside the live one; the database is backed up and migrated only
-when the schema changed. If any step fails, or the site does not report the new commit within 90 seconds,
-the previous version is put back and restarted.
+backend change is just a restart; backend packages are reinstalled only when their lock file changed; the
+website is downloaded only when `frontend/` changed, and unpacked beside the live one; the database is
+backed up and migrated only when the schema changed. If any step fails, or the site does not report the
+new commit within 90 seconds, the previous version is put back and restarted.
+
+### The website is built on GitHub
+
+The server never builds the website. The account's limit of 100 processes is shared with Healthfield, and
+with both apps live a build pushed it to 99 and froze everything. Instead, every push that changes
+`frontend/` starts **Actions › Site build** on GitHub, which builds the site and publishes it on the
+`site-build` branch (a few minutes). The deploy downloads that build; if GitHub is still building it, the
+deploy waits (up to 15 minutes, or `SITE_BUILD_WAIT_MINUTES`) and says so. If the build failed on GitHub,
+the deploy stops before changing anything: open the run on GitHub to see why.
+
+`frontend/node_modules` on the server is no longer used and can be deleted to free space.

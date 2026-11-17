@@ -1,0 +1,57 @@
+# Builds the website on GitHub and publishes it on the site-build branch, so the Novahost deploy only
+# downloads it. Building on the server ran the hosting account (100 processes, shared with Healthfield)
+# into its limit beside the live apps and froze it.
+#
+# The branch holds one commit: build/ plus FRONTEND_TREE, the git tree id of frontend/ it was built
+# from. scripts/deploy.sh compares that with the version it is deploying and waits until they match.
+name: Site build
+
+on:
+  push:
+    branches: [main]
+    paths: ["frontend/**", ".github/workflows/site-build.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# A newer push replaces a build still running: only the newest website is ever deployed.
+concurrency:
+  group: site-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # The version the Novahost app runs.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      # No settings are passed: the production defaults (API on the same address, Python on
+      # runner.educlub.co.ke) are what the server build used.
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+      - name: Publish on the site-build branch
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tree="$(git rev-parse HEAD:frontend)"
+          out="$(mktemp -d)"
+          cp -a frontend/build "$out/build"
+          printf '%s\n' "$tree" > "$out/FRONTEND_TREE"
+          printf '%s\n' "$GITHUB_SHA" > "$out/SOURCE_COMMIT"
+          cd "$out"
+          git init -q -b site-build
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Website built from ${GITHUB_SHA::7} (frontend ${tree::7})"
+          git push -q --force "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" site-build

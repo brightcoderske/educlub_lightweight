@@ -9,20 +9,21 @@
 #
 # Only the work a change needs is done:
 #   backend packages   installed only when backend/package-lock.json changed (or none are installed)
-#   website packages   installed only when frontend/package-lock.json changed
-#   website build      rebuilt only when something under frontend/ changed (or there is no build)
+#   website            downloaded ready-built from GitHub only when something under frontend/ changed
 #   database           backed up, then migrated, only when the schema changed
 # A backend-only change is a restart and nothing else.
 #
-# Safety: the website is built into frontend/build.next while the site keeps serving the current build,
-# and swapped in only when it is complete. Any failure puts the previous code and build back and restarts.
+# The website is never built here. GitHub builds it on every push (.github/workflows/site-build.yml) and
+# publishes it on the site-build branch; building on the server ran the account into its process limit
+# beside the live apps. The download is unpacked into frontend/build.next while the site keeps serving
+# the current one, and swapped in only when complete. Any failure puts the previous code and website back.
 #
 # Settings, all optional, read from the environment:
 #   NODE_VENV        the nodevenv "bin/activate" (found under ~/nodevenv/apps/educlub/backend/ otherwise)
 #   SITE_URL         address /health is checked on (default FRONTEND_URL from backend/.env)
 #   RUNNER_DIR       folder runner.educlub.co.ke serves (default runner/ in this checkout; skipped if missing)
 #   BACKUP_DIR       where database backups go (default backups/ in this checkout; the newest 14 are kept)
-#   BUILD_MEMORY_MB  heap limit for the website build (default 1024)
+#   SITE_BUILD_WAIT_MINUTES  how long to wait for GitHub to finish building the website (default 15)
 #   SKIP_BACKUP=1    migrate without taking a backup first
 set -euo pipefail
 
@@ -76,7 +77,8 @@ if [[ "$PULL" == "1" && "${DEPLOY_PULLED:-0}" != "1" ]]; then
     read -r -p "Deploy ${NEW:0:7} now? [y/N] " reply
     case "$reply" in y|Y|yes|YES) ;; *) echo "Not deployed."; exit 0 ;; esac
   fi
-  # The website build rewrites frontend/public/sitemap.xml; that copy must not block the update.
+  # Builds made here before they moved to GitHub rewrote frontend/public/sitemap.xml; a leftover change
+  # must not block the update.
   git_app checkout -q -- frontend/public/sitemap.xml 2>/dev/null || true
   git_app merge -q --ff-only "origin/$BRANCH" || {
     echo "The checkout cannot fast-forward to origin/$BRANCH (local edits on the server?). Resolve it, then deploy again." >&2
@@ -100,16 +102,13 @@ touched() { [[ "$EVERYTHING" == "1" ]] || printf '%s\n' "$CHANGED" | grep -Eq "$
 fingerprint() { sha256sum "$1" | awk '{print $1}'; }
 same_lock() { [[ "$(cat "$STATE/$1" 2>/dev/null || true)" == "$(fingerprint "$2")" ]]; }
 
-NEED_BACKEND_DEPS=1; NEED_FRONTEND_DEPS=0; NEED_BUILD=0; NEED_MIGRATE=0
+NEED_BACKEND_DEPS=1; NEED_SITE=0; NEED_MIGRATE=0
 if same_lock backend-deps "$BACKEND/package-lock.json" && [[ -e "$BACKEND/node_modules/express" ]]; then NEED_BACKEND_DEPS=0; fi
-if touched '^frontend/' || [[ ! -f "$FRONTEND/build/index.html" ]]; then
-  NEED_BUILD=1
-  if ! same_lock frontend-deps "$FRONTEND/package-lock.json" || [[ ! -e "$FRONTEND/node_modules/vite" ]]; then NEED_FRONTEND_DEPS=1; fi
-fi
+if touched '^frontend/' || [[ ! -f "$FRONTEND/build/index.html" ]]; then NEED_SITE=1; fi
 if touched '^backend/(scripts/mysql-migration/|src/database/)'; then NEED_MIGRATE=1; fi
 
 if [[ -n "$BASE" ]]; then FROM="from ${BASE:0:7}"; else FROM="first deploy"; fi
-say "Deploying ${NEW:0:7} ($FROM): backend packages=$NEED_BACKEND_DEPS website packages=$NEED_FRONTEND_DEPS website build=$NEED_BUILD database=$NEED_MIGRATE"
+say "Deploying ${NEW:0:7} ($FROM): backend packages=$NEED_BACKEND_DEPS website=$NEED_SITE database=$NEED_MIGRATE"
 
 # ---------------------------------------------------------------- checks before touching anything
 [[ -f "$BACKEND/.env" ]] || { echo "No backend/.env. Create it first (docs/NOVAHOST.md, part D)." >&2; exit 1; }
@@ -134,27 +133,6 @@ SITE_URL="${SITE_URL%/}"
 [[ -n "$SITE_URL" ]] || { echo "Set FRONTEND_URL in backend/.env (or SITE_URL) so the deploy can check the site." >&2; exit 1; }
 BACKUP_DIR="${BACKUP_DIR:-$APP_DIR/backups}"
 
-# cPanel's Node selector puts a wrapper in front of npm that installs into the registered app's shared
-# folder. That is right for the backend but refuses the website's own node_modules, so the website
-# calls npm directly: the npm that ships with the Node actually running. The host keeps many Node
-# versions side by side (/opt/alt/alt-nodejs14 ... 24), and the nodevenv's `node` is a wrapper, so
-# the real program's own folder is the only reliable guide. Node 14's npm 6 cannot read the lock file.
-NPM_CLI="${NPM_CLI:-}"
-if [[ -z "$NPM_CLI" ]]; then
-  NODE_HOME="$(dirname "$(dirname "$(node -p 'process.execPath')")")"
-  for candidate in "$NODE_HOME/lib/node_modules/npm/bin/npm-cli.js" \
-                   "/opt/alt/alt-nodejs$(node -p 'process.versions.node.split(".")[0]')/root/usr/lib/node_modules/npm/bin/npm-cli.js"; do
-    if [[ -f "$candidate" ]]; then NPM_CLI="$candidate"; break; fi
-  done
-fi
-website_npm() { if [[ -n "$NPM_CLI" ]]; then node "$NPM_CLI" "$@"; else npm "$@"; fi; }
-NPM_MAJOR="$(website_npm --version 2>/dev/null | cut -d. -f1)"
-if [[ ! "$NPM_MAJOR" =~ ^[0-9]+$ ]] || (( NPM_MAJOR < 7 )); then
-  echo "The website needs npm 7 or newer, and the npm found is '${NPM_MAJOR:-none}' (${NPM_CLI:-npm}). Set NPM_CLI to a newer npm-cli.js." >&2
-  exit 1
-fi
-say "Website packages use npm $(website_npm --version) with Node $(node --version)."
-
 # ---------------------------------------------------------------- failure: put everything back
 SWAPPED=0
 STAGE="$FRONTEND/build.next"
@@ -167,7 +145,6 @@ on_fail() {
   rm -rf "$STAGE"
   if [[ "$SWAPPED" == "1" && -d "$PREVIOUS" ]]; then rm -rf "$FRONTEND/build"; mv "$PREVIOUS" "$FRONTEND/build"; fi
   if [[ "$OLD_HEAD" != "$NEW" ]]; then git_app reset -q --hard "$OLD_HEAD"; fi
-  git_app checkout -q -- frontend/public/sitemap.xml 2>/dev/null
   write_release "$OLD_HEAD"
   mkdir -p "$BACKEND/tmp" && touch "$BACKEND/tmp/restart.txt"
   say "Version ${OLD_HEAD:0:7} is back in place. Database changes are not undone; any backup taken is in $BACKUP_DIR."
@@ -182,45 +159,31 @@ if [[ "$NEED_BACKEND_DEPS" == "1" ]]; then
   (cd "$BACKEND" && npm install --omit=dev --no-audit --no-fund)
   fingerprint "$BACKEND/package-lock.json" > "$STATE/backend-deps"
 fi
-if [[ "$NEED_FRONTEND_DEPS" == "1" ]]; then
-  say "Installing website packages (two downloads at a time)..."
-  (cd "$FRONTEND" && website_npm ci --include=dev --no-audit --no-fund --maxsockets=2)
-  fingerprint "$FRONTEND/package-lock.json" > "$STATE/frontend-deps"
-fi
 
 # The app reads and checks its settings as it starts, and a refusal there shows only as a page that
-# never answers. Running the same check now names the problem before anything is built or restarted.
+# never answers. Running the same check now names the problem before anything is changed or restarted.
 say "Checking backend/.env..."
 (cd "$BACKEND" && node -e 'try { require("./src/config/env"); } catch (error) { console.error(error.message); process.exit(1); }') \
   || die "backend/.env is not ready: the reason is on the line above. Fix it, then deploy again."
 
-# ---------------------------------------------------------------- website build, beside the live one
-if [[ "$NEED_BUILD" == "1" ]]; then
-  # The account counts every thread against its process limit, and Vite's compiler starts one per CPU
-  # it can see (dozens on a shared host). Pinning the build to two CPUs keeps that pool small.
-  PIN=()
-  if command -v taskset >/dev/null 2>&1 && taskset -c 0,1 true 2>/dev/null; then PIN=(taskset -c 0,1); fi
-  if [[ ${#PIN[@]} -gt 0 ]]; then CPUS="pinned to 2 CPUs"; else CPUS="taskset unavailable, not pinned"; fi
-  say "Building the website ($CPUS, heap ${BUILD_MEMORY_MB:-1024} MB)..."
-  rm -rf "$STAGE"
-  attempt=1
-  # At the process limit a build can freeze instead of failing, and only a failure is retried, so a
-  # build still running after 10 minutes (one normally takes one or two) is stopped and counts as one.
-  # Every thread pool the build starts is capped, because CPU pinning does not limit them all: Rolldown
-  # (Vite's Rust bundler) runs Rayon and a Tokio runtime, esbuild runs Go, and Node runs V8's and libuv's
-  # pools. Uncapped, one build used 55 of the account's ~100 threads and froze beside Healthfield.
-  until (cd "$FRONTEND" && export BUILD_OUT_DIR=build.next RAYON_NUM_THREADS=1 TOKIO_WORKER_THREADS=1 \
-           GOMAXPROCS=1 UV_THREADPOOL_SIZE=2 \
-           NODE_OPTIONS="--max-old-space-size=${BUILD_MEMORY_MB:-1024} --v8-pool-size=2" \
-         && timeout -k 10 600 ${PIN[@]+"${PIN[@]}"} node node_modules/vite/bin/vite.js build \
-         && timeout -k 10 300 node scripts/generate-public-seo.js); do
-    if (( attempt >= 3 )); then die "The website build failed 3 times."; fi
-    attempt=$((attempt + 1))
-    say "Build failed (often a momentary process limit); trying again in 20 seconds ($attempt of 3)..."
-    sleep 20
+# ---------------------------------------------------------------- website: GitHub's build, beside the live one
+# The site-build branch holds the website GitHub built and the frontend/ tree id it was built from. A
+# push is built within a few minutes; until the tree matches this version's, the deploy waits.
+if [[ "$NEED_SITE" == "1" ]]; then
+  WANT_TREE="$(git_app rev-parse "$NEW:frontend")"
+  say "Fetching the website GitHub built for ${NEW:0:7}..."
+  deadline=$(( $(date +%s) + ${SITE_BUILD_WAIT_MINUTES:-15} * 60 ))
+  until git_app fetch -q origin "+refs/heads/site-build:refs/remotes/origin/site-build" 2>/dev/null         && [[ "$(git_app show origin/site-build:FRONTEND_TREE 2>/dev/null)" == "$WANT_TREE" ]]; do
+    if (( $(date +%s) >= deadline )); then
+      die "GitHub has not published the website for ${NEW:0:7} (see Actions > Site build on GitHub). Deploy again once it has."
+    fi
+    say "GitHub is still building the website; checking again in 30 seconds..."
+    sleep 30
   done
-  git_app checkout -q -- frontend/public/sitemap.xml 2>/dev/null || true
-  if [[ ! -s "$STAGE/index.html" ]]; then die "The build finished without an index.html."; fi
+  rm -rf "$STAGE" && mkdir -p "$STAGE"
+  git_app archive origin/site-build build | tar -x -C "$STAGE" --strip-components=1
+  if [[ ! -s "$STAGE/index.html" ]]; then die "The downloaded website has no index.html."; fi
+  say "Website ready ($(du -sh "$STAGE" | cut -f1))."
 fi
 
 # ---------------------------------------------------------------- database: back up, then migrate
@@ -255,7 +218,7 @@ if [[ "$NEED_MIGRATE" == "1" ]]; then
 fi
 
 # ---------------------------------------------------------------- swap in the new website
-if [[ "$NEED_BUILD" == "1" ]]; then
+if [[ "$NEED_SITE" == "1" ]]; then
   rm -rf "$PREVIOUS"
   if [[ -d "$FRONTEND/build" ]]; then mv "$FRONTEND/build" "$PREVIOUS"; fi
   mv "$STAGE" "$FRONTEND/build"
