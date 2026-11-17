@@ -172,7 +172,7 @@ shows the app's health.
 there is no log file yet, so it runs once however often cron fires:
 
 ```text
-[ -e ~/educlub-step4.log ] || (cd ~/apps/educlub && bash scripts/deploy.sh --force --yes && cd backend && . "$(ls -d ~/nodevenv/apps/educlub/backend/*/bin/activate | sort -V | tail -1)" && echo "--- pictures" && node scripts/rewrite-upload-urls.js --apply && echo "--- email" && node scripts/verify-email.js; echo "--- health"; for ip in 127.0.0.1 $(hostname -I); do curl -sk --max-time 10 --resolve educlub.co.ke:443:$ip https://educlub.co.ke/health/ready && break; done; echo; echo FINISHED) > ~/educlub-step4.log 2>&1
+[ -e ~/educlub-step4.log ] || (cd ~/apps/educlub && bash scripts/deploy.sh --force --yes && cd backend && . "$(ls -d ~/nodevenv/apps/educlub/backend/*/bin/activate | sort -V | tail -1)" && echo "--- pictures" && node scripts/rewrite-upload-urls.js --apply && echo "--- email" && node scripts/verify-email.js; echo "--- health"; curl -sk --max-time 20 --resolve educlub.co.ke:443:127.0.0.1 https://educlub.co.ke/health/ready; echo; echo FINISHED) > ~/educlub-step4.log 2>&1
 ```
 
 Open `~/educlub-step4.log` in *File Manager* and refresh it until the last line reads `FINISHED` (the
