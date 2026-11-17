@@ -25,7 +25,9 @@ const byClassThenName = (a, b) =>
  *
  * Where they go comes first: a term (the term after the current one to start
  * with) and a class - kept, each moved up one grade from their own, or one grade
- * for everyone. Who goes is a ticked list. The search, grade and class filters
+ * for everyone. A term in a new school year (Term 3 into next year's Term 1)
+ * sets the class to "each up one grade" by itself. Who goes is a ticked list,
+ * and "Tick everyone" takes the whole school in one go. The search, grade and class filters
  * only change what is shown: ticks stay as the filters change, so learners from
  * several classes can be gathered before moving them together, and the count
  * says how many are ticked, including any the filters are hiding.
@@ -41,21 +43,50 @@ function PromoteLearnersDialog({
   onClose,
 }) {
   const options = useMemo(() => promotionTermOptions(academicTerms), [academicTerms]);
-  const [termValue, setTermValue] = useState(() => suggestedNextTerm(options)?.value || "");
-  const [classMove, setClassMove] = useState("keep");
-  const [search, setSearch] = useState("");
-  const [grade, setGrade] = useState("");
-  const [stream, setStream] = useState("");
-  const [ticked, setTicked] = useState(() => new Set());
-
-  const chosenTerm = options.find((option) => option.value === termValue) || null;
-
   // Someone who has graduated has left the school, and is never moved on.
   const movable = useMemo(
     () =>
       learners.filter((learner) => learner.graduation_status !== "graduated").sort(byClassThenName),
     [learners]
   );
+  // The school year learners are in now: the running term's, or between terms,
+  // the one on most learners' records. A term in a later year starts a new
+  // school year, when a class normally moves up a grade as well.
+  const yearNow = useMemo(() => {
+    const running = options.find((option) => option.isCurrent);
+    if (running) return Number(running.academicYear);
+    const counts = new Map();
+    movable.forEach((learner) => {
+      const year = Number(learner.academic_year);
+      if (year) counts.set(year, (counts.get(year) || 0) + 1);
+    });
+    const [mostCommon] = [...counts].sort((a, b) => b[1] - a[1])[0] || [];
+    return mostCommon || new Date().getFullYear();
+  }, [options, movable]);
+  const startsNewYear = (value) => {
+    const option = options.find((item) => item.value === value);
+    return Boolean(option) && Number(option.academicYear) > yearNow;
+  };
+
+  const [termValue, setTermValue] = useState(() => suggestedNextTerm(options)?.value || "");
+  const [classMove, setClassMove] = useState(() => (startsNewYear(termValue) ? "up" : "keep"));
+  const [search, setSearch] = useState("");
+  const [grade, setGrade] = useState("");
+  const [stream, setStream] = useState("");
+  const [ticked, setTicked] = useState(() => new Set());
+
+  const chosenTerm = options.find((option) => option.value === termValue) || null;
+  const newSchoolYear = startsNewYear(termValue);
+
+  // Choosing the term decides the class too, unless one grade was picked for
+  // everyone: into a new school year each learner goes up a grade, otherwise
+  // they keep it. The class can still be changed afterwards.
+  const chooseTerm = (value) => {
+    setTermValue(value);
+    if (classMove === "keep" || classMove === "up") {
+      setClassMove(startsNewYear(value) ? "up" : "keep");
+    }
+  };
   const shown = movable.filter(
     (learner) =>
       (!grade || learner.grade === grade) &&
@@ -116,7 +147,7 @@ function PromoteLearnersDialog({
               label="Next term"
               fullWidth
               value={termValue}
-              onChange={(event) => setTermValue(event.target.value)}
+              onChange={(event) => chooseTerm(event.target.value)}
               InputLabelProps={{ shrink: true }}
               SelectProps={{ native: true }}
               helperText={chosenTerm ? chosenTerm.dates : "Their term stays as it is."}
@@ -145,7 +176,11 @@ function PromoteLearnersDialog({
               InputLabelProps={{ shrink: true }}
               SelectProps={{ native: true }}
               helperText={
-                classMove === "up" ? "Grade 5 goes to Grade 6, and so on. Grade 12 stays." : " "
+                classMove === "up"
+                  ? `${
+                      newSchoolYear ? "A new school year, so each moves up. " : ""
+                    }Grade 5 goes to Grade 6, and so on. Grade 12 stays.`
+                  : " "
               }
             >
               <option value="keep">Keep their current class</option>
@@ -274,6 +309,16 @@ function PromoteLearnersDialog({
             <MDTypography variant="caption" color="text" data-testid="promotion-hidden">
               ({tickedHidden} not shown by the filters)
             </MDTypography>
+          )}
+          {ticked.size < movable.length && (
+            <MDButton
+              variant="text"
+              color="info"
+              size="small"
+              onClick={() => setTicked(new Set(movable.map((learner) => learner.id)))}
+            >
+              Tick everyone ({movable.length})
+            </MDButton>
           )}
           {ticked.size > 0 && (
             <MDButton

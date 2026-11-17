@@ -217,6 +217,80 @@ test("with no term set up it says what to do, and a class move still works", asy
   await unmount();
 });
 
+test("a term in the next school year moves each learner up a grade as well", async () => {
+  const { unmount } = await open();
+
+  expect(field("Next class").value).toBe("keep");
+  await choose("Next term", `${YEAR + 1}|Term C`);
+  expect(field("Next class").value).toBe("up");
+  expect(document.body.textContent).toContain("A new school year, so each moves up.");
+
+  // Back to a term in this year: the class is kept again.
+  await choose("Next term", `${YEAR}|Term B`);
+  expect(field("Next class").value).toBe("keep");
+
+  await unmount();
+});
+
+test("at the end of the year it starts on next year's first term, moving up a grade", async () => {
+  // Term 3 is running; the next term to start is next year's Term 1.
+  const endOfYear = [term("Term 3", YEAR, -30, 10), term("Term 1", YEAR + 1, 40, 120)];
+  const { unmount, onConfirm } = await open({ academicTerms: endOfYear });
+
+  expect(field("Next term").value).toBe(`${YEAR + 1}|Term 1`);
+  expect(field("Next class").value).toBe("up");
+
+  await act(async () => Simulate.click(button(/^Tick everyone \(3\)$/)));
+  expect(summary()).toBe(
+    `3 learners ticked will move to Term 1 ${YEAR + 1} and each up one grade.`
+  );
+  await act(async () => Simulate.click(button(/^Move 3 learners$/)));
+  expect(onConfirm).toHaveBeenCalledWith({
+    learner_ids: [1, 2, 3],
+    next_term: "Term 1",
+    academic_year: YEAR + 1,
+    next_grade: "up",
+  });
+
+  await unmount();
+});
+
+test("between terms, the school year is taken from the learners' records", async () => {
+  // No term is running; learners are recorded in this year, so next year's
+  // Term 1 is a new school year.
+  const holiday = [term("Term 1", YEAR + 1, 40, 120)];
+  const learners = LEARNERS.map((learner) => ({ ...learner, academic_year: YEAR }));
+  const { unmount } = await open({ academicTerms: holiday, learners });
+
+  expect(field("Next class").value).toBe("up");
+
+  await unmount();
+});
+
+test("Tick everyone takes the whole school, whatever the filters show", async () => {
+  const { unmount } = await open();
+
+  await choose("Grade", "Grade 6");
+  await act(async () => Simulate.click(button(/^Tick everyone \(3\)$/)));
+
+  expect(summary()).toMatch(/^3 learners ticked/);
+  expect(hidden()).toBe("(2 not shown by the filters)");
+  expect(button(/^Tick everyone/)).toBeUndefined();
+
+  await unmount();
+});
+
+test("one grade chosen for everyone is kept when the term changes", async () => {
+  const { unmount } = await open();
+
+  await choose("Next class", "Grade 7");
+  await choose("Next term", `${YEAR + 1}|Term C`);
+
+  expect(field("Next class").value).toBe("Grade 7");
+
+  await unmount();
+});
+
 test("a failure is shown in the dialog, where the operator is looking", async () => {
   const { unmount } = await open({ error: 'Term "Term B" does not exist.' });
 
