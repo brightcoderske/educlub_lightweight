@@ -61,142 +61,158 @@ const button = (pattern) =>
   Array.from(document.body.querySelectorAll("button")).find((item) =>
     pattern.test(item.textContent)
   );
+const tickbox = (name) => document.body.querySelector(`input[aria-label="${name}"]`);
+const tick = (name) =>
+  act(async () => Simulate.change(tickbox(name), { target: { checked: true } }));
+const tickAllShown = () =>
+  act(async () => Simulate.change(tickbox("Tick everyone shown"), { target: { checked: true } }));
 const summary = () => document.body.querySelector('[data-testid="promotion-summary"]')?.textContent;
+const hidden = () => document.body.querySelector('[data-testid="promotion-hidden"]')?.textContent;
+const listed = () =>
+  Array.from(document.body.querySelectorAll('input[type="checkbox"]'))
+    .map((input) => input.getAttribute("aria-label"))
+    .filter((name) => name && name !== "Tick everyone shown");
 const optionLabels = (select) =>
   Array.from(select.querySelectorAll("option")).map((item) => item.textContent);
 
-test("it asks which term first, as one dropdown of the terms that exist", async () => {
+test("terms are one dropdown of the terms that exist, starting on the next one", async () => {
   const { unmount } = await open();
 
-  expect(document.body.textContent).toMatch(/1\. Which term are they moving to\?/);
-  const select = field("Next term");
-  expect(optionLabels(select)).toEqual([
-    "Choose a term",
+  expect(optionLabels(field("Next term"))).toEqual([
+    "Keep their current term",
     `Term A ${YEAR} (current)`,
     `Term B ${YEAR}`,
     `Term C ${YEAR + 1}`,
   ]);
-  expect(optionLabels(select).join()).not.toMatch(/Term Z/);
-
-  await unmount();
-});
-
-test("it starts on the term after the current one", async () => {
-  const { unmount } = await open();
-
   expect(field("Next term").value).toBe(`${YEAR}|Term B`);
-  expect(summary()).toMatch(new RegExp(`will move to Term B ${YEAR}\\.$`));
 
   await unmount();
 });
 
-test("it says how many will move, and never counts someone who has graduated", async () => {
+test("everyone who has not graduated is listed with their grade and class", async () => {
   const { unmount } = await open();
 
-  expect(summary()).toMatch(/^3 learners across the school will move/);
-  expect(button(/^Graduate 3 learners$/)).toBeTruthy();
-
-  await choose("Grade", "Grade 5");
-  expect(summary()).toMatch(/^2 learners in Grade 5 will move/);
-
-  await choose("Class / stream", "B");
-  expect(summary()).toMatch(/^1 learner in Grade 5, class B will move/);
-  expect(button(/^Graduate 1 learner$/)).toBeTruthy();
+  expect(listed()).toEqual(["Anna Mani", "Kevin Otieno", "Grace Wanjiru"]);
+  expect(document.body.textContent).toContain("Grade 5 · A");
+  expect(document.body.textContent).not.toContain("Old Timer");
 
   await unmount();
 });
 
-test("one chosen learner is named, and the grade and class no longer apply", async () => {
+test("ticks survive filtering, and the count says how many are hidden", async () => {
   const { unmount } = await open();
 
-  await choose("Learners", "3");
+  await tick("Anna Mani");
+  await choose("Grade", "Grade 6");
+  expect(listed()).toEqual(["Grace Wanjiru"]);
+  await tick("Grace Wanjiru");
 
-  expect(summary()).toMatch(/^Grace Wanjiru will move to/);
-  expect(field("Grade").disabled).toBe(true);
-  expect(field("Class / stream").disabled).toBe(true);
+  expect(summary()).toMatch(/^2 learners ticked will move to Term B/);
+  expect(hidden()).toBe("(1 not shown by the filters)");
+
+  await choose("Grade", "");
+  expect(tickbox("Anna Mani").checked).toBe(true);
+  expect(tickbox("Grace Wanjiru").checked).toBe(true);
+  expect(hidden()).toBeUndefined();
 
   await unmount();
 });
 
-test("the term and its own year are sent together, with who is moving", async () => {
+test("ticking everyone shown takes only the learners the filters show", async () => {
   const { unmount, onConfirm } = await open();
 
-  await choose("Grade", "Grade 5");
-  await choose("Next grade", "Grade 6");
-  await act(async () => Simulate.click(button(/^Graduate 2 learners$/)));
+  await choose("Class / stream", "A");
+  await tickAllShown();
+  await choose("Class / stream", "");
 
-  expect(onConfirm).toHaveBeenCalledTimes(1);
+  expect(tickbox("Kevin Otieno").checked).toBe(false);
+  await act(async () => Simulate.click(button(/^Move 2 learners$/)));
+  expect(onConfirm.mock.calls[0][0].learner_ids).toEqual([1, 3]);
+
+  await unmount();
+});
+
+test("the search finds learners by name", async () => {
+  const { unmount } = await open();
+
+  await act(async () => Simulate.change(field("Search name"), { target: { value: "kev" } }));
+
+  expect(listed()).toEqual(["Kevin Otieno"]);
+
+  await unmount();
+});
+
+test("moving each up one grade is sent as 'up' with the ticked learners and the term", async () => {
+  const { unmount, onConfirm } = await open();
+
+  await tick("Anna Mani");
+  await tick("Grace Wanjiru");
+  await choose("Next class", "up");
+  expect(summary()).toMatch(/will move to Term B \d+ and each up one grade\.$/);
+  await act(async () => Simulate.click(button(/^Move 2 learners$/)));
+
   expect(onConfirm).toHaveBeenCalledWith({
-    grade: "Grade 5",
+    learner_ids: [1, 3],
     next_term: "Term B",
     academic_year: YEAR,
-    next_grade: "Grade 6",
+    next_grade: "up",
   });
 
   await unmount();
 });
 
-test("choosing a later year's term sends that year, not this one", async () => {
-  const { unmount, onConfirm } = await open();
-
-  await choose("Next term", `${YEAR + 1}|Term C`);
-  await act(async () => Simulate.click(button(/^Graduate 3 learners$/)));
-
-  expect(onConfirm.mock.calls[0][0]).toMatchObject({
-    next_term: "Term C",
-    academic_year: YEAR + 1,
-  });
-  expect(onConfirm.mock.calls[0][0]).not.toHaveProperty("next_grade");
-
-  await unmount();
-});
-
-test("a chosen learner is sent by id, without a grade or class filter", async () => {
-  const { unmount, onConfirm } = await open();
-
-  await choose("Learners", "3");
-  await act(async () => Simulate.click(button(/^Graduate 1 learner$/)));
-
-  expect(onConfirm.mock.calls[0][0]).toEqual({
-    learner_ids: [3],
-    next_term: "Term B",
-    academic_year: YEAR,
-  });
-
-  await unmount();
-});
-
-test("nothing can be confirmed until a term is chosen", async () => {
+test("a class move alone, with the term kept, sends no term", async () => {
   const { unmount, onConfirm } = await open();
 
   await choose("Next term", "");
+  await choose("Next class", "up");
+  await tick("Kevin Otieno");
+  expect(summary()).toBe("1 learner ticked will each move up one grade.");
+  await choose("Next class", "Grade 7");
+  expect(summary()).toBe("1 learner ticked will move to Grade 7.");
+  await act(async () => Simulate.click(button(/^Move 1 learner$/)));
 
-  expect(button(/^Graduate 3 learners$/).disabled).toBe(true);
-  expect(summary()).toBe("Choose the term they are moving to.");
-  await act(async () => Simulate.click(button(/^Graduate 3 learners$/)));
+  expect(onConfirm).toHaveBeenCalledWith({ learner_ids: [2], next_grade: "Grade 7" });
+
+  await unmount();
+});
+
+test("nothing can be confirmed until someone is ticked and something changes", async () => {
+  const { unmount, onConfirm } = await open();
+
+  expect(summary()).toBe("Tick the learners who are moving.");
+  expect(button(/^Move 0 learners$/).disabled).toBe(true);
+
+  await tick("Anna Mani");
+  await choose("Next term", "");
+  expect(summary()).toBe("Choose a term, a class, or both.");
+  expect(button(/^Move 1 learner$/).disabled).toBe(true);
+  await act(async () => Simulate.click(button(/^Move 1 learner$/)));
   expect(onConfirm).not.toHaveBeenCalled();
 
   await unmount();
 });
 
-test("with no term set up it says what to do instead of offering nothing", async () => {
-  const { unmount } = await open({ academicTerms: [] });
+test("Clear ticks empties the selection", async () => {
+  const { unmount } = await open();
 
-  expect(document.body.textContent).toMatch(/No current or upcoming term is set up/);
-  expect(document.body.textContent).toMatch(/Academic Years and\s+Terms/);
-  expect(field("Next term").disabled).toBe(true);
-  expect(button(/^Graduate/).disabled).toBe(true);
+  await tick("Anna Mani");
+  await tick("Kevin Otieno");
+  await act(async () => Simulate.click(button(/^Clear ticks$/)));
+
+  expect(tickbox("Anna Mani").checked).toBe(false);
+  expect(summary()).toBe("Tick the learners who are moving.");
 
   await unmount();
 });
 
-test("a class nobody is in cannot be graduated", async () => {
-  const { unmount } = await open();
+test("with no term set up it says what to do, and a class move still works", async () => {
+  const { unmount } = await open({ academicTerms: [] });
 
-  await choose("Grade", "Grade 7");
-
-  expect(summary()).toMatch(/^0 learners in Grade 7 will move/);
-  expect(button(/^Graduate 0 learners$/).disabled).toBe(true);
+  expect(document.body.textContent).toMatch(/No current or upcoming term is set up/);
+  await tick("Anna Mani");
+  await choose("Next class", "up");
+  expect(button(/^Move 1 learner$/).disabled).toBe(false);
 
   await unmount();
 });

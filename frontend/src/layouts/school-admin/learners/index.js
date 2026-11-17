@@ -31,6 +31,7 @@ import LearnerCredentialsDialog, {
   credentialsFromCreatedLearner,
 } from "components/LearnerCredentialsDialog";
 import PromoteLearnersDialog from "./PromoteLearnersDialog";
+import LearnerNameCheck from "./LearnerNameCheck";
 import { apiClient } from "lib/api";
 import API_BASE_URL from "lib/apiBase";
 import { getCachedPage, setCachedPage } from "lib/pageCache";
@@ -376,6 +377,7 @@ function SchoolAdminLearners() {
                     </MDInput>
                   </Grid>
                 </Grid>
+                <LearnerNameCheck learners={learners} form={form} />
                 {error && (
                   <MDTypography variant="caption" color="error" display="block" mt={2}>
                     {error}

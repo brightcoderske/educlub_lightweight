@@ -12,11 +12,20 @@ const config = require("../src/config");
 
 const written = [];
 let updated = [];
+// What "SELECT id, grade" finds when each learner moves up from their own grade.
+let chosen = [];
 config.query = async (text, params = []) => {
   const sql = text.replace(/\s+/g, " ").trim();
   if (/^UPDATE learners SET /.test(sql)) {
     written.push({ sql, params });
-    return { rows: updated, rowCount: updated.length };
+    // Moving up writes one group of learners per statement; answer with them.
+    const ids = params.find(Array.isArray);
+    const rows = /grade = \$1/.test(sql) && ids && chosen.length ? ids.map((id) => ({ id })) : updated;
+    return { rows, rowCount: rows.length };
+  }
+  if (/^SELECT id, grade FROM learners WHERE /.test(sql)) {
+    written.push({ sql, params });
+    return { rows: chosen, rowCount: chosen.length };
   }
   throw new Error(`a promotion test ran a statement it has no answer for: ${sql}`);
 };
@@ -43,6 +52,7 @@ async function promote(body, user = schoolAdmin) {
 function reset(rows = [{ id: 1 }, { id: 2 }]) {
   written.length = 0;
   updated = rows;
+  chosen = [];
 }
 
 test("moving to a term writes the term and its own year, whatever year the client sent", async () => {
@@ -116,6 +126,40 @@ test("a term that was never created is refused with the reason", async () => {
   assert.equal(written.length, 0, "nothing was changed");
 });
 
+test("moving up one grade moves each chosen learner from their own grade, once", async () => {
+  reset([]);
+  chosen = [
+    { id: 1, grade: "Grade 5" },
+    { id: 2, grade: "Grade 5" },
+    { id: 3, grade: "Grade 6" },
+    { id: 4, grade: "Grade 12" },
+  ];
+
+  const res = await promote({
+    next_term: "Term 1",
+    academic_year: 2027,
+    next_grade: "up",
+    learner_ids: [1, 2, 3, 4],
+  });
+
+  assert.equal(res.statusCode, 200);
+  const [select, ...updates] = written;
+  assert.match(select.sql, /AND id = ANY\(\$2\)/, "only the chosen learners are read");
+  // One statement per destination grade, each naming exactly its learners: a
+  // Grade 5 learner moved to Grade 6 is never picked up again with Grade 6.
+  const byGrade = Object.fromEntries(
+    updates.filter((u) => /grade = \$1/.test(u.sql)).map((u) => [u.params[0], u.params.at(-1)])
+  );
+  assert.deepEqual(byGrade, { "Grade 6": [1, 2], "Grade 7": [3] });
+  // Grade 12 has no next grade: it moves term only.
+  const termOnly = updates.find((u) => !/grade = /.test(u.sql));
+  assert.match(termOnly.sql, /SET term = \$1, academic_year = \$2/);
+  assert.deepEqual(termOnly.params.at(-1), [4]);
+  assert.match(res.body.message, /^Moved \d+ learners? to Term 1 2027, the next grade\./);
+  assert.match(res.body.message, /1 had no next grade \(Grade 12, or none recorded\) and kept their grade\./);
+  assert.ok(updates.every((u) => u.params.includes(2)), "every statement stays in the admin's school");
+});
+
 test("a grade or a term has to be given", async () => {
   reset();
 
@@ -124,4 +168,13 @@ test("a grade or a term has to be given", async () => {
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.error, "Next grade or next term is required");
   assert.equal(written.length, 0);
+});
+
+test("the next grade is the one after, and there is none after Grade 12", () => {
+  const { nextGrade } = require("../src/utils/grade");
+  assert.equal(nextGrade("Grade 5"), "Grade 6");
+  assert.equal(nextGrade(" grade 11 "), "Grade 12");
+  assert.equal(nextGrade("Grade 12"), null);
+  assert.equal(nextGrade(""), null);
+  assert.equal(nextGrade("Form 2"), null);
 });

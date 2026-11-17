@@ -7,7 +7,7 @@ const { resolveLearnerSchoolScope } = require("../services/learnerScope");
 const { generateRandomPassword, hashPassword } = require("../utils/password");
 const teacherAssignmentsService = require("../services/teacherAssignments.service");
 const academicService = require("../services/academic.service");
-const { normalizeGrade } = require("../utils/grade");
+const { normalizeGrade, nextGrade } = require("../utils/grade");
 const streakService = require("../services/streak.service");
 const { getLearnerTrend } = require("../services/schoolPopulation.service");
 const userEmailService = require("../services/userEmail.service");
@@ -469,76 +469,102 @@ async function promoteLearners(req, res) {
       }
     }
 
-    const params = [];
-    let paramIndex = 1;
-    const updates = [];
-    let queryText = "UPDATE learners SET ";
-
     // Promotion targets a real class, so the same canonical form applies here
-    // as on create: "Grade 7", never a bare "7" from a caller.
-    const promotionGrade = normalizeGrade(next_grade);
-    if (next_grade && !promotionGrade) {
+    // as on create: "Grade 7", never a bare "7" from a caller. "up" instead
+    // moves each chosen learner from their own grade to the next one.
+    const gradeUp = next_grade === "up";
+    const promotionGrade = gradeUp ? null : normalizeGrade(next_grade);
+    if (next_grade && !gradeUp && !promotionGrade) {
       return res
         .status(400)
         .json({ error: "Next grade must be a grade between 1 and 12." });
     }
 
-    if (promotionGrade) {
-      updates.push(`grade = $${paramIndex}`);
-      params.push(promotionGrade);
-      paramIndex++;
-    }
-
-    if (promotionTerm) {
-      updates.push(`term = $${paramIndex}`);
-      params.push(promotionTerm.term);
-      paramIndex++;
-    }
-
-    // The year is written only together with the term it belongs to, taken from
-    // that term and never from a separate client value, so the two cannot
-    // disagree on the record. Moving up a grade alone leaves the year as it is.
-    if (promotionTerm?.academic_year) {
-      updates.push(`academic_year = $${paramIndex}`);
-      params.push(promotionTerm.academic_year);
-      paramIndex++;
-    }
-
-    updates.push("updated_at = NOW()");
-    // Someone who has already graduated has left the school; moving a whole
-    // class on must not drag them into the next term with it.
-    queryText += `${updates.join(", ")} WHERE school_id = $${paramIndex} AND graduation_status <> 'graduated'`;
-    params.push(schoolId);
-    paramIndex++;
-
+    // Who moves. Someone who has already graduated has left the school; moving
+    // a whole class on must not drag them into the next term with it.
+    const scopeParams = [schoolId];
+    let scope = "school_id = $1 AND graduation_status <> 'graduated'";
     if (Array.isArray(learner_ids) && learner_ids.length > 0) {
-      queryText += ` AND id = ANY($${paramIndex})`;
-      params.push(learner_ids);
-      paramIndex++;
+      scopeParams.push(learner_ids);
+      scope += ` AND id = ANY($${scopeParams.length})`;
     } else {
       if (grade) {
-        queryText += ` AND grade = $${paramIndex}`;
-        params.push(grade);
-        paramIndex++;
+        scopeParams.push(grade);
+        scope += ` AND grade = $${scopeParams.length}`;
       }
-
       if (stream) {
-        queryText += ` AND stream = $${paramIndex}`;
-        params.push(stream);
-        paramIndex++;
+        scopeParams.push(stream);
+        scope += ` AND stream = $${scopeParams.length}`;
       }
     }
 
-    queryText += " RETURNING *";
+    // One UPDATE setting the grade (when there is one), the term and the term's
+    // year. The year is written only together with the term it belongs to,
+    // taken from that term and never from a separate client value, so the two
+    // cannot disagree on the record. Moving up a grade alone leaves the year
+    // as it is. `where` is numbered from $1 and is renumbered after the SET.
+    const moveLearners = async (newGrade, where, whereParams) => {
+      const params = [];
+      const updates = [];
+      if (newGrade) {
+        params.push(newGrade);
+        updates.push(`grade = $${params.length}`);
+      }
+      if (promotionTerm) {
+        params.push(promotionTerm.term);
+        updates.push(`term = $${params.length}`);
+      }
+      if (promotionTerm?.academic_year) {
+        params.push(promotionTerm.academic_year);
+        updates.push(`academic_year = $${params.length}`);
+      }
+      if (!updates.length) return [];
+      updates.push("updated_at = NOW()");
+      const offset = params.length;
+      const renumbered = where.replace(/\$(\d+)/g, (_, number) => `$${Number(number) + offset}`);
+      const result = await query(
+        `UPDATE learners SET ${updates.join(", ")} WHERE ${renumbered} RETURNING *`,
+        [...params, ...whereParams]
+      );
+      return result.rows;
+    };
 
-    const result = await query(queryText, params);
+    let movedLearners;
+    let keptGrade = 0;
+    if (gradeUp) {
+      // Each learner is read first and moved once, grouped by the grade they
+      // move into, so nobody is carried up two grades in one go. Anyone with no
+      // next grade (Grade 12, or none recorded) keeps it and still moves term.
+      const chosen = await query(`SELECT id, grade FROM learners WHERE ${scope}`, scopeParams);
+      const idsByTarget = new Map();
+      chosen.rows.forEach((learner) => {
+        const target = nextGrade(learner.grade);
+        if (!target) keptGrade += 1;
+        if (!idsByTarget.has(target)) idsByTarget.set(target, []);
+        idsByTarget.get(target).push(learner.id);
+      });
+      movedLearners = [];
+      for (const [target, ids] of idsByTarget) {
+        movedLearners.push(
+          ...(await moveLearners(target, "school_id = $1 AND id = ANY($2)", [schoolId, ids]))
+        );
+      }
+    } else {
+      movedLearners = await moveLearners(promotionGrade, scope, scopeParams);
+    }
+
     const moved = [
       promotionTerm && [promotionTerm.term, promotionTerm.academic_year].filter(Boolean).join(" "),
       promotionGrade,
+      gradeUp && "the next grade",
     ].filter(Boolean);
+    const count = movedLearners.length;
+    const kept = keptGrade
+      ? ` ${keptGrade} had no next grade (Grade 12, or none recorded) and kept their grade.`
+      : "";
     res.json({
-      message: `Moved ${result.rows.length} ${result.rows.length === 1 ? "learner" : "learners"} to ${moved.join(", ")}.`,
-      learners: result.rows,
+      message: `Moved ${count} ${count === 1 ? "learner" : "learners"} to ${moved.join(", ")}.${kept}`,
+      learners: movedLearners,
     });
   } catch (error) {
     console.error("Promote learners error:", error);

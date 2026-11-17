@@ -147,23 +147,32 @@ test("a learner who could not be created gets no popup", async () => {
   await unmount();
 });
 
-test("Bulk Graduate asks for the next term and moves the class into it", async () => {
+const tickEveryoneShown = () =>
+  act(async () =>
+    Simulate.change(document.body.querySelector('input[aria-label="Tick everyone shown"]'), {
+      target: { checked: true },
+    })
+  );
+
+test("Bulk Graduate moves the ticked learners into the next term", async () => {
   apiClient.post.mockResolvedValue({ message: "Moved 2 learners to Term B " + YEAR + "." });
   const { unmount } = await renderInApp(<SchoolAdminLearners />);
 
   await act(async () => Simulate.click(button(/Bulk Graduate/)));
 
-  expect(document.body.textContent).toMatch(/Graduate learners to the next term/);
-  expect(document.body.textContent).toMatch(/1\. Which term are they moving to\?/);
+  expect(document.body.textContent).toMatch(/Move learners to the next term or class/);
+  expect(document.body.textContent).toMatch(/1\. Where are they moving\?/);
 
-  await act(async () => Simulate.click(button(/^Graduate 2 learners$/)));
+  await tickEveryoneShown();
+  await act(async () => Simulate.click(button(/^Move 2 learners$/)));
 
   expect(apiClient.post).toHaveBeenCalledWith("/learners/promote", {
+    learner_ids: [1, 2],
     next_term: "Term B",
     academic_year: YEAR,
   });
   // The dialog is put away, and what it did is left on the page where it can be read.
-  expect(document.body.textContent).not.toMatch(/Graduate learners to the next term/);
+  expect(document.body.textContent).not.toMatch(/Move learners to the next term or class/);
   const notice = document.body.querySelector('[role="alert"]');
   expect(notice.textContent).toBe(`Moved 2 learners to Term B ${YEAR}.`);
 
@@ -184,9 +193,10 @@ test("a failed graduation is explained inside the dialog and leaves it open", as
   const { unmount } = await renderInApp(<SchoolAdminLearners />);
 
   await act(async () => Simulate.click(button(/Bulk Graduate/)));
-  await act(async () => Simulate.click(button(/^Graduate 2 learners$/)));
+  await tickEveryoneShown();
+  await act(async () => Simulate.click(button(/^Move 2 learners$/)));
 
-  expect(document.body.textContent).toMatch(/Graduate learners to the next term/);
+  expect(document.body.textContent).toMatch(/Move learners to the next term or class/);
   expect(document.body.textContent).toContain('Term "Term B" does not exist.');
 
   await unmount();

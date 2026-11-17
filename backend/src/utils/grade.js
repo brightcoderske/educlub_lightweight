@@ -31,4 +31,15 @@ function gradeOptions() {
   return Array.from({ length: MAX_GRADE }, (_, index) => `Grade ${index + 1}`);
 }
 
-module.exports = { normalizeGrade, gradeOptions, MIN_GRADE, MAX_GRADE };
+/**
+ * The grade after `value` ("Grade 6" for "Grade 5"), or null when there is
+ * none: Grade 12, or a value that is not a grade at all.
+ */
+function nextGrade(value) {
+  const grade = normalizeGrade(value);
+  if (!grade) return null;
+  const number = Number(grade.replace("Grade ", ""));
+  return number < MAX_GRADE ? `Grade ${number + 1}` : null;
+}
+
+module.exports = { normalizeGrade, nextGrade, gradeOptions, MIN_GRADE, MAX_GRADE };
