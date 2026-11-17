@@ -217,13 +217,19 @@ Pick a quiet hour (no lessons), then:
 
 1. Repeat **step 3** so the newest data and uploads are copied, then run step 4 again (delete
    `~/educlub-step4.log` first if you use the cron job).
-2. **DNS**: point `educlub.co.ke`, `www` and `runner` at Novahost. The simplest is to switch the domain's
-   nameservers to Novahost's, which also moves mail. Then *SSL/TLS Status* › **Run AutoSSL**. Leave
-   `learn` out: it is retired.
+2. **DNS** is in Cloudflare; keep every record grey ("DNS only"), and leave the nameservers as they are:
+   - `educlub.co.ke` A → `185.93.220.243`
+   - `www` CNAME → `educlub.co.ke`
+   - `runner`: delete the Vercel CNAME, add A `runner` → `185.93.220.243`
+   - `learn`: delete (retired)
+
+   Then *SSL/TLS Status* › **Run AutoSSL** straight away: browsers warn until the certificate is issued.
+   Leave the mail records (`mail`, MX, SPF, DKIM, DMARC) alone; email moves as a separate step later.
 3. **Flutterwave**: in the Flutterwave dashboard, *Settings › Webhooks*, change the URL to
    `https://educlub.co.ke/api/payments/flutterwave/webhook`. That one address handles both course and
    competition payments; the secret hash stays as it is.
-4. **Vercel**: remove `educlub.co.ke`, `www.educlub.co.ke` and `runner.educlub.co.ke` from the Vercel project.
+4. **Vercel**: remove `educlub.co.ke`, `www.educlub.co.ke` and `runner.educlub.co.ke` from the Vercel project,
+   then the `_vercel` TXT record in Cloudflare.
 5. Sign in as a learner and a teacher, open a course (its pictures should show), run a Python activity,
    look at a school logo and a competition banner, and send a password reset.
 6. Leave the old HostAfrica app running, unchanged, for a week in case anything was missed.
