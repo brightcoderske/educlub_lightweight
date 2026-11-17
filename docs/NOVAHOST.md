@@ -37,13 +37,15 @@ You can do all of this before moving DNS; nothing is live until Part H.
 
 1. **`educlub.co.ke`**: *Domains* › **Create A New Domain**, untick *Share document root*, document root
    `apps/educlub-public`.
-2. **`learn.educlub.co.ke`**: create it with the **same document root, `apps/educlub-public`**. It must keep
-   working: logos, banners, activity images and learners' files are stored in the database with
-   `https://learn.educlub.co.ke/uploads/...` addresses, and Flutterwave sends payment notices there.
-3. **`runner.educlub.co.ke`**: create it with document root `apps/educlub-runner`. It must stay a different
-   address from the site: learners' Python runs there so it can never reach a signed-in session.
-4. **`www.educlub.co.ke`**: *Redirects* › permanent (301) redirect to `https://educlub.co.ke`.
-5. **SSL**: *SSL/TLS Status* › **Run AutoSSL** for all four once DNS points at Novahost (Part H).
+2. **`runner.educlub.co.ke`**: create it with document root `apps/educlub-runner`. It must stay a different
+   address from the site: learners' Python runs there so it can never reach a signed-in session. Python
+   activities need it, so its DNS must point at Novahost too.
+3. **`www.educlub.co.ke`**: *Redirects* › permanent (301) redirect to `https://educlub.co.ke`.
+4. **`learn.educlub.co.ke`** (optional, a safety net): the old API address is retired, and nothing in the app
+   uses it once Part E step 5 has run. To keep old links in emails and bookmarks working, add it with any
+   document root and, under *Redirects*, a permanent (301) redirect to `https://educlub.co.ke` with
+   *Wild Card Redirect* ticked, so `learn.educlub.co.ke/uploads/x.png` lands on `educlub.co.ke/uploads/x.png`.
+5. **SSL**: *SSL/TLS Status* › **Run AutoSSL** for each of these once DNS points at Novahost (Part H).
 
 ## Part C. Get the code onto the server
 
@@ -82,8 +84,7 @@ mkdir -p ~/apps/educlub-public ~/apps/educlub-runner
    NODE_ENV=production
    DATABASE_URL=mysql://CPANELUSER_educlub:THE_PASSWORD@localhost:3306/CPANELUSER_educlub
    FRONTEND_URL=https://educlub.co.ke
-   PUBLIC_BASE_URL=https://educlub.co.ke
-   CORS_ORIGINS=https://educlub.co.ke,https://www.educlub.co.ke,https://learn.educlub.co.ke
+   CORS_ORIGINS=https://educlub.co.ke,https://www.educlub.co.ke
    EMAIL_HOST=mail.educlub.co.ke          (and EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD from Part F)
    ```
 
@@ -120,6 +121,22 @@ mkdir -p ~/apps/educlub-public ~/apps/educlub-runner
    tar -xzf ~/educlub-uploads.tar.gz -C ~/apps/educlub/backend
    ```
 
+5. **Drop the old host from saved addresses.** Uploads were saved as `https://learn.educlub.co.ke/uploads/...`;
+   the app now saves `/uploads/...` and needs the old ones changed to match. First see what would change
+   (this changes nothing):
+
+   ```bash
+   cd ~/apps/educlub/backend && node scripts/rewrite-upload-urls.js
+   ```
+
+   It lists each table and column with the number of values found. Then make the change:
+
+   ```bash
+   node scripts/rewrite-upload-urls.js --apply
+   ```
+
+   Running it again reports "Nothing to do". Run it after every database copy (Part H repeats this).
+
 ## Part F. Email
 
 1. *Email Accounts*: recreate the mailboxes eduClub sends from (the address in `EMAIL_USER` / `EMAIL_FROM`).
@@ -153,13 +170,19 @@ database and the app agree on the time.
 
 Pick a quiet hour (no lessons), then:
 
-1. Repeat **Part E steps 2-4** so the newest data and uploads are copied, and run
-   `bash scripts/deploy.sh --force --no-pull` once more.
-2. **DNS**: point `educlub.co.ke`, `www`, `learn` and `runner` at Novahost (the simplest is to switch the
-   domain's nameservers to Novahost's, which also moves mail). Then run AutoSSL (Part B step 5).
-3. **Vercel**: remove `educlub.co.ke`, `www.educlub.co.ke` and `runner.educlub.co.ke` from the Vercel project.
-4. Sign in as a learner and a teacher, open a course, run a Python activity, and send a password reset.
-5. Leave the old HostAfrica app running, unchanged, for a week in case anything was missed.
+1. Repeat **Part E steps 2-5** so the newest data and uploads are copied and their addresses rewritten,
+   then run `bash scripts/deploy.sh --force --no-pull` once more.
+2. **DNS**: point `educlub.co.ke`, `www` and `runner` (and `learn`, if you kept the redirect) at Novahost.
+   The simplest is to switch the domain's nameservers to Novahost's, which also moves mail. Then run
+   AutoSSL (Part B step 5).
+3. **Flutterwave**: in the Flutterwave dashboard, *Settings › Webhooks*, change the URL to
+   `https://educlub.co.ke/api/payments/flutterwave/webhook`. That one address handles both course and
+   competition payments. Payment notices are POSTs, which a redirect does not carry, so this must point at
+   the new address directly; the secret hash stays as it is.
+4. **Vercel**: remove `educlub.co.ke`, `www.educlub.co.ke` and `runner.educlub.co.ke` from the Vercel project.
+5. Sign in as a learner and a teacher, open a course (its pictures should show), run a Python activity,
+   look at a school logo and a competition banner, and send a password reset.
+6. Leave the old HostAfrica app running, unchanged, for a week in case anything was missed.
 
 ## Every update after this
 

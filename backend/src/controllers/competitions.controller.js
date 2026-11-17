@@ -3,13 +3,7 @@ const fs = require("fs/promises");
 const path = require("path");
 const competitionsService = require("../services/competitions.service");
 const flutterwave = require("../services/flutterwave.service");
-
-function getPublicUploadUrl(req, relativePath) {
-  return `${req.protocol}://${req.get("host")}${relativePath.replace(
-    /\\/g,
-    "/"
-  )}`;
-}
+const { uploadUrl } = require("../utils/uploads");
 
 async function list(req, res) {
   try {
@@ -101,10 +95,7 @@ async function uploadBanner(req, res) {
     await fs.writeFile(path.join(uploadDir, safeName), buffer, { flag: "wx" });
 
     res.json({
-      image_url: getPublicUploadUrl(
-        req,
-        `/uploads/competition-banners/${safeName}`
-      ),
+      image_url: uploadUrl(`/uploads/competition-banners/${safeName}`),
     });
   } catch (error) {
     console.error("Upload competition banner error:", error);

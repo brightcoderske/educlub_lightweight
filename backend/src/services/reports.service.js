@@ -6,6 +6,7 @@ const path = require("path");
 const courseProgressService = require("./courseProgress.service");
 const { getBadgeTier } = require("./moduleBadges.service");
 const { getTypingBadge } = require("./typingBadges");
+const { uploadLocalPath } = require("../utils/uploads");
 
 const DEFAULT_REPORT_CARD_SETTINGS = Object.freeze({
   show_weekly_typing: true,
@@ -211,27 +212,6 @@ function getEduClubLogoPath() {
     "../../../uploads/educlub-logo/educlub logo.png"
   );
   return fs.existsSync(logoPath) ? logoPath : null;
-}
-
-function getUploadLocalPath(fileUrl) {
-  if (!fileUrl || typeof fileUrl !== "string") {
-    return null;
-  }
-
-  let uploadPath = fileUrl;
-  try {
-    if (/^https?:\/\//i.test(fileUrl)) {
-      uploadPath = new URL(fileUrl).pathname;
-    }
-  } catch (error) {
-    uploadPath = fileUrl;
-  }
-
-  if (!uploadPath.startsWith("/uploads/")) {
-    return null;
-  }
-
-  return path.join(__dirname, "../..", uploadPath);
 }
 
 function drawPill(doc, text, x, y, width, color) {
@@ -942,7 +922,7 @@ async function generateLearnerReportPDF(learnerId, term, academicYear) {
   }
 
   if (learner.school_logo) {
-    const localLogo = getUploadLocalPath(learner.school_logo);
+    const localLogo = uploadLocalPath(learner.school_logo);
     if (localLogo && fs.existsSync(localLogo)) {
       doc.image(localLogo, 55, 46, { width: 42 });
     } else {

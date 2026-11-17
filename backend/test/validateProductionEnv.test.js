@@ -10,7 +10,6 @@ function productionEnv(overrides = {}) {
     NODE_ENV: "production",
     JWT_SECRET: "a".repeat(64),
     FRONTEND_URL: "https://educlub.co.ke",
-    PUBLIC_BASE_URL: "https://learn.educlub.co.ke",
     CORS_ORIGINS: "https://educlub.co.ke,https://www.educlub.co.ke",
     EMAIL_HOST: "mail.educlub.co.ke",
     EMAIL_PORT: "465",
@@ -37,9 +36,9 @@ test("requires HTTPS public URLs in production", () => {
   assert.throws(
     () =>
       validateProductionEnv(
-        productionEnv({ PUBLIC_BASE_URL: "http://learn.educlub.co.ke" }),
+        productionEnv({ FRONTEND_URL: "http://educlub.co.ke" }),
       ),
-    /PUBLIC_BASE_URL must use HTTPS/,
+    /FRONTEND_URL must use HTTPS/,
   );
 });
 

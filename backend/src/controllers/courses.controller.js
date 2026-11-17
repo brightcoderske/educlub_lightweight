@@ -1,6 +1,7 @@
 const coursesService = require("../services/courses.service");
 const activityDrafts = require("../services/activityDrafts.service");
 const { respondWithError } = require("../utils/httpErrors");
+const { uploadUrl } = require("../utils/uploads");
 const { writeModulePdf } = require("../services/modulePdf.service");
 const flutterwave = require("../services/flutterwave.service");
 const fs = require("fs/promises");
@@ -73,14 +74,6 @@ function isAllowedSubmissionFile(fileName = "", mimeType = "") {
   return SUBMISSION_FILE_TYPES.includes(normalizedMimeType);
 }
 
-function getPublicUploadUrl(req, relativePath) {
-  const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.API_PUBLIC_URL;
-  if (publicBaseUrl) {
-    return `${publicBaseUrl.replace(/\/$/, "")}${relativePath}`;
-  }
-  return `${req.protocol}://${req.get("host")}${relativePath}`;
-}
-
 async function saveDataUpload(req, folder, options = {}) {
   const { fileName, dataUrl } = req.body || {};
   const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl || "");
@@ -123,7 +116,7 @@ async function saveDataUpload(req, folder, options = {}) {
   const uploadDir = path.join(__dirname, "../../uploads", folder);
   await fs.mkdir(uploadDir, { recursive: true });
   await fs.writeFile(path.join(uploadDir, safeName), buffer, { flag: "wx" });
-  return getPublicUploadUrl(req, `/uploads/${folder}/${safeName}`);
+  return uploadUrl(`/uploads/${folder}/${safeName}`);
 }
 
 async function getAllCourses(req, res) {

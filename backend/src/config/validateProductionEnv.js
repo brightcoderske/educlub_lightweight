@@ -41,7 +41,6 @@ function validateProductionEnv(environment) {
   }
 
   parseHttpsUrl("FRONTEND_URL", environment.FRONTEND_URL);
-  parseHttpsUrl("PUBLIC_BASE_URL", environment.PUBLIC_BASE_URL);
 
   const origins = String(environment.CORS_ORIGINS || "")
     .split(",")

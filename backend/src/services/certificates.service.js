@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const PDFDocument = require("pdfkit");
 const { query } = require("../config");
+const { uploadLocalPath } = require("../utils/uploads");
 
 const CERTIFICATE_COLORS = {
   navy: "#061a3a",
@@ -279,20 +280,6 @@ async function approveCertificate(id, approvedBy, user = {}) {
   return getCertificateRow(id);
 }
 
-function getUploadLocalPath(fileUrl) {
-  if (!fileUrl || typeof fileUrl !== "string") return null;
-  let uploadPath = fileUrl;
-  try {
-    if (/^https?:\/\//i.test(fileUrl)) {
-      uploadPath = new URL(fileUrl).pathname;
-    }
-  } catch (error) {
-    uploadPath = fileUrl;
-  }
-  if (!uploadPath.startsWith("/uploads/")) return null;
-  return path.join(__dirname, "../..", uploadPath);
-}
-
 function drawCenteredText(doc, text, y, options = {}) {
   doc
     .font(options.font || "Helvetica")
@@ -306,7 +293,7 @@ function drawCenteredText(doc, text, y, options = {}) {
 }
 
 function drawSchoolMark(doc, certificate, x, y) {
-  const localLogo = getUploadLocalPath(certificate.school_logo_url);
+  const localLogo = uploadLocalPath(certificate.school_logo_url);
   if (localLogo && fs.existsSync(localLogo)) {
     doc.image(localLogo, x, y, { width: 54, height: 54, fit: [54, 54] });
   } else {

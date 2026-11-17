@@ -22,6 +22,15 @@ test("resource links accept explicit web URLs and escape teacher text", () => {
   );
 });
 
+test("an uploaded image, stored as a path alone, stays editable; other paths do not pass", () => {
+  expect(
+    resourceHtml({ type: "image", url: "/uploads/activity-images/123-photo.webp", alt: "Kit" })
+  ).toContain('src="/uploads/activity-images/123-photo.webp"');
+  for (const url of ["/uploads/../backend/.env", "/admin", "//evil.example/x.png"]) {
+    expect(() => resourceHtml({ type: "image", url })).toThrow(/http/i);
+  }
+});
+
 test("one executable source editor remains compatible with learner payloads", () => {
   const source =
     "<style>h1 { color: teal; }</style><h1>Hello</h1><script>document.body.dataset.ok = '1';</script>";

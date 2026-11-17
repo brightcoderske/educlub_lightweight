@@ -66,6 +66,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       strictPort: true,
+      // Uploads are stored as /uploads/... paths, which production serves from
+      // the site's own address. In development the API is a separate server.
+      proxy: { "/uploads": "http://localhost:4000" },
     },
     define: {
       "globalThis.__EDUCLUB_API_URL__": JSON.stringify(

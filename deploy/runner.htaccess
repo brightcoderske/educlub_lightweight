@@ -6,7 +6,7 @@ Options -Indexes
 
 <IfModule mod_headers.c>
   <Files "python-runner.html">
-    Header set Content-Security-Policy "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors https://educlub.co.ke https://www.educlub.co.ke https://learn.educlub.co.ke; script-src 'self' https://cdn.jsdelivr.net; worker-src 'self' blob:; connect-src https://cdn.jsdelivr.net; style-src 'self'"
+    Header set Content-Security-Policy "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors https://educlub.co.ke https://www.educlub.co.ke; script-src 'self' https://cdn.jsdelivr.net; worker-src 'self' blob:; connect-src https://cdn.jsdelivr.net; style-src 'self'"
     Header set Referrer-Policy "strict-origin"
     Header set Cache-Control "public, max-age=0, must-revalidate"
   </Files>

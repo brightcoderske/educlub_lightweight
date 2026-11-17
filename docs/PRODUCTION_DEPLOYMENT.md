@@ -73,7 +73,6 @@ Important production values:
 
 ```text
 NODE_ENV=production
-PUBLIC_BASE_URL=https://learn.educlub.co.ke
 FRONTEND_URL=https://educlub.co.ke
 CORS_ORIGINS=https://educlub.co.ke,https://www.educlub.co.ke
 DB_POOL_MAX=4

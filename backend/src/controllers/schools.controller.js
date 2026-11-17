@@ -1,13 +1,7 @@
 const { query } = require("../config");
 const fs = require("fs/promises");
 const path = require("path");
-
-function getPublicUploadUrl(req, relativePath) {
-  return `${req.protocol}://${req.get("host")}${relativePath.replace(
-    /\\/g,
-    "/"
-  )}`;
-}
+const { uploadUrl } = require("../utils/uploads");
 
 function cleanTextField(value) {
   if (value === null || value === undefined) {
@@ -317,7 +311,7 @@ async function uploadSchoolLogo(req, res) {
     await fs.writeFile(filePath, Buffer.from(match[2], "base64"), { flag: "wx" });
 
     res.json({
-      logo_url: getPublicUploadUrl(req, `/uploads/school-logos/${safeName}`),
+      logo_url: uploadUrl(`/uploads/school-logos/${safeName}`),
     });
   } catch (error) {
     console.error("Upload school logo error:", error);

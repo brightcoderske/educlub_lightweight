@@ -7,8 +7,13 @@ export function escapeHtml(value = "") {
     .replace(/'/g, "&#039;");
 }
 
+// The site's own uploads are stored as a path alone (/uploads/...), so an
+// uploaded image has to stay editable without a host in front of it.
+const OWN_UPLOAD_PATH = /^\/uploads\/[\w./-]+$/;
+
 export function normalizeHttpUrl(value) {
   const url = String(value || "").trim();
+  if (OWN_UPLOAD_PATH.test(url) && !url.includes("..")) return url;
   let parsed;
 
   try {
@@ -164,9 +169,7 @@ export function interactiveBlockHtml({
   prompt = "",
   answer = "",
 }) {
-  const safeType = ["flash_card", "reveal", "self_check"].includes(type)
-    ? type
-    : "flash_card";
+  const safeType = ["flash_card", "reveal", "self_check"].includes(type) ? type : "flash_card";
   const safeTitle = escapeHtml(title);
   const safePrompt = escapeHtml(prompt);
   const safeAnswer = escapeHtml(answer);
@@ -189,7 +192,9 @@ export function interactiveBlockHtml({
       : ""
   }<button type="button" data-interactive-toggle="true" style="padding:8px 12px;border:0;border-radius:7px;background:${
     isSelfCheck ? "#16a34a" : "#7c3aed"
-  };color:#ffffff;cursor:pointer">${isSelfCheck ? "Check answer" : "Show answer"}</button><div data-interactive-answer="true" hidden style="margin-top:10px;padding:10px;border-radius:8px;background:#ffffff;color:#334155;white-space:pre-wrap">${safeAnswer}</div></div><p><br></p>`;
+  };color:#ffffff;cursor:pointer">${
+    isSelfCheck ? "Check answer" : "Show answer"
+  }</button><div data-interactive-answer="true" hidden style="margin-top:10px;padding:10px;border-radius:8px;background:#ffffff;color:#334155;white-space:pre-wrap">${safeAnswer}</div></div><p><br></p>`;
 }
 
 export function buildEarlyUnlockPayload({
