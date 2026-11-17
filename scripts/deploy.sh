@@ -254,13 +254,14 @@ fi
 # ---------------------------------------------------------------- restart, and confirm the new version answers
 write_release "$NEW"
 
-# LiteSpeed can leave an old worker running after a restart is requested. Only Node processes whose
-# working folder is exactly the backend are stopped: never this script or a terminal open there.
+# LiteSpeed can leave an old worker running after a restart is requested. Only processes that ARE Node
+# (named node, or lsnode:... for LiteSpeed's workers) with the backend as working folder are stopped:
+# never this script, and never a shell someone has open there, whatever it is running.
 for proc in /proc/[0-9]*; do
   pid="${proc##*/}"
   [[ "$pid" == "$$" || "$pid" == "$PPID" ]] && continue
   [[ "$(readlink "$proc/cwd" 2>/dev/null || true)" == "$BACKEND" ]] || continue
-  if tr '\0' ' ' < "$proc/cmdline" 2>/dev/null | grep -qi 'node'; then kill -TERM "$pid" 2>/dev/null || true; fi
+  if grep -Eq '^(node|lsnode)' "$proc/comm" 2>/dev/null; then kill -TERM "$pid" 2>/dev/null || true; fi
 done
 mkdir -p "$BACKEND/tmp"
 touch "$BACKEND/tmp/restart.txt"
