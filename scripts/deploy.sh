@@ -184,6 +184,12 @@ if [[ "$NEED_FRONTEND_DEPS" == "1" ]]; then
   fingerprint "$FRONTEND/package-lock.json" > "$STATE/frontend-deps"
 fi
 
+# The app reads and checks its settings as it starts, and a refusal there shows only as a page that
+# never answers. Running the same check now names the problem before anything is built or restarted.
+say "Checking backend/.env..."
+(cd "$BACKEND" && node -e 'try { require("./src/config/env"); } catch (error) { console.error(error.message); process.exit(1); }') \
+  || die "backend/.env is not ready: the reason is on the line above. Fix it, then deploy again."
+
 # ---------------------------------------------------------------- website build, beside the live one
 if [[ "$NEED_BUILD" == "1" ]]; then
   # The account counts every thread against its process limit, and Vite's compiler starts one per CPU
