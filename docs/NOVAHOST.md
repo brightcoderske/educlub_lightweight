@@ -70,6 +70,9 @@ cPanel only clones into a folder that does not exist yet or is empty:
    belongs to the old HostAfrica server.
 3. Then do 1b. cPanel creates `apps/educlub/public` and `apps/educlub/runner` inside the checkout, and git
    ignores both.
+4. *File Manager*: right-click `apps/educlub` › *Change Permissions* › **711** (Execute for Group and World,
+   nothing else). cPanel clones it as 700, and the web server, which reads the site folders as another
+   user, then cannot reach `public/` or `runner/` and answers 404 for every file. Each deploy re-applies this.
 
 *With a Terminal* (or SSH), make a read-only deploy key for this repository (never a password or token):
 

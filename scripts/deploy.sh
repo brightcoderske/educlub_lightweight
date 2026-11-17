@@ -113,6 +113,10 @@ say "Deploying ${NEW:0:7} ($FROM): backend packages=$NEED_BACKEND_DEPS website p
 
 # ---------------------------------------------------------------- checks before touching anything
 [[ -f "$BACKEND/.env" ]] || { echo "No backend/.env. Create it first (docs/NOVAHOST.md, part D)." >&2; exit 1; }
+# The site's document roots (public/, runner/) live inside this folder, and the web server reads them as
+# another user, so it must be able to pass through it. cPanel's Git screen creates it as 700, which made
+# LiteSpeed answer 404 for every file. Pass-through only (711): nobody else can list or read it.
+chmod go+x "$APP_DIR"
 if [[ -z "${NODE_VENV:-}" ]]; then
   NODE_VENV="$(ls -d "$HOME"/nodevenv/apps/educlub/backend/*/bin/activate 2>/dev/null | sort -V | tail -1 || true)"
 fi
