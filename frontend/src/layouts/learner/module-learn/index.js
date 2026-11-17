@@ -1771,14 +1771,24 @@ function LearnerAiPanel({
         <MDButton
           variant="gradient"
           color="info"
-          startIcon={<Icon>auto_awesome</Icon>}
+          aria-label="eduClub AI"
           onClick={onOpen}
           sx={{
             borderRadius: "999px",
             boxShadow: "0 14px 28px rgba(37, 99, 235, 0.28)",
+            // On a phone the label made it a wide bar over the lesson text;
+            // there it is a small round button.
+            minWidth: { xs: 48, sm: "auto" },
+            width: { xs: 48, sm: "auto" },
+            height: { xs: 48, sm: "auto" },
+            px: { xs: 0, sm: 2.5 },
+            gap: 0.75,
           }}
         >
-          eduClub AI
+          <Icon>auto_awesome</Icon>
+          <MDBox component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+            eduClub AI
+          </MDBox>
         </MDButton>
       ) : (
         <Card sx={{ boxShadow: "0 18px 42px rgba(15, 23, 42, 0.22)" }}>
@@ -1926,6 +1936,7 @@ function ModuleLearn() {
   const entityId = templatePreviewMode ? templateId : courseId;
   const contentTopRef = useRef(null);
   const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
+  const phoneActivityRowRef = useRef(null);
   const completionRef = useRef(null);
   const pythonRunSequenceRef = useRef(0);
   const [data, setData] = useState(null);
@@ -2191,6 +2202,16 @@ function ModuleLearn() {
     if (!activeActivityId) return;
     contentTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [activeActivityId]);
+
+  // On a phone the activities are one sideways row; keep the open one in view
+  // there. Only the row scrolls, never the page.
+  useEffect(() => {
+    const row = phoneActivityRowRef.current;
+    const chip = row?.querySelector(`[data-activity-id="${activeActivityId}"]`);
+    if (!row || !chip) return;
+    const offset = chip.getBoundingClientRect().left - row.getBoundingClientRect().left;
+    row.scrollLeft += offset - (row.clientWidth - chip.clientWidth) / 2;
+  }, [activeActivityId, data?.module?.activities?.length]);
 
   // `blocking` drives the busy state. Marking work complete has to block, because
   // the learner is waiting on the result. Recording that an activity was merely
@@ -2652,6 +2673,7 @@ function ModuleLearn() {
         )}
 
         <MDBox
+          ref={phoneActivityRowRef}
           mb={2}
           display={{ xs: "flex", md: "none" }}
           gap={1}
@@ -2662,6 +2684,7 @@ function ModuleLearn() {
           {(data?.module?.activities || []).map((activity, index) => (
             <MDButton
               key={`top-${activity.id}`}
+              data-activity-id={activity.id}
               variant={activity.id === activeActivityId ? "gradient" : "outlined"}
               color={
                 done(activity.status)
@@ -2674,7 +2697,15 @@ function ModuleLearn() {
               disabled={!activity.is_unlocked}
               title={activity.lock_reason || activity.title}
               onClick={() => selectActivity(activity)}
-              sx={{ flex: "0 0 auto", whiteSpace: "nowrap" }}
+              // Two short lines instead of one long clipped one.
+              sx={{
+                flex: "0 0 auto",
+                maxWidth: 210,
+                whiteSpace: "normal",
+                textAlign: "left",
+                lineHeight: 1.3,
+                py: 0.75,
+              }}
             >
               {index + 1}. {activity.title}
             </MDButton>
@@ -2760,7 +2791,7 @@ function ModuleLearn() {
 
           <MDBox flex={1} minWidth={0}>
             <Card ref={contentTopRef}>
-              <MDBox p={{ xs: 2.5, md: 4 }}>
+              <MDBox p={{ xs: 1.5, sm: 2.5, md: 4 }} pb={{ xs: 10, md: 4 }}>
                 {activeActivity ? (
                   <>
                     <MDBox

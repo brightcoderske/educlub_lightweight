@@ -3609,7 +3609,8 @@ function CourseBuilder() {
         actions={
           <>
             {" "}
-            {!isTemplate && course?.update_available && (
+            {/* Boolean(): MySQL sends 0, which React prints. */}
+            {!isTemplate && Boolean(course?.update_available) && (
               <Chip label="Template update available" color="warning" size="small" sx={{ mt: 1 }} />
             )}
             <MDBox display="flex" gap={1} flexWrap="wrap">
@@ -3893,20 +3894,43 @@ function CourseBuilder() {
                             px={1.5}
                             py={1}
                           >
-                            <MDBox display="flex" alignItems="center" gap={0.75} minWidth={0}>
+                            {/* The title takes the row; its state sits on the line
+                                under it, so the title is not squeezed to a word
+                                per line by a badge and three buttons. */}
+                            <MDBox
+                              display="flex"
+                              alignItems="center"
+                              gap={0.75}
+                              minWidth={0}
+                              flex={1}
+                            >
                               <Icon color="disabled" sx={{ cursor: "grab" }}>
                                 drag_indicator
                               </Icon>
                               <MDBox minWidth={0}>
-                                <MDTypography variant="button" fontWeight="medium">
+                                <MDTypography
+                                  variant="button"
+                                  fontWeight="medium"
+                                  display="block"
+                                  sx={{ lineHeight: 1.35 }}
+                                >
                                   {courseModule.title}
                                 </MDTypography>
                                 <MDTypography variant="caption" color="text" display="block">
-                                  {courseModule.activities.length} activities
+                                  {courseModule.activities.length} activities ·{" "}
+                                  <MDBox
+                                    component="span"
+                                    sx={{
+                                      fontWeight: 700,
+                                      color: courseModule.is_published ? "#1b7f3b" : "#6b7280",
+                                    }}
+                                  >
+                                    {courseModule.is_published ? "Published" : "Hidden"}
+                                  </MDBox>
                                 </MDTypography>
                               </MDBox>
                             </MDBox>
-                            <MDBox display="flex" alignItems="center" gap={0.5}>
+                            <MDBox display="flex" alignItems="center" gap={0.5} flexShrink={0}>
                               <MDBox display={{ xs: "flex", md: "none" }} alignItems="center">
                                 <IconButton
                                   size="small"
@@ -3914,7 +3938,7 @@ function CourseBuilder() {
                                   disabled={saving || moduleIndex === 0}
                                   onClick={() => moveModuleOrder(courseModule.id, -1)}
                                 >
-                                  <Icon>keyboard_arrow_up</Icon>
+                                  <Icon>arrow_upward</Icon>
                                 </IconButton>
                                 <IconButton
                                   size="small"
@@ -3922,14 +3946,9 @@ function CourseBuilder() {
                                   disabled={saving || moduleIndex === modules.length - 1}
                                   onClick={() => moveModuleOrder(courseModule.id, 1)}
                                 >
-                                  <Icon>keyboard_arrow_down</Icon>
+                                  <Icon>arrow_downward</Icon>
                                 </IconButton>
                               </MDBox>
-                              <Chip
-                                size="small"
-                                label={courseModule.is_published ? "Published" : "Hidden"}
-                                color={courseModule.is_published ? "success" : "default"}
-                              />
                               <IconButton
                                 size="small"
                                 aria-label="Toggle activities"
@@ -4066,7 +4085,7 @@ function CourseBuilder() {
                                             moveActivityOrder(courseModule, activity.id, -1)
                                           }
                                         >
-                                          <Icon>keyboard_arrow_up</Icon>
+                                          <Icon>arrow_upward</Icon>
                                         </IconButton>
                                         <IconButton
                                           size="small"
@@ -4079,7 +4098,7 @@ function CourseBuilder() {
                                             moveActivityOrder(courseModule, activity.id, 1)
                                           }
                                         >
-                                          <Icon>keyboard_arrow_down</Icon>
+                                          <Icon>arrow_downward</Icon>
                                         </IconButton>
                                       </MDBox>
                                       {!isTemplate && (

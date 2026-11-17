@@ -35,6 +35,9 @@ const MDTypography = forwardRef(
     return (
       <MDTypographyRoot
         {...rest}
+        // Marks text set on a coloured surface, so the dashboard's theme-wide
+        // text colour (DashboardLayout) leaves it white.
+        data-on-colour={color === "white" ? "" : undefined}
         ref={ref}
         ownerState={{
           color,

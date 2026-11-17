@@ -193,8 +193,11 @@ function DashboardLayout({ children }) {
           // colour from the MUI palette, which only knows the light ground, so
           // without this the copy stays dark-on-dark the moment the surface
           // flips.
-          "& .MuiTypography-root": { color: palette.text },
-          "& .MuiTypography-caption, & .MuiTypography-body2": { color: palette.textMuted },
+          // Text asked to be white sits on a coloured surface (a tile, a
+          // banner) in either theme, so it is left alone.
+          "& .MuiTypography-root:not([data-on-colour])": { color: palette.text },
+          "& .MuiTypography-caption:not([data-on-colour]), & .MuiTypography-body2:not([data-on-colour])":
+            { color: palette.textMuted },
           "& button:focus-visible, & a:focus-visible, & input:focus-visible": {
             outline: `3px solid ${palette.focusRing}`,
             outlineOffset: 3,

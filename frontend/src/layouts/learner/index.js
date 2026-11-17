@@ -460,13 +460,20 @@ function LearnerDashboard() {
                   }}
                 >
                   <LearningArt kind={art} size={40} />
+                  {/* color="white", not sx: MDTypography's own default colour
+                      wins over sx and drew dark text on these dark tiles. */}
                   <MDTypography
                     variant="button"
-                    sx={{ color: "#fff", display: "block", fontWeight: 800 }}
+                    color="white"
+                    sx={{ display: "block", fontWeight: 800 }}
                   >
                     {label}
                   </MDTypography>
-                  <MDTypography variant="caption" sx={{ color: "#fff", fontSize: ".68rem" }}>
+                  <MDTypography
+                    variant="caption"
+                    color="white"
+                    sx={{ fontSize: ".75rem", opacity: 0.92 }}
+                  >
                     {subtitle}
                   </MDTypography>
                 </MDBox>
