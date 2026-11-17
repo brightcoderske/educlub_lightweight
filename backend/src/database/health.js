@@ -17,7 +17,10 @@ function poolStats() {
 async function getDatabaseHealth(options = {}) {
   const startedAt = Date.now();
 
-  const version = await query("SELECT VERSION() AS version");
+  const version = await query(
+    `SELECT VERSION() AS version, NOW() AS database_now,
+            @@session.time_zone AS session_time_zone, @@global.time_zone AS global_time_zone`,
+  );
   const tables = await query(
     `SELECT TABLE_NAME FROM information_schema.TABLES
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ANY($1)`,
@@ -31,6 +34,14 @@ async function getDatabaseHealth(options = {}) {
     status: missing.length ? "degraded" : "ok",
     latencyMs: Date.now() - startedAt,
     mysqlVersion: version.rows[0].version,
+    // Side by side, so a clock or timezone drift on a new host shows in one
+    // request: databaseNow and serverNow should match to the second.
+    clock: {
+      databaseNow: version.rows[0].database_now,
+      serverNow: new Date().toISOString(),
+      sessionTimeZone: version.rows[0].session_time_zone,
+      globalTimeZone: version.rows[0].global_time_zone,
+    },
     schema: { required: REQUIRED_TABLES.length, present: present.size, missing },
     pool: poolStats(),
   };

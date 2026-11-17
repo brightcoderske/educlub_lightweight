@@ -98,6 +98,14 @@ pool.on("connection", (connection) => {
   connection.query(`SET SESSION sql_mode = '${SESSION_SQL_MODE}'`, (error) => {
     if (error) logger.error("database_sql_mode_failed", { message: error.message });
   });
+  // The driver reads every DATETIME as UTC (timezone "Z" above), so the server
+  // must write NOW() and CURRENT_TIMESTAMP in UTC too. Hosts disagree: Novahost
+  // runs MySQL at +03:00, which without this stores every timestamp three hours
+  // ahead. MySQL runs commands on a connection in order, so this lands before
+  // the caller's first query.
+  connection.query("SET time_zone = '+00:00'", (error) => {
+    if (error) logger.error("database_time_zone_failed", { message: error.message });
+  });
 });
 
 // The application was written against node-postgres, which answers with

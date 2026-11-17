@@ -4,6 +4,7 @@ require("./config/loadEnv").loadEnv();
 const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
+const fs = require("fs");
 const path = require("path");
 const compression = require("compression");
 const crypto = require("node:crypto");
@@ -20,6 +21,7 @@ const {
   securityHeaders,
 } = require("./middleware/security.middleware");
 const { ensureStartupSchema } = require("./services/startupSchema.service");
+const { frontendSite, forApiOnly, hasBuild } = require("./site");
 const { verifyMailLogin } = require("./utils/email");
 const { reportMailStartup } = require("./utils/mailDiagnostics");
 
@@ -68,8 +70,8 @@ const rateLimitJsonHandler = (req, res, next, options) => {
 
 // Security middleware
 app.use(blockSuspiciousPaths);
-app.use(securityHeaders(env));
-app.use(permissionsPolicy);
+app.use(forApiOnly(securityHeaders(env)));
+app.use(forApiOnly(permissionsPolicy));
 app.use(compression());
 app.use(
   cors({
@@ -155,9 +157,26 @@ app.use((req, res, next) => {
   next();
 });
 
+// Written by scripts/deploy.sh, so /health can say which commit is running and
+// the deploy can confirm the new one is live before it calls itself done.
+function readRelease() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, "../.release.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+const release = readRelease();
+
 // Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), version: process.env.APP_VERSION || "1.0.0" });
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    version: process.env.APP_VERSION || "1.0.0",
+    commit: release?.commit || null,
+    deployedAt: release?.deployedAt || null,
+  });
 });
 app.get("/health/live", (req, res) => res.json({ status: "ok" }));
 app.get("/health/ready", async (req, res, next) => {
@@ -194,6 +213,13 @@ app.use("/api/quiz-tests", quizTestsRoutes);
 app.use("/api/teacher-assignments", teacherAssignmentsRoutes);
 app.use("/api/teacher-dashboard", teacherDashboardRoutes);
 app.use("/api/ai", aiRoutes);
+
+// The website, when its build sits beside the backend (one app on one address).
+// Without a build this does nothing and the server is API-only, as before.
+const siteBuild = process.env.FRONTEND_BUILD_DIR || path.resolve(__dirname, "../../frontend/build");
+if (hasBuild(siteBuild)) {
+  app.use(frontendSite(siteBuild, { production: env.nodeEnv === "production" }));
+}
 
 // 404 handler
 app.use(notFoundHandler);

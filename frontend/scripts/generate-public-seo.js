@@ -25,11 +25,11 @@ function buildSnapshotHtml(template, route, page) {
           item.points || []
         )
           .map((point) => `<li>${escapeHtml(point)}</li>`)
-          .join("")}</ul></section>`,
+          .join("")}</ul></section>`
     )
     .join("");
   const staticContent = `<main class="educlub-first-paint" data-seo-snapshot="true"><div><span>eduClub</span><h1>${escapeHtml(
-    page.h1,
+    page.h1
   )}</h1><p>${escapeHtml(page.intro)}</p>${visibleSections}</div></main>`;
   const criticalStyles = `<style id="educlub-first-paint">
     *{box-sizing:border-box}body{margin:0;background:#f7f9fc;color:#17324d;font-family:Arial,sans-serif}
@@ -56,43 +56,46 @@ function buildSnapshotHtml(template, route, page) {
     },
   };
 
-  let html = template.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(page.title)}</title>`);
+  let html = template.replace(
+    /<title>[\s\S]*?<\/title>/i,
+    `<title>${escapeHtml(page.title)}</title>`
+  );
   html = replaceOrInsert(
     html,
     /<meta\s+name="description"[^>]*>/i,
-    `<meta name="description" content="${escapeHtml(page.description)}" />`,
+    `<meta name="description" content="${escapeHtml(page.description)}" />`
   );
   html = html.replace("</head>", `${criticalStyles}</head>`);
   html = replaceOrInsert(
     html,
     /<meta\s+name="keywords"[^>]*>/i,
-    `<meta name="keywords" content="${escapeHtml((page.keywords || []).join(", "))}" />`,
+    `<meta name="keywords" content="${escapeHtml((page.keywords || []).join(", "))}" />`
   );
   html = replaceOrInsert(
     html,
     /<link\s+rel="canonical"[^>]*>/i,
-    `<link rel="canonical" href="${canonical}" />`,
+    `<link rel="canonical" href="${canonical}" />`
   );
   html = replaceOrInsert(
     html,
     /<meta\s+property="og:title"[^>]*>/i,
-    `<meta property="og:title" content="${escapeHtml(page.title)}" />`,
+    `<meta property="og:title" content="${escapeHtml(page.title)}" />`
   );
   html = replaceOrInsert(
     html,
     /<meta\s+property="og:description"[^>]*>/i,
-    `<meta property="og:description" content="${escapeHtml(page.description)}" />`,
+    `<meta property="og:description" content="${escapeHtml(page.description)}" />`
   );
   html = replaceOrInsert(
     html,
     /<meta\s+property="og:url"[^>]*>/i,
-    `<meta property="og:url" content="${canonical}" />`,
+    `<meta property="og:url" content="${canonical}" />`
   );
   html = html.replace(
     '<div id="app"></div>',
     `<div id="app" data-seo-snapshot="true" style="visibility:hidden">${staticContent}</div><script type="application/ld+json">${JSON.stringify(
-      schema,
-    )}</script>`,
+      schema
+    )}</script>`
   );
   return html;
 }
@@ -132,14 +135,14 @@ function loadPublicPages() {
   new Function("module", "exports", "require", transformed)(
     loadedModule,
     loadedModule.exports,
-    require,
+    require
   );
   return loadedModule.exports;
 }
 
 function writeSnapshots() {
   const { PUBLIC_PAGES, PUBLIC_PAGE_PATHS } = loadPublicPages();
-  const buildDir = path.resolve(__dirname, "../build");
+  const buildDir = path.resolve(__dirname, "..", process.env.BUILD_OUT_DIR || "build");
   const publicDir = path.resolve(__dirname, "../public");
   const template = fs.readFileSync(path.join(buildDir, "index.html"), "utf8");
   const utilityPages = {

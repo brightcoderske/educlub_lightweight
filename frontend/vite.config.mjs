@@ -69,7 +69,12 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       "globalThis.__EDUCLUB_API_URL__": JSON.stringify(
-        environment.VITE_API_URL || environment.REACT_APP_API_URL || "http://localhost:4000"
+        // Unset in a production build means the API is on the same address as
+        // the site (one app serves both), so requests go to /api. Vercel's build
+        // sets VITE_API_URL to the separate API host.
+        environment.VITE_API_URL ??
+          environment.REACT_APP_API_URL ??
+          (mode === "production" ? "" : "http://localhost:4000")
       ),
       "globalThis.__EDUCLUB_PYTHON_RUNNER_URL__": JSON.stringify(
         environment.VITE_PYTHON_RUNNER_URL ||
@@ -78,7 +83,9 @@ export default defineConfig(({ mode }) => {
       "globalThis.__EDUCLUB_PYTHON_PARENT_ORIGINS__": JSON.stringify(pythonParentOrigins),
     },
     build: {
-      outDir: "build",
+      // The deploy builds into a staging folder, so the live site keeps serving
+      // the current build until the new one is complete.
+      outDir: environment.BUILD_OUT_DIR || "build",
       emptyOutDir: true,
       sourcemap: false,
       chunkSizeWarningLimit: 750,

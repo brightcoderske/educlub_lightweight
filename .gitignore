@@ -46,3 +46,12 @@ backend\.env
 # hand against the database, never committed or deployed.
 db-imports/
 *-content.sql
+
+# Written on the server by scripts/deploy.sh
+.deploy/
+backend/.release.json
+backend/tmp/
+frontend/build.next/
+frontend/build.previous/
+# Learners' uploaded work stays on the server, never in git
+backend/uploads/activity-submissions/

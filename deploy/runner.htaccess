@@ -1,0 +1,22 @@
+# runner.educlub.co.ke: the Python runner, on an address of its own so learners' code never runs with
+# access to the signed-in site. scripts/deploy.sh copies this file, python-runner.html and assets/ here.
+# These are the headers the runner had on Vercel (frontend/vercel.json).
+DirectoryIndex python-runner.html
+Options -Indexes
+
+<IfModule mod_headers.c>
+  <Files "python-runner.html">
+    Header set Content-Security-Policy "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors https://educlub.co.ke https://www.educlub.co.ke https://learn.educlub.co.ke; script-src 'self' https://cdn.jsdelivr.net; worker-src 'self' blob:; connect-src https://cdn.jsdelivr.net; style-src 'self'"
+    Header set Referrer-Policy "strict-origin"
+    Header set Cache-Control "public, max-age=0, must-revalidate"
+  </Files>
+  <FilesMatch "\.(js|mjs|css)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# Only the runner page and its scripts are served from here.
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>

@@ -20,7 +20,7 @@ import { getUserDisplayName } from "lib/userDisplay";
 import { useAppPalette } from "lib/appTheme";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
-import API_BASE_URL from "lib/apiBase";
+import { apiAssetUrl } from "lib/apiBase";
 import { activityLearningPath, findContinueLearning } from "./learningNavigation";
 import { buildDueThisWeekItems, findActiveWeekLearning } from "./dashboardDueItems";
 import {
@@ -28,20 +28,6 @@ import {
   filterAcademicPeriod,
   currentLearningAllocations,
 } from "lib/academicHistory";
-
-const apiOrigin = new URL(API_BASE_URL).origin;
-
-function resolveAssetUrl(url) {
-  if (!url) {
-    return "";
-  }
-
-  if (url.startsWith("/")) {
-    return `${apiOrigin}${url}`;
-  }
-
-  return url;
-}
 
 function formatCompetitionDate(value, options = {}) {
   if (!value) {
@@ -844,7 +830,7 @@ function LearnerDashboard() {
               height={{ xs: 170, sm: 220 }}
               sx={{
                 backgroundImage: featuredCompetition.image_url
-                  ? `url("${resolveAssetUrl(featuredCompetition.image_url)}")`
+                  ? `url("${apiAssetUrl(featuredCompetition.image_url)}")`
                   : "linear-gradient(135deg, #1A73E8, #111827)",
                 backgroundSize: "cover",
                 backgroundPosition: "center",

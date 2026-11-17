@@ -19,21 +19,7 @@ import { LearnerHero, LearningArt, learningTheme } from "components/DashboardIde
 import { useAppPalette } from "lib/appTheme";
 import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
-import API_BASE_URL from "lib/apiBase";
-
-const apiOrigin = new URL(API_BASE_URL).origin;
-
-function resolveAssetUrl(url) {
-  if (!url) {
-    return "";
-  }
-
-  if (url.startsWith("/")) {
-    return `${apiOrigin}${url}`;
-  }
-
-  return url;
-}
+import { apiAssetUrl } from "lib/apiBase";
 
 function formatCompetitionDate(value, options = {}) {
   if (!value) {
@@ -465,7 +451,7 @@ function LearnerCompetitions() {
                     {competition.image_url ? (
                       <MDBox
                         component="img"
-                        src={resolveAssetUrl(competition.image_url)}
+                        src={apiAssetUrl(competition.image_url)}
                         alt={`${competition.name} banner`}
                         height={130}
                         width="100%"

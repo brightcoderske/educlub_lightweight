@@ -1,9 +1,9 @@
-import API_BASE_URL from "lib/apiBase";
+import { API_ORIGIN } from "lib/apiBase";
 
 export function getUserPhotoUrl(user) {
   const photo = user?.profilePhotoUrl || user?.profile_photo_url;
   return typeof photo === "string" && photo.startsWith("/uploads/profile-photos/")
-    ? `${API_BASE_URL.replace(/\/api$/, "")}${photo}`
+    ? `${API_ORIGIN}${photo}`
     : undefined;
 }
 
