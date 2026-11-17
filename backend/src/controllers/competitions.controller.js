@@ -10,7 +10,7 @@ async function list(req, res) {
     const competitions =
       req.user.role === "learner"
         ? await competitionsService.listCompetitionsForLearner(req.user.userId)
-        : await competitionsService.listCompetitions();
+        : await competitionsService.listCompetitions(req.user);
     res.json(competitions);
   } catch (error) {
     console.error("List competitions error:", error);
@@ -18,44 +18,36 @@ async function list(req, res) {
   }
 }
 
+// The service decides who may write which competition: the system
+// administrator eduClub's, school admins and teachers their own school's.
 async function create(req, res) {
   try {
-    if (req.user.role !== "system_admin") {
-      return res.status(403).json({ error: "System admin access required" });
-    }
-
-    const competition = await competitionsService.createCompetition(
-      req.body,
-      req.user.userId
-    );
+    const competition = await competitionsService.createCompetition(req.body, req.user);
     res.status(201).json(competition);
   } catch (error) {
     console.error("Create competition error:", error);
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 }
 
 async function update(req, res) {
   try {
-    if (req.user.role !== "system_admin") {
-      return res.status(403).json({ error: "System admin access required" });
-    }
-
     const competition = await competitionsService.updateCompetition(
       req.params.id,
-      req.body
+      req.body,
+      req.user
     );
     res.json(competition);
   } catch (error) {
     console.error("Update competition error:", error);
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 }
 
 async function uploadBanner(req, res) {
   try {
-    if (req.user.role !== "system_admin") {
-      return res.status(403).json({ error: "System admin access required" });
+    if (!["system_admin", "school_admin", "teacher"].includes(req.user.role)) {
+      return res.status(403).json({ error: "You cannot manage competitions." });
     }
 
     const { fileName, dataUrl } = req.body;

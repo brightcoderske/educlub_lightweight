@@ -155,7 +155,7 @@ export default function TypingStudioForm({
   termOptions,
   selectedTerm,
   weekOptions,
-  isSystemAdmin,
+  canLinkCompetition,
 }) {
   const [activeStep, setActiveStep] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -270,10 +270,10 @@ export default function TypingStudioForm({
                     setTypingForm({ ...typingForm, test_type: event.target.value })
                   }
                   SelectProps={{ native: true }}
-                  disabled={!isSystemAdmin()}
+                  disabled={!canLinkCompetition}
                 >
                   <option value="weekly">Weekly</option>
-                  {isSystemAdmin() && <option value="competition">Competition</option>}
+                  {canLinkCompetition && <option value="competition">Competition</option>}
                 </MDInput>
               </Grid>
               {typingForm.test_type === "competition" ? (

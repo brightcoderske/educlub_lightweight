@@ -1244,6 +1244,11 @@ ALTER TABLE competitions DROP CONSTRAINT competitions_competition_type_check;
 ALTER TABLE competitions ADD CONSTRAINT competitions_competition_type_check
   CHECK (competition_type IN ('quiz', 'typing', 'maths', 'science', 'stem'));
 
+ALTER TABLE competitions ADD COLUMN school_id INT;
+
+ALTER TABLE competitions
+  ADD FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE;
+
 CREATE TABLE IF NOT EXISTS competition_enrollments (
   id INT AUTO_INCREMENT PRIMARY KEY,
   competition_id INT,
@@ -1567,6 +1572,8 @@ CREATE INDEX idx_competitions_featured ON competitions(is_featured, is_active);
 CREATE INDEX idx_competitions_active_dates ON competitions(is_active, start_date, end_date);
 
 CREATE INDEX idx_competitions_type ON competitions(competition_type);
+
+CREATE INDEX idx_competitions_school ON competitions(school_id);
 
 -- dropped idx_competitions_eligible_grades: GIN index, unused (eligible_grades is filtered in application code);
 

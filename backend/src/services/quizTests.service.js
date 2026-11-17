@@ -1,5 +1,6 @@
 const { assessmentScheduleJoins, assessmentScheduleColumns } = require("./assessmentSchedule");
 const { query } = require("../config");
+const { competitionForAssessment } = require("./competitions.service");
 const { normalizeQuestionMarks } = require("./quizAttemptMarks");
 const { answersMatch } = require("./quizAnswerPolicy");
 const {
@@ -269,7 +270,11 @@ async function getTestRow(testId) {
 async function createTest(user, data) {
   validateQuestionAllocation(data);
   const period = await requireConfiguredAssessmentScope(data);
-  const quizType = resolveAssessmentType(user, data.quiz_type);
+  const quizType = resolveAssessmentType(
+    user,
+    data.quiz_type,
+    await competitionForAssessment(data.quiz_type, data.competition_id),
+  );
   const schoolId = resolveAssessmentSchoolId(user);
   const result = await query(
     `INSERT INTO quiz_tests (
@@ -320,7 +325,11 @@ async function updateTest(user, testId, data) {
 
   validateQuestionAllocation(data);
   const period = await requireConfiguredAssessmentScope(data);
-  const quizType = resolveAssessmentType(user, data.quiz_type);
+  const quizType = resolveAssessmentType(
+    user,
+    data.quiz_type,
+    await competitionForAssessment(data.quiz_type, data.competition_id),
+  );
   const schoolId = resolveAssessmentSchoolId(user);
   const result = await query(
     `UPDATE quiz_tests

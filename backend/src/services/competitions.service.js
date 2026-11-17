@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { query } = require("../config");
 const env = require("../config/env");
 const flutterwave = require("./flutterwave.service");
+const { isSchoolStaff, positiveId } = require("./assessmentOwnership");
 
 const COMPETITION_TYPES = new Set([
   "quiz",
@@ -63,6 +64,19 @@ function isCompetitionVisibleForGrade(competition, learnerGrade) {
   );
 }
 
+// A competition with no school is eduClub's, open to every school; one with a
+// school is that school's own, for its learners only.
+function isCompetitionOpenToSchool(competition, schoolId) {
+  const owner = positiveId(competition?.school_id);
+  return owner === null || owner === positiveId(schoolId);
+}
+
+function staffSchoolId(user = {}) {
+  const schoolId = positiveId(user.schoolId);
+  if (!schoolId) throw new Error("Your account is not linked to a school.");
+  return schoolId;
+}
+
 function availableToEnrollFilter() {
   return "c.is_active = TRUE AND c.start_date <= CURRENT_DATE AND c.end_date >= CURRENT_DATE";
 }
@@ -110,8 +124,9 @@ async function listCompetitionsForLearner(userId) {
        ON rr.competition_id = c.id
       AND rr.learner_id = $1
      WHERE c.is_active = true
+       AND (c.school_id IS NULL OR c.school_id = $2)
      ORDER BY c.is_featured DESC, c.start_date DESC`,
-    [learner.id]
+    [learner.id, learner.school_id]
   );
 
   return result.rows
@@ -121,13 +136,20 @@ async function listCompetitionsForLearner(userId) {
     .map(hydrateCompetition);
 }
 
-async function listCompetitions() {
+// The system administrator sees every competition; school staff see eduClub's
+// and their own school's, never another school's.
+async function listCompetitions(user = {}) {
+  const staff = isSchoolStaff(user);
   const result = await query(
     `SELECT c.*,
+            s.name AS school_name,
             (SELECT COUNT(*) FROM competition_enrollments ce
              WHERE ce.competition_id = c.id AND ce.status = 'enrolled') AS enrolled_count
      FROM competitions c
-     ORDER BY c.is_featured DESC, c.start_date DESC`
+     LEFT JOIN schools s ON s.id = c.school_id
+     ${staff ? "WHERE c.school_id IS NULL OR c.school_id = $1" : ""}
+     ORDER BY c.is_featured DESC, c.start_date DESC`,
+    staff ? [staffSchoolId(user)] : []
   );
   return result.rows.map(hydrateCompetition);
 }
@@ -137,14 +159,42 @@ async function getCompetitionById(id) {
   return hydrateCompetition(result.rows[0]);
 }
 
-async function createCompetition(data, createdByUserId) {
+// The competition a quiz or typing test asks to be attached to, or null when it
+// is not asking for one (or names none that exists).
+async function competitionForAssessment(requestedType, competitionId) {
+  if (String(requestedType || "") !== "competition") return null;
+  const id = positiveId(competitionId);
+  return id ? getCompetitionById(id) : null;
+}
+
+// What a school's competition may not have: a price (payments go to eduClub's
+// account) or a place in eduClub's featured list.
+function schoolCompetitionLimits(data, user) {
+  return isSchoolStaff(user)
+    ? { ...data, price_amount: 0, currency: "KES", is_featured: false }
+    : data;
+}
+
+// eduClub competitions are the system administrator's; school admins and
+// teachers write their own school's.
+function assertCanWriteCompetitions(user = {}) {
+  if (user.role !== "system_admin" && !isSchoolStaff(user)) {
+    const error = new Error("You cannot manage competitions.");
+    error.status = 403;
+    throw error;
+  }
+}
+
+async function createCompetition(rawData, user = {}) {
+  assertCanWriteCompetitions(user);
+  const data = schoolCompetitionLimits(rawData, user);
   const result = await query(
     `INSERT INTO competitions (
        name, description, competition_type, eligible_grades,
        start_date, end_date, practice_available, image_url,
-       price_amount, currency, is_featured, is_active, created_by_user_id
+       price_amount, currency, is_featured, is_active, created_by_user_id, school_id
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      RETURNING *`,
     [
       data.name,
@@ -159,14 +209,28 @@ async function createCompetition(data, createdByUserId) {
       data.currency || "KES",
       Boolean(data.is_featured),
       data.is_active !== false,
-      createdByUserId,
+      user.userId || null,
+      isSchoolStaff(user) ? staffSchoolId(user) : null,
     ]
   );
 
   return hydrateCompetition(result.rows[0]);
 }
 
-async function updateCompetition(id, data) {
+async function updateCompetition(id, rawData, user = {}) {
+  assertCanWriteCompetitions(user);
+  const existing = await getCompetitionById(id);
+  if (!existing) throw new Error("Competition not found.");
+  if (isSchoolStaff(user) && positiveId(existing.school_id) !== staffSchoolId(user)) {
+    const error = new Error(
+      existing.school_id
+        ? "This competition belongs to another school."
+        : "eduClub competitions are managed by eduClub.",
+    );
+    error.status = 403;
+    throw error;
+  }
+  const data = schoolCompetitionLimits(rawData, user);
   const result = await query(
     `UPDATE competitions
      SET name = $1,
@@ -217,7 +281,9 @@ async function enrollOrStartPayment(competitionId, user) {
     [competitionId]
   );
   const competition = competitionResult.rows[0];
-  if (!competition) throw new Error("Competition is not open for enrolment.");
+  if (!competition || !isCompetitionOpenToSchool(competition, learner.school_id)) {
+    throw new Error("Competition is not open for enrolment.");
+  }
   if (!isCompetitionVisibleForGrade(competition, learner.grade)) {
     throw new Error("This competition is not available for your grade.");
   }
@@ -573,6 +639,7 @@ module.exports = {
   listCompetitions,
   listCompetitionsForLearner,
   getCompetitionById,
+  competitionForAssessment,
   createCompetition,
   updateCompetition,
   enrollOrStartPayment,

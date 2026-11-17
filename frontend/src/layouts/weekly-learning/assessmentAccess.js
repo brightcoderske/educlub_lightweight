@@ -24,9 +24,11 @@ export function canManageAssessment(assessment, viewer = {}) {
   const owner = schoolId(assessment.school_id);
   const competition = isCompetitionAssessment(assessment);
 
+  // Staff manage what their school owns, its own competitions' assessments
+  // included; eduClub's competition assessments carry no school.
   if (viewer.isSchoolStaff) {
     const own = schoolId(viewer.schoolId);
-    return !competition && own !== null && owner === own;
+    return own !== null && owner === own;
   }
 
   // The system console keeps competitions and the global library it publishes

@@ -1,5 +1,6 @@
 const { assessmentScheduleJoins, assessmentScheduleColumns } = require("./assessmentSchedule");
 const { query } = require("../config");
+const { competitionForAssessment } = require("./competitions.service");
 const { scoreTypingAttempt } = require("./typingScoring");
 const {
   resolveAssessmentSchoolId,
@@ -243,7 +244,8 @@ async function listTests(user, filters = {}) {
             (SELECT COUNT(*) FROM typing_lessons detail WHERE detail.typing_test_id = tt.id) AS lesson_count
      FROM typing_tests tt
      ${assessmentScheduleJoins("tt")}
-     ${where}`,
+     ${where}
+`,
     values
   );
 
@@ -443,7 +445,11 @@ async function getTestRow(testId) {
 
 async function createTest(user, data) {
   const period = await requireConfiguredAssessmentScope(data);
-  const testType = resolveAssessmentType(user, data.test_type);
+  const testType = resolveAssessmentType(
+    user,
+    data.test_type,
+    await competitionForAssessment(data.test_type, data.competition_id),
+  );
   const schoolId = resolveAssessmentSchoolId(user);
   const result = await query(
     `INSERT INTO typing_tests (
@@ -492,7 +498,11 @@ async function updateTest(user, testId, data) {
   assertAssessmentManageAccess(user, existing, "typing test");
 
   const period = await requireConfiguredAssessmentScope(data);
-  const testType = resolveAssessmentType(user, data.test_type);
+  const testType = resolveAssessmentType(
+    user,
+    data.test_type,
+    await competitionForAssessment(data.test_type, data.competition_id),
+  );
   const schoolId = resolveAssessmentSchoolId(user);
   const result = await query(
     `UPDATE typing_tests

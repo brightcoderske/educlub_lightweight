@@ -500,7 +500,7 @@ export default function QuizStudioForm({
   termOptions,
   selectedQuizTerm,
   quizWeekOptions,
-  isSystemAdmin,
+  canLinkCompetition,
   termTools,
 }) {
   const [activeStep, setActiveStep] = useState(0);
@@ -592,10 +592,10 @@ export default function QuizStudioForm({
                   value={quizForm.quiz_type}
                   onChange={(event) => setQuizForm({ ...quizForm, quiz_type: event.target.value })}
                   SelectProps={{ native: true }}
-                  disabled={!isSystemAdmin()}
+                  disabled={!canLinkCompetition}
                 >
                   <option value="weekly">Weekly</option>
-                  {isSystemAdmin() && <option value="competition">Competition</option>}
+                  {canLinkCompetition && <option value="competition">Competition</option>}
                 </MDInput>
               </Grid>
               <Grid item xs={12} md={3}>

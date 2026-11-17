@@ -3,9 +3,10 @@
 // Weekly assessments belong to the school that authored them: its own staff
 // create, publish, review and delete them, and nobody outside that school ever
 // sees the questions or the answer key. The system administrator keeps the two
-// things that are genuinely cross-school - competition assessments and the
-// global library (school_id IS NULL) that every school may run - and is
-// read-only over everything a school authored for itself.
+// things that are genuinely cross-school - eduClub competition assessments and
+// the global library (school_id IS NULL) that every school may run - and is
+// read-only over everything a school authored for itself. A school may also run
+// competitions of its own; their assessments are the school's like any other.
 
 const SCHOOL_STAFF_ROLES = ["school_admin", "teacher"];
 
@@ -46,23 +47,28 @@ function resolveAssessmentSchoolId(user = {}) {
   throw new Error("You cannot author assessments.");
 }
 
-// Competitions are run centrally, so a school cannot promote its own weekly
-// assessment into one by sending test_type/quiz_type from the browser.
-function resolveAssessmentType(user = {}, requestedType) {
-  const wantsCompetition = String(requestedType || "") === "competition";
-  return wantsCompetition && !isSchoolStaff(user) ? "competition" : "weekly";
+// School staff may make a competition assessment only for one of their own
+// school's competitions: `competition` is the row competition_id names (null if
+// none). Asking for any other competition - an eduClub one, another school's -
+// gives a weekly assessment, as it always did, so a school cannot attach its
+// questions to a competition it does not run.
+function resolveAssessmentType(user = {}, requestedType, competition = null) {
+  if (String(requestedType || "") !== "competition") return "weekly";
+  if (!isSchoolStaff(user)) return "competition";
+  const schoolId = positiveId(user.schoolId);
+  return schoolId !== null && positiveId(competition?.school_id) === schoolId
+    ? "competition"
+    : "weekly";
 }
 
 function canManageAssessment(user = {}, assessment = {}) {
   const ownerSchoolId = positiveId(assessment.school_id);
 
+  // Staff manage what their school owns, its competition assessments included.
+  // eduClub competition assessments carry no school, so they stay out of reach.
   if (isSchoolStaff(user)) {
     const schoolId = positiveId(user.schoolId);
-    return (
-      schoolId !== null &&
-      ownerSchoolId === schoolId &&
-      !isCompetitionAssessment(assessment)
-    );
+    return schoolId !== null && ownerSchoolId === schoolId;
   }
 
   if (user.role === "system_admin") {

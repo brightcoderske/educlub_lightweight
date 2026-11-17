@@ -34,19 +34,22 @@ test("system administrator assessments are global, never targeted at a school", 
   );
 });
 
-test("only the system console can create a competition assessment", () => {
+test("school staff make competition assessments only for their own school's competitions", () => {
+  const eduClubCompetition = { id: 1, school_id: null };
+  const ownCompetition = { id: 2, school_id: 2 };
+  const otherSchoolCompetition = { id: 3, school_id: 7 };
+
   assert.equal(
-    resolveAssessmentType({ role: "system_admin" }, "competition"),
+    resolveAssessmentType({ role: "system_admin" }, "competition", eduClubCompetition),
     "competition",
   );
-  assert.equal(
-    resolveAssessmentType({ role: "school_admin", schoolId: 2 }, "competition"),
-    "weekly",
-  );
-  assert.equal(
-    resolveAssessmentType({ role: "teacher", schoolId: 2 }, "competition"),
-    "weekly",
-  );
+  for (const role of ["school_admin", "teacher"]) {
+    const user = { role, schoolId: 2 };
+    assert.equal(resolveAssessmentType(user, "competition", ownCompetition), "competition");
+    assert.equal(resolveAssessmentType(user, "competition", eduClubCompetition), "weekly");
+    assert.equal(resolveAssessmentType(user, "competition", otherSchoolCompetition), "weekly");
+    assert.equal(resolveAssessmentType(user, "competition", null), "weekly");
+  }
   assert.equal(resolveAssessmentType({ role: "system_admin" }, "weekly"), "weekly");
 });
 
@@ -59,8 +62,15 @@ test("a school manages its own weekly assessments and nobody else's", () => {
   assert.equal(canManageAssessment(staff, { school_id: 8, quiz_type: "weekly" }), false);
   // The global library is published centrally, so a school may run it but not edit it.
   assert.equal(canManageAssessment(staff, { school_id: null, quiz_type: "weekly" }), false);
+  // A school's own competition assessments are the school's to manage...
+  assert.equal(canManageAssessment(staff, { school_id: 3, quiz_type: "competition" }), true);
+  // ...but eduClub's (no school) and another school's are not.
   assert.equal(
-    canManageAssessment(staff, { school_id: 3, quiz_type: "competition" }),
+    canManageAssessment(staff, { school_id: null, quiz_type: "competition" }),
+    false,
+  );
+  assert.equal(
+    canManageAssessment(teacher, { school_id: 8, test_type: "competition" }),
     false,
   );
 });

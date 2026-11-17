@@ -1101,6 +1101,9 @@ ALTER TABLE competitions ADD COLUMN IF NOT EXISTS eligible_grades JSONB DEFAULT 
 ALTER TABLE competitions DROP CONSTRAINT IF EXISTS competitions_competition_type_check;
 ALTER TABLE competitions ADD CONSTRAINT competitions_competition_type_check
   CHECK (competition_type IN ('quiz', 'typing', 'maths', 'science', 'stem'));
+-- Empty for an eduClub competition open to every school; set for one a school
+-- runs for its own learners only.
+ALTER TABLE competitions ADD COLUMN IF NOT EXISTS school_id INTEGER REFERENCES schools(id) ON DELETE CASCADE;
 
 CREATE TABLE IF NOT EXISTS competition_enrollments (
   id SERIAL PRIMARY KEY,
@@ -1315,6 +1318,7 @@ CREATE INDEX IF NOT EXISTS idx_competitions_dates ON competitions(start_date, en
 CREATE INDEX IF NOT EXISTS idx_competitions_featured ON competitions(is_featured, is_active);
 CREATE INDEX IF NOT EXISTS idx_competitions_active_dates ON competitions(is_active, start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_competitions_type ON competitions(competition_type);
+CREATE INDEX IF NOT EXISTS idx_competitions_school ON competitions(school_id);
 CREATE INDEX IF NOT EXISTS idx_competitions_eligible_grades ON competitions USING GIN (eligible_grades);
 CREATE INDEX IF NOT EXISTS idx_courses_category_active ON courses(course_category, is_active);
 CREATE INDEX IF NOT EXISTS idx_competition_enrollments_competition ON competition_enrollments(competition_id);
@@ -3266,13 +3270,18 @@ CREATE POLICY competitions_role_read ON competitions
     OR (
       (SELECT public.educlub_role()) IN ('school_admin', 'teacher', 'learner')
       AND is_active IS TRUE
+      AND (school_id IS NULL OR school_id = (SELECT public.educlub_school_id()))
     )
   );
 
+-- eduClub competitions are the system administrator's; a school's own are
+-- written by its admins and teachers.
 DROP POLICY IF EXISTS competitions_system_admin_write ON competitions;
 DROP POLICY IF EXISTS competitions_system_admin_insert ON competitions;
 DROP POLICY IF EXISTS competitions_system_admin_update ON competitions;
 DROP POLICY IF EXISTS competitions_system_admin_delete ON competitions;
+DROP POLICY IF EXISTS competitions_school_staff_insert ON competitions;
+DROP POLICY IF EXISTS competitions_school_staff_update ON competitions;
 CREATE POLICY competitions_system_admin_insert ON competitions
   FOR INSERT
   WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
@@ -3280,6 +3289,22 @@ CREATE POLICY competitions_system_admin_update ON competitions
   FOR UPDATE
   USING ((SELECT public.educlub_role()) = 'system_admin')
   WITH CHECK ((SELECT public.educlub_role()) = 'system_admin');
+CREATE POLICY competitions_school_staff_insert ON competitions
+  FOR INSERT
+  WITH CHECK (
+    (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+    AND school_id = (SELECT public.educlub_school_id())
+  );
+CREATE POLICY competitions_school_staff_update ON competitions
+  FOR UPDATE
+  USING (
+    (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+    AND school_id = (SELECT public.educlub_school_id())
+  )
+  WITH CHECK (
+    (SELECT public.educlub_role()) IN ('school_admin', 'teacher')
+    AND school_id = (SELECT public.educlub_school_id())
+  );
 CREATE POLICY competitions_system_admin_delete ON competitions
   FOR DELETE
   USING ((SELECT public.educlub_role()) = 'system_admin');

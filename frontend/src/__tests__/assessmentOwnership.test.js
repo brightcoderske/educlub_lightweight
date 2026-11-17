@@ -24,10 +24,14 @@ test("the centrally published library is runnable by a school but not editable",
   expect(canManageAssessment({ school_id: null, quiz_type: "weekly" }, systemAdmin)).toBe(true);
 });
 
-test("competitions stay with the system console on both sides", () => {
-  const competition = { school_id: 3, quiz_type: "competition" };
-  expect(canManageAssessment(competition, schoolStaff)).toBe(false);
-  expect(canManageAssessment(competition, systemAdmin)).toBe(true);
+test("eduClub competitions stay with the system console; a school runs its own", () => {
+  const eduClubCompetition = { school_id: null, quiz_type: "competition" };
+  expect(canManageAssessment(eduClubCompetition, schoolStaff)).toBe(false);
+  expect(canManageAssessment(eduClubCompetition, systemAdmin)).toBe(true);
+
+  const ownSchoolCompetition = { school_id: 3, quiz_type: "competition" };
+  expect(canManageAssessment(ownSchoolCompetition, schoolStaff)).toBe(true);
+  expect(canManageAssessment({ school_id: 8, test_type: "competition" }, schoolStaff)).toBe(false);
 });
 
 test("a school's own weekly assessment is read-only from the system console", () => {

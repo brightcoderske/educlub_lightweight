@@ -253,9 +253,9 @@ function WeeklyLearning() {
 
       if (!isLearner()) {
         setAcademicTerms(Array.isArray(termRows) ? termRows : []);
-        if (isSystemAdmin()) {
-          setCompetitions(Array.isArray(competitionRows) ? competitionRows : []);
-        }
+        // School staff get eduClub's competitions and their own school's; only
+        // their own can take a quiz or typing test (linkableCompetitions).
+        setCompetitions(Array.isArray(competitionRows) ? competitionRows : []);
         const authoringPeriod =
           requestedTerm && requestedYear
             ? termRows.find(
@@ -319,10 +319,15 @@ function WeeklyLearning() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!competitionQueryId || !isSystemAdmin()) return;
+    if (!competitionQueryId) return;
+    const current = competitions.find((item) => String(item.id) === String(competitionQueryId));
+    // School staff set up their own school's competitions; eduClub's stay with
+    // the system console.
+    const ownSchoolCompetition =
+      current?.school_id && Number(current.school_id) === Number(user?.schoolId);
+    if (!isSystemAdmin() && !ownSchoolCompetition) return;
     if (searchParams.get("category") === "weekly_quiz") {
       setAuthoringPanel("weekly_quiz");
-      const current = competitions.find((item) => String(item.id) === String(competitionQueryId));
       setQuizForm((form) => ({
         ...form,
         quiz_type: "competition",
@@ -339,7 +344,7 @@ function WeeklyLearning() {
       competition_id: competitionQueryId,
       name: current.name || "Typing Competition Assessment",
     }));
-  }, [competitionQueryId, isSystemAdmin, searchParams, competitions]);
+  }, [competitionQueryId, isSystemAdmin, searchParams, competitions, user?.schoolId]);
 
   useEffect(() => {
     if (!activeTest || !hasStartedTyping || !startedAt || remaining <= 0 || lessonLocked) {
@@ -442,10 +447,20 @@ function WeeklyLearning() {
       }));
     }
   }, [selectedQuizTerm?.id, selectedQuizTerm?.weeks, quizForm.week_number]);
-  const typingCompetitions = competitions.filter(
+  // The competitions a quiz or typing test may be attached to: any, from the
+  // system console; only the school's own, for its staff (eduClub's are run
+  // centrally). The server applies the same rule.
+  const linkableCompetitions = isSystemAdmin()
+    ? competitions
+    : competitions.filter(
+        (competition) =>
+          competition.school_id && Number(competition.school_id) === Number(user?.schoolId)
+      );
+  const canLinkCompetition = isSystemAdmin() || linkableCompetitions.length > 0;
+  const typingCompetitions = linkableCompetitions.filter(
     (competition) => competition.competition_type === "typing"
   );
-  const quizCompetitions = competitions.filter((competition) =>
+  const quizCompetitions = linkableCompetitions.filter((competition) =>
     ["quiz", "maths", "science", "stem"].includes(competition.competition_type)
   );
 
@@ -1346,7 +1361,7 @@ function WeeklyLearning() {
                   termOptions={termOptions}
                   selectedTerm={selectedTerm}
                   weekOptions={weekOptions}
-                  isSystemAdmin={isSystemAdmin}
+                  canLinkCompetition={canLinkCompetition}
                 />
               ) : (
                 <QuizStudioForm
@@ -1367,7 +1382,7 @@ function WeeklyLearning() {
                   termOptions={termOptions}
                   selectedQuizTerm={selectedQuizTerm}
                   quizWeekOptions={quizWeekOptions}
-                  isSystemAdmin={isSystemAdmin}
+                  canLinkCompetition={canLinkCompetition}
                   termTools={
                     isSchoolAdmin() ? (
                       <AssessmentTermTools

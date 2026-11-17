@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Card from "@mui/material/Card";
+import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -11,6 +13,7 @@ import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
+import CompetitionEditor, { competitionSetupPath } from "components/CompetitionEditor";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -19,6 +22,7 @@ import { useAuth } from "context/AuthContext";
 import { apiClient } from "lib/api";
 
 const todayValue = new Date().toISOString().slice(0, 10);
+const SETUP_PATH = "/school-admin/typing-quizzes";
 const gradeOptions = Array.from({ length: 12 }, (_, index) => `Grade ${index + 1}`);
 const competitionTypes = [
   ["", "All types"],
@@ -30,9 +34,9 @@ const competitionTypes = [
 ];
 
 function formatMoney(competition) {
-  const amount = Number(competition.price_amount || 0).toLocaleString();
-
-  return `${competition.currency || "KES"} ${amount}`;
+  const amount = Number(competition.price_amount || 0);
+  if (!amount) return "Free";
+  return `${competition.currency || "KES"} ${amount.toLocaleString()}`;
 }
 
 function competitionTiming(competition) {
@@ -68,6 +72,8 @@ function buildReportEndpoint(filters) {
 
 function SchoolAdminCompetitions() {
   const { user, isSchoolAdmin } = useAuth();
+  const navigate = useNavigate();
+  const [editing, setEditing] = useState(null);
   const [rows, setRows] = useState([]);
   const [competitions, setCompetitions] = useState([]);
   const [showAll, setShowAll] = useState(false);
@@ -82,6 +88,10 @@ function SchoolAdminCompetitions() {
   });
   const [error, setError] = useState("");
   const isTeacher = user?.role === "teacher";
+  // School admins and teachers run their own school's competitions; eduClub's
+  // are listed here but managed centrally.
+  const isOwnCompetition = (competition) =>
+    Boolean(competition.school_id) && Number(competition.school_id) === Number(user?.schoolId);
 
   const setFilter = (name, value) => {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -161,6 +171,19 @@ function SchoolAdminCompetitions() {
           </MDTypography>
         )}
 
+        <Card sx={{ mb: 3 }}>
+          <CompetitionEditor
+            schoolRun
+            editing={editing}
+            setupPath={SETUP_PATH}
+            onSaved={async () => {
+              setEditing(null);
+              await loadCompetitions();
+            }}
+            onCancel={() => setEditing(null)}
+          />
+        </Card>
+
         <Card>
           <MDBox p={2}>
             <MDTypography variant="h5" fontWeight="bold" mb={2}>
@@ -171,12 +194,14 @@ function SchoolAdminCompetitions() {
                 <TableHead sx={{ display: "table-header-group" }}>
                   <TableRow>
                     <TableCell>Competition</TableCell>
+                    <TableCell>Run by</TableCell>
                     <TableCell>Dates</TableCell>
                     <TableCell>Type</TableCell>
                     <TableCell>Grades</TableCell>
                     <TableCell>Price</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Enrolled</TableCell>
+                    <TableCell>Action</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -186,6 +211,13 @@ function SchoolAdminCompetitions() {
                         <MDTypography variant="button" fontWeight="medium">
                           {competition.name}
                         </MDTypography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={isOwnCompetition(competition) ? "Your school" : "eduClub"}
+                          color={isOwnCompetition(competition) ? "info" : "success"}
+                          size="small"
+                        />
                       </TableCell>
                       <TableCell>
                         {competition.start_date} to {competition.end_date}
@@ -199,6 +231,36 @@ function SchoolAdminCompetitions() {
                       <TableCell>{formatMoney(competition)}</TableCell>
                       <TableCell>{competitionTiming(competition)}</TableCell>
                       <TableCell>{competition.enrolled_count || 0}</TableCell>
+                      <TableCell>
+                        {isOwnCompetition(competition) ? (
+                          <MDBox display="flex" flexWrap="wrap" gap={0.25}>
+                            <MDButton
+                              variant="text"
+                              color="info"
+                              size="small"
+                              onClick={() => setEditing(competition)}
+                            >
+                              Edit
+                            </MDButton>
+                            <MDButton
+                              variant="text"
+                              color="success"
+                              size="small"
+                              onClick={() =>
+                                navigate(competitionSetupPath(SETUP_PATH, competition))
+                              }
+                            >
+                              {competition.competition_type === "typing"
+                                ? "Typing Setup"
+                                : "Quiz Setup"}
+                            </MDButton>
+                          </MDBox>
+                        ) : (
+                          <MDTypography variant="caption" color="text">
+                            Run by eduClub
+                          </MDTypography>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
