@@ -57,8 +57,21 @@ Replace `CPANELUSER` with your Novahost cPanel username everywhere below.
 3. `www.educlub.co.ke`: *Redirects* › type **Permanent (301)**, domain `educlub.co.ke`, redirect to
    `https://educlub.co.ke`, **Only redirect with www.**, **Wild Card Redirect** ticked.
 
-**1c. The code.** In the cPanel Terminal, make a read-only deploy key for this repository (never a
-password or token):
+**1c. The code.**
+
+*Without a Terminal* (the repository is public, so no key is needed). Do this **before** 1b, because
+cPanel only clones into a folder that does not exist yet or is empty:
+
+1. *File Manager*: look in `apps`. If an `educlub` folder is there and has anything in it, rename it
+   `educlub-old`.
+2. *Git Version Control* › **Create**: *Clone a Repository* on, Clone URL
+   `https://github.com/brightcoderske/educlub_lightweight.git`, Repository Path `apps/educlub`,
+   Repository Name `educlub`. Never press *Deploy HEAD Commit* there: the repository's `.cpanel.yml`
+   belongs to the old HostAfrica server.
+3. Then do 1b. cPanel creates `apps/educlub/public` and `apps/educlub/runner` inside the checkout, and git
+   ignores both.
+
+*With a Terminal* (or SSH), make a read-only deploy key for this repository (never a password or token):
 
 ```bash
 (set -e; mkdir -p ~/.ssh ~/apps; chmod 700 ~/.ssh
@@ -155,6 +168,17 @@ cd ~/apps/educlub && bash scripts/deploy.sh --force
 `--force` does every step: installs the packages, builds the website (pinned to two CPUs, so the account's
 process limit is not hit), checks the database is complete, fills `~/apps/educlub/runner`, restarts the
 app and waits until `/health` reports the deployed commit. It ends with `DEPLOYED <commit>`.
+
+*No Terminal or SSH yet?* Run it from *Cron Jobs* instead. Add a job set to every minute with this
+command. It runs only when there is no log file yet, so it deploys once however often cron fires:
+
+```text
+[ -e ~/educlub-deploy.log ] || (cd ~/apps/educlub && bash scripts/deploy.sh --force --yes > ~/educlub-deploy.log 2>&1)
+```
+
+Open `~/educlub-deploy.log` in *File Manager* and refresh it until the last line reads `DEPLOYED <commit>`
+(the website build takes several minutes). Then **delete the cron job**. To run it again, delete the log
+file first.
 
 Next, load the app's Node into the Terminal, so the commands below can run:
 
