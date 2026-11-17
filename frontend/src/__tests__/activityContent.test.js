@@ -51,10 +51,9 @@ test("combines separate starter HTML and CSS", () => {
   })).toContain("<style>");
 });
 
-test("HTML CSS preview removes scripts unless JavaScript is enabled", () => {
-  const html = "<h1>Hello</h1><script>window.alert('no')</script>";
-  expect(webPreview(html, "h1 { color: blue; }", false)).not.toContain("<script>");
-  expect(webPreview(html, "", true)).toContain("<script>");
+test("a script the learner writes in the HTML box runs in the preview", () => {
+  const html = "<h1>Hello</h1><script>window.alert('yes')</script>";
+  expect(webPreview(html, "h1 { color: blue; }")).toContain("<script>window.alert('yes')</script>");
 });
 
 test("legacy starter code populates the HTML editor", () => {

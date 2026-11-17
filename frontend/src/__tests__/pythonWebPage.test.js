@@ -32,14 +32,14 @@ describe("Python + HTML activity detection", () => {
 });
 
 describe("pythonWebPreview", () => {
-  test("keeps the restrictive CSP and strips every learner script", () => {
+  test("uses the web preview's policy and strips every learner script", () => {
     const out = pythonWebPreview(
       "<p>hi</p><script>steal()</script><script src=x>",
       "p{color:red}",
       1
     );
     expect(out).toContain("default-src 'none'");
-    expect(out).not.toContain("connect-src");
+    expect(out).toContain("form-action 'none'");
     expect(out).not.toContain("steal()");
     expect(out).not.toContain("src=x");
     expect(out).toContain("<p>hi</p>");

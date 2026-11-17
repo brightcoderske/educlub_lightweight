@@ -10,6 +10,7 @@ import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
 import MDTypography from "components/MDTypography";
+import { PREVIEW_SANDBOX, webPreview } from "layouts/learner/module-learn/activityContent";
 import { executableBlockHtml, splitExecutableSource } from "./authoringUtils";
 
 const starterSource = `<style>
@@ -22,11 +23,11 @@ h2 { color: teal; }
 console.log("Ready");
 </script>`;
 
+// The same document learners get when they press Run, so what the author
+// previews here is what the lesson shows.
 function previewDocument(source) {
   const { html, css, js } = splitExecutableSource(source);
-  const policy =
-    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:\">";
-  return `<!doctype html><html><head>${policy}<style>${css}</style></head><body>${html}<script>${js}<\/script></body></html>`;
+  return webPreview(html, css, js);
 }
 
 function ExecutableCodeDialog({ open, initialValues, onClose, onSave }) {
@@ -61,8 +62,9 @@ function ExecutableCodeDialog({ open, initialValues, onClose, onSave }) {
         <Grid container spacing={2}>
           <Grid item xs={12} md={showPreview ? 7 : 12}>
             <MDTypography variant="caption" color="text">
-              Runs only inside an isolated iframe. It cannot access eduClub login data, the
-              dashboard page, forms, popups, or external network requests.
+              Runs inside an isolated frame. It can show pictures and call web addresses that
+              start with https, and its links open in a new tab, but it cannot reach eduClub
+              login data or the dashboard page.
             </MDTypography>
             <MDInput
               multiline
@@ -89,7 +91,7 @@ function ExecutableCodeDialog({ open, initialValues, onClose, onSave }) {
               <MDBox
                 component="iframe"
                 title="Sandboxed code preview"
-                sandbox="allow-scripts"
+                sandbox={PREVIEW_SANDBOX}
                 srcDoc={preview}
                 width="100%"
                 height="390px"

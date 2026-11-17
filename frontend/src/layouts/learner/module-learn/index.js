@@ -29,6 +29,7 @@ import {
   pythonWebPreview,
   isPythonActivity,
   PREVIEW_MIN_HEIGHT,
+  PREVIEW_SANDBOX,
   scriptsAllowed,
   selectActivityContent,
   starterWorkspace,
@@ -160,14 +161,14 @@ function ExecutableRichContent({ html, storageScope }) {
         "margin-top:10px;padding:8px 14px;border:0;border-radius:6px;background:#2563eb;color:white;cursor:pointer";
       const frame = document.createElement("iframe");
       frame.title = "Executable lesson output";
-      frame.sandbox = "allow-scripts";
+      frame.sandbox = PREVIEW_SANDBOX;
       frame.style.cssText =
         "display:none;width:100%;height:320px;margin-top:10px;border:1px solid #d1d5db;border-radius:6px;background:white;resize:vertical;overflow:auto";
       cleanups.push(attachPreviewAutoHeight(frame));
       const run = () => {
         try {
           const source = JSON.parse(decodeURIComponent(block.dataset.executableCode || ""));
-          frame.srcdoc = webPreview(source.html, source.css, source.js, true);
+          frame.srcdoc = webPreview(source.html, source.css, source.js);
           frame.style.display = "block";
         } catch {
           frame.srcdoc = "<p>This code block could not be opened.</p>";
@@ -1313,7 +1314,7 @@ function ActivityBody({
               ref={previewFrameRef}
               title="Code preview"
               srcDoc={codePreviewHtml}
-              sandbox={scriptsAllowed(content) || pythonWeb ? "allow-scripts" : ""}
+              sandbox={PREVIEW_SANDBOX}
               mt={1.5}
               width="100%"
               sx={{
@@ -2375,11 +2376,12 @@ function ModuleLearn() {
       return;
     }
     if (["html_css", "html_css_js", "html", "web"].includes(language.toLowerCase())) {
+      // The JavaScript box only exists when the activity asks for it, so a
+      // left-over draft from a box the learner cannot see is not run.
       const preview = webPreview(
         htmlDraft || codeDraft,
         cssDraft,
-        jsDraft,
-        scriptsAllowed(activeActivity.content || {})
+        scriptsAllowed(activeActivity.content || {}) ? jsDraft : ""
       );
       // Only the preview frame gets the generated document. Writing it back into
       // codeDraft overwrote the learner's own source in the single-editor

@@ -70,18 +70,12 @@ export function starterWorkspace(content = {}) {
 }
 
 /**
- * Whether an activity's code workspace should run JavaScript.
+ * Whether an activity's code workspace shows its own JavaScript box.
  *
  * `language` and `starter_js` come from the same authored content blob, written
- * by the same staff member through the same sanitizer, so neither is more
- * trusted than the other. Requiring both to agree bought no safety and silently
- * broke activities: content carrying starter_js under language "html_css" ran
- * with the script dropped, so the learner met dead buttons and no explanation.
- * Treating either signal as the author's intent removes that trap.
- *
- * The sandbox itself is unchanged - still `allow-scripts` with no
- * `allow-same-origin`, under the CSP webPreview writes - so scripts stay walled
- * off from the app's origin, storage and network.
+ * by the same staff member through the same sanitizer, so either one is taken
+ * as the author's intent. Scripts written inside the HTML box run in every web
+ * preview either way (see PREVIEW_SANDBOX).
  */
 export function scriptsAllowed(content = {}) {
   if ((content.language || "").toLowerCase() === "html_css_js") return true;
@@ -169,19 +163,80 @@ export function attachPreviewAutoHeight(
   return () => view.removeEventListener("message", onMessage);
 }
 
-const PREVIEW_POLICY =
-  "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:\">";
+/**
+ * What a preview frame may do. A learner's page behaves like a real web page:
+ * its scripts run, alert() and prompt() show, a form's submit event fires, and
+ * an outside link opens in a new tab.
+ *
+ * `allow-same-origin` is the one thing it never gets. Without it the frame is
+ * an opaque origin: it cannot read eduClub's page, storage or session, and the
+ * session cookie (SameSite=Lax) is not sent on its requests, so reaching the
+ * internet does not reach the learner's account.
+ */
+export const PREVIEW_SANDBOX =
+  "allow-scripts allow-modals allow-forms allow-popups allow-popups-to-escape-sandbox";
 
-export function webPreview(html = "", css = "", js = "", allowJavaScript = false) {
-  if (typeof js === "boolean") {
-    allowJavaScript = js;
-    js = "";
+/**
+ * Pictures, sounds, fonts, stylesheets, libraries and fetch() may come from
+ * any https address, so a learner sees the image they linked and can call a
+ * public API. A form still never leaves the page (form-action 'none'): its
+ * submit event runs the learner's script, and a form without one stays put.
+ */
+const PREVIEW_POLICY = `<meta http-equiv="Content-Security-Policy" content="${[
+  "default-src 'none'",
+  "script-src 'unsafe-inline' https:",
+  "style-src 'unsafe-inline' https:",
+  "img-src https: data: blob:",
+  "media-src https: data: blob:",
+  "font-src https: data:",
+  "connect-src https:",
+  "form-action 'none'",
+  "base-uri 'none'",
+].join("; ")}">`;
+
+/**
+ * Runs before the learner's code. An outside link opens in a new tab: inside
+ * the frame most sites refuse to show at all, and the learner's page would be
+ * gone until they pressed Run again. `#section` links still scroll the page.
+ *
+ * localStorage throws in an opaque frame, which stopped a whole script at its
+ * first line. It is swapped for one kept in memory: it works the same way,
+ * and it empties when Run starts the page again.
+ */
+const PAGE_HELPER = `
+(function () {
+  document.addEventListener("click", function (event) {
+    var link = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+    if (!link || event.defaultPrevented) return;
+    var href = link.getAttribute("href") || "";
+    if (href.charAt(0) === "#" || /^javascript:/i.test(href)) return;
+    link.target = "_blank";
+    link.rel = "noopener";
+  });
+  function memoryStorage() {
+    var items = {};
+    return {
+      getItem: function (key) { return Object.prototype.hasOwnProperty.call(items, key) ? items[key] : null; },
+      setItem: function (key, value) { items[key] = String(value); },
+      removeItem: function (key) { delete items[key]; },
+      clear: function () { items = {}; },
+      key: function (index) { return Object.keys(items)[index] || null; },
+      get length() { return Object.keys(items).length; }
+    };
   }
-  const safeHtml = allowJavaScript ? html : html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
-  const policy = PREVIEW_POLICY;
-  return `${policy}${safeHtml}${css ? `<style>${css}</style>` : ""}${
-    allowJavaScript && js ? `<script>${js}<\/script>` : ""
-  }${allowJavaScript ? `<script>${AUTO_HEIGHT_REPORTER}<\/script>` : ""}`;
+  ["localStorage", "sessionStorage"].forEach(function (name) {
+    try { window[name].length; } catch (e) {
+      try { Object.defineProperty(window, name, { value: memoryStorage(), configurable: true }); } catch (ignored) {}
+    }
+  });
+})();`;
+
+const PAGE_HELPER_TAG = `<script>${PAGE_HELPER}<\/script>`;
+
+export function webPreview(html = "", css = "", js = "") {
+  return `${PREVIEW_POLICY}${PAGE_HELPER_TAG}${html}${css ? `<style>${css}</style>` : ""}${
+    js ? `<script>${js}<\/script>` : ""
+  }<script>${AUTO_HEIGHT_REPORTER}<\/script>`;
 }
 
 export const PYTHON_PAGE_SOURCE = "educlub-python-page";
@@ -257,7 +312,7 @@ export function pythonWebPreview(html = "", css = "", nonce = 0) {
   const safeHtml = String(html)
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
     .replace(/<\/?script\b[^>]*>/gi, "");
-  return `${PREVIEW_POLICY}<!-- run ${Number(nonce) || 0} -->${safeHtml}${
+  return `${PREVIEW_POLICY}${PAGE_HELPER_TAG}<!-- run ${Number(nonce) || 0} -->${safeHtml}${
     css ? `<style>${css}</style>` : ""
   }<script>${PYTHON_PAGE_BRIDGE}<\/script><script>${AUTO_HEIGHT_REPORTER}<\/script>`;
 }
