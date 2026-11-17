@@ -267,10 +267,27 @@ mkdir -p "$BACKEND/tmp"
 touch "$BACKEND/tmp/restart.txt"
 
 # Passenger starts the app on the first request after a restart, so this check is also what starts it.
+# It asks the public address and also this server directly. Before DNS points here (a first deploy), the
+# public address still reaches the old host, so only the direct answer can show the new version. The
+# direct request skips the certificate check: it connects to this server itself, which may not have
+# its certificate yet.
+SITE_HOST="${SITE_URL#*://}"
+SITE_HOST="${SITE_HOST%%/*}"
+health_commit() { sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p'; }
+running_commit() {
+  local found ip
+  found="$(curl -fsS --max-time 10 "$SITE_URL/health" 2>/dev/null | health_commit || true)"
+  [[ "$found" == "$NEW" ]] && { echo "$found"; return; }
+  for ip in 127.0.0.1 $(hostname -I 2>/dev/null || true); do
+    found="$(curl -fsSk --max-time 5 --resolve "$SITE_HOST:443:$ip" "https://$SITE_HOST/health" 2>/dev/null | health_commit || true)"
+    [[ "$found" == "$NEW" ]] && break
+  done
+  echo "$found"
+}
 say "Checking $SITE_URL/health for ${NEW:0:7}..."
 running=""
 for _ in $(seq 1 18); do
-  running="$(curl -fsS --max-time 10 "$SITE_URL/health" 2>/dev/null | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p' || true)"
+  running="$(running_commit)"
   [[ "$running" == "$NEW" ]] && break
   sleep 5
 done

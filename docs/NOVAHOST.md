@@ -161,66 +161,59 @@ The saved picture addresses still name the old server; step 4 fixes them once th
 
 ## Step 4. First deploy, checked before anyone is sent there
 
+This step installs the packages, builds the website (pinned to two CPUs, so the account's process limit
+is not hit), checks the database is complete, fills `~/apps/educlub/runner`, restarts the app and waits
+until it reports the deployed commit. DNS still points elsewhere, so the deploy asks the app on this
+server directly. Then it changes the saved picture addresses from `https://learn.educlub.co.ke/uploads/...`
+to `/uploads/...` (it reports "Nothing to do" if they are already done), checks the mailbox login, and
+shows the app's health.
+
+*Without a Terminal*: in *Cron Jobs*, add a job set to every minute with this command. It runs only when
+there is no log file yet, so it runs once however often cron fires:
+
+```text
+[ -e ~/educlub-step4.log ] || (cd ~/apps/educlub && bash scripts/deploy.sh --force --yes && cd backend && . "$(ls -d ~/nodevenv/apps/educlub/backend/*/bin/activate | sort -V | tail -1)" && echo "--- pictures" && node scripts/rewrite-upload-urls.js --apply && echo "--- email" && node scripts/verify-email.js; echo "--- health"; for ip in 127.0.0.1 $(hostname -I); do curl -sk --max-time 10 --resolve educlub.co.ke:443:$ip https://educlub.co.ke/health/ready && break; done; echo; echo FINISHED) > ~/educlub-step4.log 2>&1
+```
+
+Open `~/educlub-step4.log` in *File Manager* and refresh it until the last line reads `FINISHED` (the
+website build takes several minutes). Then **delete the cron job**. To run it again, delete the log first.
+
+*With a Terminal*, run the same commands one at a time:
+
 ```bash
 cd ~/apps/educlub && bash scripts/deploy.sh --force
 ```
-
-`--force` does every step: installs the packages, builds the website (pinned to two CPUs, so the account's
-process limit is not hit), checks the database is complete, fills `~/apps/educlub/runner`, restarts the
-app and waits until `/health` reports the deployed commit. It ends with `DEPLOYED <commit>`.
-
-*No Terminal or SSH yet?* Run it from *Cron Jobs* instead. Add a job set to every minute with this
-command. It runs only when there is no log file yet, so it deploys once however often cron fires:
-
-```text
-[ -e ~/educlub-deploy.log ] || (cd ~/apps/educlub && bash scripts/deploy.sh --force --yes > ~/educlub-deploy.log 2>&1)
-```
-
-Open `~/educlub-deploy.log` in *File Manager* and refresh it until the last line reads `DEPLOYED <commit>`
-(the website build takes several minutes). Then **delete the cron job**. To run it again, delete the log
-file first.
-
-Next, load the app's Node into the Terminal, so the commands below can run:
 
 ```bash
 cd ~/apps/educlub/backend && source ~/nodevenv/apps/educlub/backend/*/bin/activate
 ```
 
-**Drop the old address from saved pictures.** Uploads were saved as
-`https://learn.educlub.co.ke/uploads/...`; the app now saves `/uploads/...` and needs the old ones changed
-to match. First see what would change (this changes nothing):
-
-```bash
-node scripts/rewrite-upload-urls.js
-```
-
-It lists each table and column with the number of values found. Then make the change:
-
 ```bash
 node scripts/rewrite-upload-urls.js --apply
 ```
 
-Running it again reports "Nothing to do". Run it after every database copy (step 5 repeats this).
-
-Then check the mailbox and the app through the server itself (DNS still points elsewhere):
-
 ```bash
-npm run email:verify
+node scripts/verify-email.js
 ```
 
 ```bash
-curl -s --resolve educlub.co.ke:443:127.0.0.1 -k https://educlub.co.ke/health/ready
+curl -sk --resolve educlub.co.ke:443:127.0.0.1 https://educlub.co.ke/health/ready
 ```
 
-In that answer, `clock.databaseNow` and `clock.serverNow` must match to the second: that confirms the
-database and the app agree on the time.
+In the log, look for:
+
+- `DEPLOYED <commit>` from the deploy.
+- `Rewrote N value(s)` (or "Nothing to do") after `--- pictures`.
+- "SMTP connection and authentication verified" after `--- email`.
+- After `--- health`, `clock.databaseNow` and `clock.serverNow` matching to the second: the database and
+  the app agree on the time.
 
 ## Step 5. Switch-over
 
 Pick a quiet hour (no lessons), then:
 
-1. Repeat **step 3** so the newest data and uploads are copied, then the two `rewrite-upload-urls.js`
-   commands from step 4, then run `bash scripts/deploy.sh --force --no-pull` once more.
+1. Repeat **step 3** so the newest data and uploads are copied, then run step 4 again (delete
+   `~/educlub-step4.log` first if you use the cron job).
 2. **DNS**: point `educlub.co.ke`, `www` and `runner` at Novahost. The simplest is to switch the domain's
    nameservers to Novahost's, which also moves mail. Then *SSL/TLS Status* › **Run AutoSSL**. Leave
    `learn` out: it is retired.
