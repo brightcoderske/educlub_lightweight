@@ -8,8 +8,7 @@ import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
 import MDTypography from "components/MDTypography";
 import { apiClient } from "lib/api";
-
-const adminMessageRoles = ["system_admin", "school_admin", "teacher"];
+import { STAFF_ROLES, formatMessageTime, senderLabel } from "lib/feedbackChat";
 
 function AdminFeedbackPanel({ title = "Learner Feedback" }) {
   const [threads, setThreads] = useState([]);
@@ -78,16 +77,6 @@ function AdminFeedbackPanel({ title = "Learner Feedback" }) {
     }
   };
 
-  const formatTime = (value) =>
-    value
-      ? new Date(value).toLocaleString("en-US", {
-          day: "numeric",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "";
-
   return (
     <Card>
       <MDBox p={3}>
@@ -153,7 +142,8 @@ function AdminFeedbackPanel({ title = "Learner Feedback" }) {
                       )}
                     </MDBox>
                     <MDTypography variant="caption" color="text" display="block">
-                      {thread.school_name || "No school"} | {formatTime(thread.last_message_at)}
+                      {thread.school_name || "No school"} |{" "}
+                      {formatMessageTime(thread.last_message_at)}
                     </MDTypography>
                     <MDTypography variant="caption" color="text" display="block">
                       {thread.last_message || "No messages yet."}
@@ -177,7 +167,7 @@ function AdminFeedbackPanel({ title = "Learner Feedback" }) {
                   </MDTypography>
                 ) : (
                   messages.map((message) => {
-                    const admin = adminMessageRoles.includes(message.sender_role);
+                    const admin = STAFF_ROLES.includes(message.sender_role);
                     return (
                       <MDBox
                         key={message.id}
@@ -203,7 +193,12 @@ function AdminFeedbackPanel({ title = "Learner Feedback" }) {
                             {message.message}
                           </MDTypography>
                           <MDTypography variant="caption" color={admin ? "white" : "secondary"}>
-                            {formatTime(message.created_at)}
+                            {[
+                              senderLabel(message.sender_role),
+                              formatMessageTime(message.created_at),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                           </MDTypography>
                         </MDBox>
                       </MDBox>

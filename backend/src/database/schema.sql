@@ -999,10 +999,23 @@ CREATE TABLE IF NOT EXISTS feedback_messages (
   id SERIAL PRIMARY KEY,
   thread_id INTEGER REFERENCES feedback_threads(id) ON DELETE CASCADE,
   sender_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  sender_role VARCHAR(50) NOT NULL CHECK (sender_role IN ('system_admin', 'learner')),
+  sender_role VARCHAR(50) NOT NULL,
   message TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- A learner's messages go to their own school, so its admin and teachers
+-- reply too. The first version allowed only system_admin and learner, which
+-- made every school reply fail. That rule is named by the database itself:
+-- feedback_messages_chk_1 on MySQL, sender_role on MariaDB, and
+-- feedback_messages_sender_role_check on PostgreSQL. All three go, and the
+-- widened rule gets a name of its own.
+ALTER TABLE feedback_messages DROP CONSTRAINT IF EXISTS feedback_messages_chk_1;
+ALTER TABLE feedback_messages DROP CONSTRAINT IF EXISTS sender_role;
+ALTER TABLE feedback_messages DROP CONSTRAINT IF EXISTS feedback_messages_sender_role_check;
+ALTER TABLE feedback_messages
+  ADD CONSTRAINT feedback_messages_sender_role_allowed
+  CHECK (sender_role IN ('system_admin', 'school_admin', 'teacher', 'learner'));
 
 -- Short-lived one-time password reset tokens
 CREATE TABLE IF NOT EXISTS password_reset_tokens (

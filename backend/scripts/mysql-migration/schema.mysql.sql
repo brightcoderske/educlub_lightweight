@@ -1134,12 +1134,22 @@ CREATE TABLE IF NOT EXISTS feedback_messages (
   id INT AUTO_INCREMENT PRIMARY KEY,
   thread_id INT,
   sender_user_id INT,
-  sender_role VARCHAR(50) NOT NULL CHECK (sender_role IN ('system_admin', 'learner')),
+  sender_role VARCHAR(50) NOT NULL,
   message TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (thread_id) REFERENCES feedback_threads(id) ON DELETE CASCADE,
   FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE SET NULL
 );
+
+ALTER TABLE feedback_messages DROP CONSTRAINT feedback_messages_chk_1;
+
+ALTER TABLE feedback_messages DROP CONSTRAINT sender_role;
+
+ALTER TABLE feedback_messages DROP CONSTRAINT feedback_messages_sender_role_check;
+
+ALTER TABLE feedback_messages
+  ADD CONSTRAINT feedback_messages_sender_role_allowed
+  CHECK (sender_role IN ('system_admin', 'school_admin', 'teacher', 'learner'));
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id INT AUTO_INCREMENT PRIMARY KEY,

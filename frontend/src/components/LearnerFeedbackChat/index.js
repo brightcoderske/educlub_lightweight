@@ -7,22 +7,13 @@ import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
 import { apiClient } from "lib/api";
-
-function formatTime(value) {
-  return value
-    ? new Date(value).toLocaleString("en-US", {
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "";
-}
+import { formatMessageTime, learnerChatWording, senderLabel } from "lib/feedbackChat";
 
 function LearnerFeedbackChat() {
   const [visible, setVisible] = useState(() => localStorage.getItem("feedbackHidden") !== "true");
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [thread, setThread] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
@@ -47,6 +38,7 @@ function LearnerFeedbackChat() {
     try {
       const response = await apiClient.get("/feedback/learner/thread");
       setMessages(response.messages || []);
+      setThread(response.thread || null);
       setUnreadReplies(0);
       window.dispatchEvent(new CustomEvent("educlub:feedback-unread-changed"));
     } catch (err) {
@@ -105,6 +97,7 @@ function LearnerFeedbackChat() {
   if (!visible) {
     return null;
   }
+  const wording = learnerChatWording(thread);
 
   // The stack sits below the mobile navigation drawer, which MUI puts at 1200,
   // so an open menu covers this button rather than it floating over the backdrop.
@@ -121,7 +114,7 @@ function LearnerFeedbackChat() {
             bgColor="info"
           >
             <MDTypography variant="button" color="white" fontWeight="bold">
-              eduClub Feedback
+              {wording.title}
             </MDTypography>
             <MDButton
               aria-label="Close feedback"
@@ -136,7 +129,7 @@ function LearnerFeedbackChat() {
           <MDBox p={1.5} height="260px" sx={{ overflowY: "auto", backgroundColor: "#f8fafc" }}>
             {messages.length === 0 ? (
               <MDTypography variant="caption" color="text">
-                Send feedback or ask for help. Replies from eduClub will appear here.
+                {wording.intro}
               </MDTypography>
             ) : (
               messages.map((item) => {
@@ -158,6 +151,11 @@ function LearnerFeedbackChat() {
                         border: own ? "none" : "1px solid #e5e7eb",
                       }}
                     >
+                      {!own && senderLabel(item.sender_role) && (
+                        <MDTypography variant="caption" fontWeight="bold" display="block">
+                          {senderLabel(item.sender_role)}
+                        </MDTypography>
+                      )}
                       <MDTypography
                         variant="caption"
                         color={own ? "white" : "text"}
@@ -166,7 +164,7 @@ function LearnerFeedbackChat() {
                         {item.message}
                       </MDTypography>
                       <MDTypography variant="caption" color={own ? "white" : "secondary"}>
-                        {formatTime(item.created_at)}
+                        {formatMessageTime(item.created_at)}
                       </MDTypography>
                     </MDBox>
                   </MDBox>

@@ -3,8 +3,82 @@ const notificationsService = require("./notifications.service");
 
 const adminReplyRoles = ["system_admin", "school_admin", "teacher"];
 
+// Who a learner's reply came from, in the words the learner sees.
+const REPLY_FROM = {
+  teacher: "your teacher",
+  school_admin: "your school",
+  system_admin: "eduClub",
+};
+
 function cleanMessage(message) {
   return String(message || "").trim();
+}
+
+// A learner talks to their own school: its admin and the teachers of their
+// courses. Only learners of the independent-learners school, which has no
+// staff of its own, talk to eduClub's system admins.
+const INDEPENDENT_THREAD = `(ft.school_id IS NULL OR EXISTS (
+  SELECT 1 FROM schools si WHERE si.id = ft.school_id AND si.is_independent_school = true
+))`;
+
+// The conversations a member of staff may read and answer, as a condition on ft.
+function staffThreadScope(user, params) {
+  if (user.role === "system_admin") return INDEPENDENT_THREAD;
+
+  params.push(user.schoolId || null);
+  let scope = `ft.school_id = $${params.length} AND NOT ${INDEPENDENT_THREAD}`;
+  if (user.role === "teacher") {
+    params.push(user.userId);
+    scope += ` AND EXISTS (
+      SELECT 1
+      FROM course_allocations ca
+      JOIN course_teacher_assignments cta ON cta.course_id = ca.course_id
+      WHERE ca.learner_id = ft.learner_id
+        AND cta.teacher_user_id = $${params.length}
+        AND cta.is_active = true
+    )`;
+  }
+  return scope;
+}
+
+async function notifyStaffOfLearnerMessage(thread) {
+  const notification = {
+    title: "Learner message",
+    notification_type: "learner_feedback",
+    entity_type: "feedback_thread",
+    entity_id: thread.id,
+  };
+  if (thread.independent) {
+    await notificationsService.notifyRole("system_admin", {
+      ...notification,
+      message: "An independent learner sent a new message.",
+    });
+    return;
+  }
+  if (!thread.school_id) return;
+
+  // Only teachers of the learner's own school: they are the ones who can open it.
+  const teachers = await query(
+    `SELECT DISTINCT cta.teacher_user_id
+     FROM course_allocations ca
+     JOIN course_teacher_assignments cta ON cta.course_id = ca.course_id
+     JOIN users teacher ON teacher.id = cta.teacher_user_id
+     WHERE ca.learner_id = $1 AND cta.is_active = true AND teacher.school_id = $2`,
+    [thread.learner_id, thread.school_id],
+  );
+  await Promise.all([
+    notificationsService.notifyRole("school_admin", {
+      ...notification,
+      school_id: thread.school_id,
+      message: "A learner from your school sent a new message.",
+    }),
+    ...teachers.rows.map((row) =>
+      notificationsService.notifyUser(row.teacher_user_id, {
+        ...notification,
+        message: "A learner on your course sent a new message.",
+      }),
+    ),
+  ]);
 }
 
 async function findLearner(userId) {
@@ -15,12 +89,12 @@ async function findLearner(userId) {
   return result.rows[0];
 }
 
-async function getOrCreateLearnerThread(user) {
-  const learner = await findLearner(user.userId);
+async function findLearnerThread(userId) {
   const existing = await query(
     `SELECT ft.*,
             l.full_name AS learner_name,
             s.name AS school_name,
+            ${INDEPENDENT_THREAD} AS independent,
             (
               SELECT COUNT(*)::integer
               FROM feedback_messages fm
@@ -37,32 +111,29 @@ async function getOrCreateLearnerThread(user) {
      WHERE ft.learner_user_id = $1
      ORDER BY ft.updated_at DESC
      LIMIT 1`,
-    [user.userId, adminReplyRoles],
+    [userId, adminReplyRoles],
   );
+  const thread = existing.rows[0];
+  return thread ? { ...thread, independent: Boolean(Number(thread.independent)) } : null;
+}
 
-  if (existing.rows[0]) {
-    return existing.rows[0];
-  }
+async function getOrCreateLearnerThread(user) {
+  const existing = await findLearnerThread(user.userId);
+  if (existing) return existing;
 
-  const created = await query(
+  const learner = await findLearner(user.userId);
+  await query(
     `INSERT INTO feedback_threads (
        learner_user_id, learner_id, school_id, learner_last_read_at
      )
-     VALUES ($1, $2, $3, NOW())
-     RETURNING *`,
+     VALUES ($1, $2, $3, NOW())`,
     [
       user.userId,
       learner?.id || null,
       learner?.school_id || user.schoolId || null,
     ],
   );
-
-  return {
-    ...created.rows[0],
-    learner_name: learner?.full_name || user.username || "Learner",
-    school_name: null,
-    unread_replies: 0,
-  };
+  return findLearnerThread(user.userId);
 }
 
 async function getLearnerThread(user) {
@@ -135,54 +206,14 @@ async function addLearnerMessage(user, message) {
      WHERE id = $1`,
     [thread.id],
   );
-  await Promise.all([
-    notificationsService.notifyRole("system_admin", {
-      title: "Learner message",
-      message: "A learner sent a new message.",
-      notification_type: "learner_feedback",
-      entity_type: "feedback_thread",
-      entity_id: thread.id,
-    }),
-    thread.school_id
-      ? notificationsService.notifyRole("school_admin", {
-          school_id: thread.school_id,
-          title: "Learner message",
-          message: "A learner from your school sent a new message.",
-          notification_type: "learner_feedback",
-          entity_type: "feedback_thread",
-          entity_id: thread.id,
-        })
-      : null,
-  ].filter(Boolean));
+  await notifyStaffOfLearnerMessage(thread);
 
   return result.rows[0];
 }
 
-function adminSchoolFilter(user, params) {
-  if (user.role === "system_admin") {
-    return "";
-  }
-
-  params.push(user.schoolId || null);
-  const schoolParam = params.length;
-  if (user.role === "teacher") {
-    params.push(user.userId);
-    return `WHERE ft.school_id = $${schoolParam}
-      AND EXISTS (
-        SELECT 1
-        FROM course_allocations ca
-        JOIN course_teacher_assignments cta ON cta.course_id = ca.course_id
-        WHERE ca.learner_id = ft.learner_id
-          AND cta.teacher_user_id = $${params.length}
-          AND cta.is_active = true
-      )`;
-  }
-  return `WHERE ft.school_id = $${schoolParam}`;
-}
-
 async function listThreads(user) {
   const params = [];
-  const where = adminSchoolFilter(user, params);
+  const where = `WHERE ${staffThreadScope(user, params)}`;
   const result = await query(
     `SELECT ft.*,
             l.full_name AS learner_name,
@@ -219,22 +250,7 @@ async function listThreads(user) {
 
 async function getThreadForAdmin(user, threadId) {
   const params = [threadId];
-  let schoolFilter = "";
-  if (user.role !== "system_admin") {
-    params.push(user.schoolId || null);
-    schoolFilter = `AND ft.school_id = $${params.length}`;
-    if (user.role === "teacher") {
-      params.push(user.userId);
-      schoolFilter += ` AND EXISTS (
-        SELECT 1
-        FROM course_allocations ca
-        JOIN course_teacher_assignments cta ON cta.course_id = ca.course_id
-        WHERE ca.learner_id = ft.learner_id
-          AND cta.teacher_user_id = $${params.length}
-          AND cta.is_active = true
-      )`;
-    }
-  }
+  const schoolFilter = `AND ${staffThreadScope(user, params)}`;
   const threadResult = await query(
     `SELECT ft.*,
             l.full_name AS learner_name,
@@ -291,7 +307,7 @@ async function addAdminReply(user, threadId, message) {
   );
   await notificationsService.notifyUser(thread.learner_user_id, {
     title: "New reply",
-    message: "You have a new reply from eduClub.",
+    message: `You have a new reply from ${REPLY_FROM[user.role] || "eduClub"}.`,
     notification_type: "learner_feedback_reply",
     entity_type: "feedback_thread",
     entity_id: thread.id,
