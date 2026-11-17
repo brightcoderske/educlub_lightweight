@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS courses (
   image_url TEXT,
   estimated_weeks INT,
   learning_objectives JSON DEFAULT ('[]'),
-  certificate_enabled TINYINT(1) DEFAULT FALSE,
+  certificate_enabled TINYINT(1) DEFAULT TRUE,
   independent_price_amount DECIMAL(12, 2) DEFAULT 0,
   independent_currency VARCHAR(10) DEFAULT 'KES',
   course_category VARCHAR(50) DEFAULT 'general',
@@ -209,7 +209,9 @@ ALTER TABLE courses ADD COLUMN estimated_weeks INT;
 
 ALTER TABLE courses ADD COLUMN learning_objectives JSON DEFAULT ('[]');
 
-ALTER TABLE courses ADD COLUMN certificate_enabled TINYINT(1) DEFAULT FALSE;
+ALTER TABLE courses ADD COLUMN certificate_enabled TINYINT(1) DEFAULT TRUE;
+
+ALTER TABLE courses ALTER COLUMN certificate_enabled SET DEFAULT TRUE;
 
 ALTER TABLE courses ADD COLUMN independent_price_amount DECIMAL(12, 2) DEFAULT 0;
 

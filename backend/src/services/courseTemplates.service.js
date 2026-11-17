@@ -591,7 +591,9 @@ async function adoptTemplate(templateId, user = {}) {
       template.image_url,
       template.estimated_weeks,
       JSON.stringify(template.learning_objectives || []),
-      template.certificate_enabled,
+      // A school's copy always awards a certificate. Templates default to off
+      // and nothing turns them on, so copying the flag left courses without one.
+      true,
       Number(template.independent_price_amount || 0),
       template.independent_currency || "KES",
       template.course_category,

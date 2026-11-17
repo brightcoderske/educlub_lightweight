@@ -181,7 +181,9 @@ async function createCourse(courseData) {
       image_url || null,
       estimated_weeks || null,
       JSON.stringify(learning_objectives || []),
-      certificate_enabled === true,
+      // Certificates are on unless a course is explicitly made without one: no
+      // screen sets this, so "off by default" meant finished learners got none.
+      certificate_enabled !== false,
       independent_price_amount || 0,
       independent_currency || "KES",
       courseCategory,
@@ -223,7 +225,7 @@ async function updateCourse(id, courseData) {
          image_url = NULLIF($6, ''),
          estimated_weeks = $7,
          learning_objectives = $8,
-         certificate_enabled = $9,
+         certificate_enabled = COALESCE($9, c.certificate_enabled),
          independent_price_amount = $10,
          independent_currency = $11,
          course_category = $12,
@@ -240,7 +242,9 @@ async function updateCourse(id, courseData) {
       image_url || null,
       estimated_weeks || null,
       JSON.stringify(learning_objectives || []),
-      certificate_enabled === true,
+      // The course builder does not send this, and treating its absence as
+      // "off" switched certificates off every time a course was edited.
+      certificate_enabled === undefined ? null : certificate_enabled === true,
       independent_price_amount || 0,
       independent_currency || "KES",
       courseCategory,
@@ -1539,12 +1543,10 @@ async function upsertActivityProgress(
   };
 }
 
-async function maybeCreateCourseCompletionCertificate({
-  learnerId,
-  courseId,
-  term,
-  academicYear,
-} = {}) {
+// Whether a learner has finished every required activity of a course, and
+// whether that course awards a certificate. Weekly typing and quiz courses never
+// do, so they return nothing.
+async function courseCompletionSummary(courseId, learnerId) {
   const summary = await query(
     `SELECT c.certificate_enabled,
             COUNT(la.id) FILTER (
@@ -1567,17 +1569,26 @@ async function maybeCreateCourseCompletionCertificate({
        ON ap.activity_id = la.id
       AND ap.learner_id = $2::integer
      WHERE c.id = $1::integer
+       AND COALESCE(c.course_category, 'general') NOT IN ('weekly_typing', 'weekly_quiz')
      GROUP BY c.id, c.certificate_enabled`,
     [courseId, learnerId]
   );
   const row = summary.rows[0];
-  if (
-    !row?.certificate_enabled ||
-    row.required_total <= 0 ||
-    row.required_done < row.required_total
-  ) {
-    return null;
-  }
+  if (!row) return null;
+  return {
+    certificateEnabled: Boolean(row.certificate_enabled),
+    finished: row.required_total > 0 && row.required_done >= row.required_total,
+  };
+}
+
+async function maybeCreateCourseCompletionCertificate({
+  learnerId,
+  courseId,
+  term,
+  academicYear,
+} = {}) {
+  const summary = await courseCompletionSummary(courseId, learnerId);
+  if (!summary?.certificateEnabled || !summary.finished) return null;
 
   return certificatesService.ensureCourseCompletionCertificate({
     learnerId,
@@ -2384,6 +2395,8 @@ async function revealModuleFeedbackIdentity(feedbackId, user = {}, data = {}) {
 }
 
 module.exports = {
+  courseCompletionSummary,
+  maybeCreateCourseCompletionCertificate,
   getAllCourses,
   getCourseCount,
   createCourse,

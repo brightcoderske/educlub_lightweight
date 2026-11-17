@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS courses (
   image_url TEXT,
   estimated_weeks INTEGER,
   learning_objectives JSONB DEFAULT '[]'::jsonb,
-  certificate_enabled BOOLEAN DEFAULT FALSE,
+  certificate_enabled BOOLEAN DEFAULT TRUE,
   independent_price_amount NUMERIC(12, 2) DEFAULT 0,
   independent_currency VARCHAR(10) DEFAULT 'KES',
   course_category VARCHAR(50) DEFAULT 'general',
@@ -182,7 +182,10 @@ ALTER TABLE courses ADD COLUMN IF NOT EXISTS target_level VARCHAR(80);
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS estimated_weeks INTEGER;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS learning_objectives JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE courses ADD COLUMN IF NOT EXISTS certificate_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS certificate_enabled BOOLEAN DEFAULT TRUE;
+-- A school course awards a certificate unless it is made without one. Off by
+-- default, with no screen to turn it on, finished learners never got one.
+ALTER TABLE courses ALTER COLUMN certificate_enabled SET DEFAULT TRUE;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS independent_price_amount NUMERIC(12, 2) DEFAULT 0;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS independent_currency VARCHAR(10) DEFAULT 'KES';
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS course_category VARCHAR(50) DEFAULT 'general';
