@@ -200,10 +200,12 @@ if [[ "$NEED_BUILD" == "1" ]]; then
   say "Building the website ($CPUS, heap ${BUILD_MEMORY_MB:-1024} MB)..."
   rm -rf "$STAGE"
   attempt=1
+  # At the process limit a build can freeze instead of failing, and only a failure is retried, so a
+  # build still running after 10 minutes (one normally takes one or two) is stopped and counts as one.
   until (cd "$FRONTEND" && export BUILD_OUT_DIR=build.next RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=2 \
            NODE_OPTIONS="--max-old-space-size=${BUILD_MEMORY_MB:-1024}" \
-         && ${PIN[@]+"${PIN[@]}"} node node_modules/vite/bin/vite.js build \
-         && node scripts/generate-public-seo.js); do
+         && timeout -k 10 600 ${PIN[@]+"${PIN[@]}"} node node_modules/vite/bin/vite.js build \
+         && timeout -k 10 300 node scripts/generate-public-seo.js); do
     if (( attempt >= 3 )); then die "The website build failed 3 times."; fi
     attempt=$((attempt + 1))
     say "Build failed (often a momentary process limit); trying again in 20 seconds ($attempt of 3)..."
