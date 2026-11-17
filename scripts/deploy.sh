@@ -132,15 +132,24 @@ BACKUP_DIR="${BACKUP_DIR:-$APP_DIR/backups}"
 
 # cPanel's Node selector puts a wrapper in front of npm that installs into the registered app's shared
 # folder. That is right for the backend but refuses the website's own node_modules, so the website
-# calls npm directly.
+# calls npm directly: the npm that ships with the Node actually running. The host keeps many Node
+# versions side by side (/opt/alt/alt-nodejs14 ... 24), and the nodevenv's `node` is a wrapper, so
+# the real program's own folder is the only reliable guide. Node 14's npm 6 cannot read the lock file.
 NPM_CLI="${NPM_CLI:-}"
 if [[ -z "$NPM_CLI" ]]; then
-  for candidate in "$(dirname "$(readlink -f "$(command -v node)")")/../lib/node_modules/npm/bin/npm-cli.js" \
-                   /opt/alt/alt-nodejs*/root/usr/lib/node_modules/npm/bin/npm-cli.js; do
+  NODE_HOME="$(dirname "$(dirname "$(node -p 'process.execPath')")")"
+  for candidate in "$NODE_HOME/lib/node_modules/npm/bin/npm-cli.js" \
+                   "/opt/alt/alt-nodejs$(node -p 'process.versions.node.split(".")[0]')/root/usr/lib/node_modules/npm/bin/npm-cli.js"; do
     if [[ -f "$candidate" ]]; then NPM_CLI="$candidate"; break; fi
   done
 fi
 website_npm() { if [[ -n "$NPM_CLI" ]]; then node "$NPM_CLI" "$@"; else npm "$@"; fi; }
+NPM_MAJOR="$(website_npm --version 2>/dev/null | cut -d. -f1)"
+if [[ ! "$NPM_MAJOR" =~ ^[0-9]+$ ]] || (( NPM_MAJOR < 7 )); then
+  echo "The website needs npm 7 or newer, and the npm found is '${NPM_MAJOR:-none}' (${NPM_CLI:-npm}). Set NPM_CLI to a newer npm-cli.js." >&2
+  exit 1
+fi
+say "Website packages use npm $(website_npm --version) with Node $(node --version)."
 
 # ---------------------------------------------------------------- failure: put everything back
 SWAPPED=0
