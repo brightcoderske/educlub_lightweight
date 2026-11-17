@@ -299,11 +299,15 @@ SITE_HOST="${SITE_HOST%%/*}"
 SITE_IP="${SITE_IP:-$(sed -n 's/^ip: *//p' "/var/cpanel/userdata/$(id -un)/$SITE_HOST" 2>/dev/null | head -1 || true)}"
 SITE_IP="${SITE_IP:-127.0.0.1}"
 health_commit() { sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p'; }
+# cPanel only serves a site over https once it has a certificate, and AutoSSL can issue one only after
+# DNS points here, so before the switch-over the site answers on plain http alone. Both are asked.
 running_commit() {
   local found
   found="$(curl -fsS --max-time 10 "$SITE_URL/health" 2>/dev/null | health_commit || true)"
   [[ "$found" == "$NEW" ]] && { echo "$found"; return; }
-  curl -fsSk --max-time 10 --resolve "$SITE_HOST:443:$SITE_IP" "https://$SITE_HOST/health" 2>/dev/null | health_commit || true
+  found="$(curl -fsSk --max-time 10 --resolve "$SITE_HOST:443:$SITE_IP" "https://$SITE_HOST/health" 2>/dev/null | health_commit || true)"
+  [[ "$found" == "$NEW" ]] && { echo "$found"; return; }
+  curl -fsS --max-time 10 --resolve "$SITE_HOST:80:$SITE_IP" "http://$SITE_HOST/health" 2>/dev/null | health_commit || true
 }
 say "Checking $SITE_URL/health for ${NEW:0:7} (directly at $SITE_IP)..."
 running=""
