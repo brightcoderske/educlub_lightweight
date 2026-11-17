@@ -37,7 +37,7 @@ import {
 } from "./activityContent";
 import { useActivityDraft } from "./activityDraft";
 import DraftStatus from "./DraftStatus";
-import PanelResizer, { useSidebarWidth } from "./PanelResizer";
+import PanelResizer, { useSidebarHidden, useSidebarWidth } from "./PanelResizer";
 import { findActivityNavigation, resolveInitialActivity } from "../learningNavigation";
 
 // The editor is most of this page's weight and only coding activities use it.
@@ -1937,6 +1937,7 @@ function ModuleLearn() {
   const entityId = templatePreviewMode ? templateId : courseId;
   const contentTopRef = useRef(null);
   const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
+  const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
   const phoneActivityRowRef = useRef(null);
   const completionRef = useRef(null);
   const pythonRunSequenceRef = useRef(0);
@@ -2639,7 +2640,18 @@ function ModuleLearn() {
         gap={2}
         sx={{ bgcolor: "#ffffff", borderBottom: "1px solid #e5e7eb" }}
       >
-        <MDBox minWidth={0}>
+        {/* Phones already show the path as a row of buttons, so the switch
+            is for wider screens only. */}
+        <IconButton
+          aria-label={sidebarHidden ? "Show learning path" : "Hide learning path"}
+          aria-pressed={!sidebarHidden}
+          title={sidebarHidden ? "Show learning path" : "Hide learning path"}
+          onClick={() => setSidebarHidden((hidden) => !hidden)}
+          sx={{ display: { xs: "none", md: "inline-flex" }, ml: -1, mr: -1 }}
+        >
+          <Icon>{sidebarHidden ? "menu" : "menu_open"}</Icon>
+        </IconButton>
+        <MDBox minWidth={0} flex={1}>
           <MDTypography variant="button" color="text">
             {data?.course?.name || "Course"}
           </MDTypography>
@@ -2658,7 +2670,12 @@ function ModuleLearn() {
         </IconButton>
       </MDBox>
 
-      <MDBox px={{ xs: 2, md: 4, lg: 8 }} py={3} maxWidth="1480px" mx="auto">
+      <MDBox
+        px={{ xs: 2, md: sidebarHidden ? 3 : 4, lg: sidebarHidden ? 4 : 8 }}
+        py={3}
+        maxWidth="1480px"
+        mx="auto"
+      >
         {previewMode && (
           <MDBox mb={2} p={1.5} borderRadius="md" sx={{ bgcolor: "#fff7ed" }}>
             <MDTypography variant="body2" color="warning" fontWeight="medium">
@@ -2717,7 +2734,7 @@ function ModuleLearn() {
         <MDBox display="flex">
           <MDBox
             sx={{
-              display: { xs: "none", md: "block" },
+              display: { xs: "none", md: sidebarHidden ? "none" : "block" },
               flex: `0 0 ${sidebarWidth}px`,
               minWidth: 0,
             }}
@@ -2789,7 +2806,7 @@ function ModuleLearn() {
             </Card>
           </MDBox>
 
-          <PanelResizer width={sidebarWidth} onResize={setSidebarWidth} />
+          {!sidebarHidden && <PanelResizer width={sidebarWidth} onResize={setSidebarWidth} />}
 
           <MDBox flex={1} minWidth={0}>
             <Card ref={contentTopRef}>
