@@ -20,8 +20,8 @@
 # Settings, all optional, read from the environment:
 #   NODE_VENV        the nodevenv "bin/activate" (found under ~/nodevenv/apps/educlub/backend/ otherwise)
 #   SITE_URL         address /health is checked on (default FRONTEND_URL from backend/.env)
-#   RUNNER_DIR       folder runner.educlub.co.ke serves (default ~/apps/educlub-runner; skipped if missing)
-#   BACKUP_DIR       where database backups go (default ~/apps/educlub-backups; the newest 14 are kept)
+#   RUNNER_DIR       folder runner.educlub.co.ke serves (default runner/ in this checkout; skipped if missing)
+#   BACKUP_DIR       where database backups go (default backups/ in this checkout; the newest 14 are kept)
 #   BUILD_MEMORY_MB  heap limit for the website build (default 1024)
 #   SKIP_BACKUP=1    migrate without taking a backup first
 set -euo pipefail
@@ -128,7 +128,7 @@ env_value() { sed -n "s/^$1=//p" "$BACKEND/.env" | head -1 | tr -d "\"' \r"; }
 SITE_URL="${SITE_URL:-$(env_value FRONTEND_URL)}"
 SITE_URL="${SITE_URL%/}"
 [[ -n "$SITE_URL" ]] || { echo "Set FRONTEND_URL in backend/.env (or SITE_URL) so the deploy can check the site." >&2; exit 1; }
-BACKUP_DIR="${BACKUP_DIR:-$HOME/apps/educlub-backups}"
+BACKUP_DIR="${BACKUP_DIR:-$APP_DIR/backups}"
 
 # cPanel's Node selector puts a wrapper in front of npm that installs into the registered app's shared
 # folder. That is right for the backend but refuses the website's own node_modules, so the website
@@ -237,7 +237,7 @@ if [[ "$NEED_BUILD" == "1" ]]; then
   SWAPPED=1
   # runner.educlub.co.ke: the Python runner on an address of its own, so learners' code never runs with
   # access to the signed-in site. It needs only its page and the scripts in assets/.
-  RUNNER_DIR="${RUNNER_DIR:-$HOME/apps/educlub-runner}"
+  RUNNER_DIR="${RUNNER_DIR:-$APP_DIR/runner}"
   if [[ -d "$RUNNER_DIR" ]]; then
     rm -rf "$RUNNER_DIR/assets.next"
     cp -a "$FRONTEND/build/assets" "$RUNNER_DIR/assets.next"
@@ -247,7 +247,7 @@ if [[ "$NEED_BUILD" == "1" ]]; then
     mv "$RUNNER_DIR/assets.next" "$RUNNER_DIR/assets"
     say "Python runner updated in $RUNNER_DIR."
   else
-    say "No $RUNNER_DIR, so the Python runner was not updated (docs/NOVAHOST.md, part B)."
+    say "No $RUNNER_DIR, so the Python runner was not updated (docs/NOVAHOST.md, step 1)."
   fi
 fi
 

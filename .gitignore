@@ -49,9 +49,16 @@ db-imports/
 
 # Written on the server by scripts/deploy.sh
 .deploy/
+# On the server, the document roots of educlub.co.ke (public/, left empty: the
+# Node app answers) and runner.educlub.co.ke (runner/, filled by the deploy).
+# backups/ above holds the deploy's database backups.
+/public/
+/runner/
 backend/.release.json
 backend/tmp/
 frontend/build.next/
 frontend/build.previous/
 # Learners' uploaded work stays on the server, never in git
 backend/uploads/activity-submissions/
+# Test-run cache
+frontend/.jest-cache/
