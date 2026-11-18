@@ -94,6 +94,8 @@ test("a learner sees and enters only eduClub's and their own school's competitio
   const list = listing.calls.find((call) => /FROM competitions c/.test(call.sql));
   assert.match(list.sql, /c\.school_id IS NULL OR c\.school_id = \$2/);
   assert.deepEqual(list.params, [11, 4]);
+  // An ended competition stays only for those who took part.
+  assert.match(list.sql, /c\.end_date >= CURRENT_DATE OR ce\.status = 'enrolled'/);
 
   const enrolling = serviceWith((sql) => {
     if (/FROM learners/.test(sql)) return [learner];

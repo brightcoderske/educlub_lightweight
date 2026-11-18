@@ -42,6 +42,15 @@ function competitionWindow(competition) {
   )}`;
 }
 
+// Over once its last day has passed. Dates arrive as "2026-11-30", sometimes
+// with a time after; only the day counts, in the learner's own calendar.
+function hasEnded(competition) {
+  const now = new Date();
+  const pad = (number) => String(number).padStart(2, "0");
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return String(competition.end_date || "").slice(0, 10) < today;
+}
+
 function competitionAccessNote(competition) {
   if (competition.practice_available) {
     return `Practice is open every day. The final quiz opens on ${formatCompetitionDate(
@@ -563,7 +572,8 @@ function LearnerCompetitions() {
                         </MDTypography>
                       </MDBox>
                     </MDBox>
-                    <MDBox display="flex" gap={1} my={2}>
+                    <MDBox display="flex" gap={1} my={2} flexWrap="wrap">
+                      {hasEnded(competition) && <Chip size="small" color="default" label="Ended" />}
                       <Chip
                         size="small"
                         label={`Score: ${competition.total_score ?? "Not yet recorded"}`}
@@ -581,21 +591,35 @@ function LearnerCompetitions() {
                         }
                       />
                     </MDBox>
+                    {/* After the last day there is nothing left to take part in:
+                        only the results remain. */}
                     <MDBox display="flex" gap={1}>
-                      <MDButton
-                        variant="contained"
-                        color="info"
-                        onClick={() => launchCompetition(competition)}
-                      >
-                        Open Competition
-                      </MDButton>
-                      <MDButton
-                        variant="text"
-                        color="info"
-                        onClick={() => openPerformance(competition)}
-                      >
-                        Performance
-                      </MDButton>
+                      {hasEnded(competition) ? (
+                        <MDButton
+                          variant="contained"
+                          color="info"
+                          onClick={() => openPerformance(competition)}
+                        >
+                          See results
+                        </MDButton>
+                      ) : (
+                        <>
+                          <MDButton
+                            variant="contained"
+                            color="info"
+                            onClick={() => launchCompetition(competition)}
+                          >
+                            Open Competition
+                          </MDButton>
+                          <MDButton
+                            variant="text"
+                            color="info"
+                            onClick={() => openPerformance(competition)}
+                          >
+                            Performance
+                          </MDButton>
+                        </>
+                      )}
                     </MDBox>
                   </MDBox>
                 ))

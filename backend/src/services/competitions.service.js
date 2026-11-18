@@ -89,6 +89,9 @@ async function findLearnerForUser(userId) {
   return result.rows[0];
 }
 
+// eduClub's and the learner's own school's competitions. Once one has ended it
+// is gone for good for anyone who did not take part; those who did keep it, for
+// their results.
 async function listCompetitionsForLearner(userId) {
   const learner = await findLearnerForUser(userId);
   if (!learner) return [];
@@ -125,6 +128,7 @@ async function listCompetitionsForLearner(userId) {
       AND rr.learner_id = $1
      WHERE c.is_active = true
        AND (c.school_id IS NULL OR c.school_id = $2)
+       AND (c.end_date >= CURRENT_DATE OR ce.status = 'enrolled')
      ORDER BY c.is_featured DESC, c.start_date DESC`,
     [learner.id, learner.school_id]
   );
