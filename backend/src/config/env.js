@@ -43,7 +43,10 @@ module.exports = {
   // Timestamps are stored in UTC; this is the zone a learner's calendar day is
   // measured in, which is what a daily streak counts.
   learnerTimezone: process.env.LEARNER_TIMEZONE || "Africa/Nairobi",
-  frontendUrl: process.env.FRONTEND_URL,
+  // Links in emails are this plus a path, so a trailing "/" in the setting
+  // would make "https://educlub.co.ke//authentication/..." - a page the site
+  // does not have. Trailing slashes are dropped here, once, for every link.
+  frontendUrl: process.env.FRONTEND_URL.replace(/\/+$/, ""),
   corsOrigins: process.env.CORS_ORIGINS.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),

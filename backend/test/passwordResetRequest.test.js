@@ -19,13 +19,22 @@ let accounts = [];
 let sendResult = true;
 let failureCode = "EAUTH";
 let auditFails = false;
+// The open link a confirmation finds, and what it then writes to the links.
+let openLink = null;
+const linkUpdates = [];
 
 config.query = async (text, params) => {
   seen.queries.push(text);
+  if (/FROM password_reset_tokens prt/i.test(text)) return { rows: openLink ? [openLink] : [] };
+  if (/UPDATE password_reset_tokens/i.test(text)) linkUpdates.push({ text, params });
   if (/FROM users/i.test(text)) return { rows: accounts, rowCount: accounts.length };
   if (/INSERT INTO audit_logs/i.test(text)) {
     if (auditFails) throw new Error("audit table is unavailable");
-    seen.audit.push({ userId: params[0], action: params[1], detail: JSON.parse(params[2]) });
+    // A completed reset writes (user, details) with its action in the SQL; the
+    // request outcomes write (user, action, details, ip).
+    if (params.length > 2) {
+      seen.audit.push({ userId: params[0], action: params[1], detail: JSON.parse(params[2]) });
+    }
   }
   return { rows: [], rowCount: 0 };
 };
@@ -193,4 +202,52 @@ test("an account with no reachable address is a client error, not a server fault
     },
   );
   assert.equal(seen.sent.length, 0);
+});
+
+test("asking again does not cancel a link already sent", async () => {
+  // Email can be slow; people press send again and then open whichever email
+  // arrives first. That link must still work.
+  reset({ users: [admin] });
+  await request("admin@example.test");
+  await request("admin@example.test");
+
+  assert.equal(seen.sent.length, 2);
+  assert.ok(
+    !seen.queries.some((sql) => /UPDATE password_reset_tokens/i.test(sql)),
+    "requesting a link never cancels another",
+  );
+});
+
+test("using a link cancels every link still open for the account", async () => {
+  reset();
+  linkUpdates.length = 0;
+  openLink = { id: 5, user_id: 9, expires_at: new Date(Date.now() + 60_000), used_at: null, is_active: true };
+  // Signing the account out everywhere is a session matter, tested on its own.
+  const sessionService = require("../src/services/session.service");
+  const revokeAllSessions = sessionService.revokeAllSessions;
+  sessionService.revokeAllSessions = async () => {};
+  try {
+    await authService.confirmPasswordReset("a".repeat(64), "NewPassw0rd!");
+  } finally {
+    openLink = null;
+    sessionService.revokeAllSessions = revokeAllSessions;
+  }
+
+  assert.equal(linkUpdates.length, 1);
+  assert.match(linkUpdates[0].text, /WHERE user_id = \$1 AND used_at IS NULL/);
+  assert.deepEqual(linkUpdates[0].params, [9]);
+});
+
+test("a site address ending in / never makes a // link", () => {
+  const before = process.env.FRONTEND_URL;
+  process.env.FRONTEND_URL = "https://educlub.example/";
+  const envPath = require.resolve("../src/config/env");
+  delete require.cache[envPath];
+  try {
+    assert.equal(require("../src/config/env").frontendUrl, "https://educlub.example");
+  } finally {
+    process.env.FRONTEND_URL = before;
+    delete require.cache[envPath];
+    require("../src/config/env");
+  }
 });

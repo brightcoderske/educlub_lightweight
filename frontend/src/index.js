@@ -19,6 +19,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "App";
 import AppErrorBoundary from "components/AppErrorBoundary";
 import { reloadForNewVersion } from "lib/staleBuild";
+import { singleSlashAddress } from "lib/singleSlashes";
 
 // Material Dashboard 2 React Context Provider
 import { MaterialUIControllerProvider } from "context";
@@ -36,6 +37,10 @@ if (container.dataset.seoSnapshot) {
 window.addEventListener("vite:preloadError", (event) => {
   if (reloadForNewVersion()) event.preventDefault();
 });
+
+// "//authentication/set-password" opens no page; the router must see one slash.
+const tidyAddress = singleSlashAddress(window.location);
+if (tidyAddress) window.history.replaceState(window.history.state, "", tidyAddress);
 
 const root = createRoot(container);
 

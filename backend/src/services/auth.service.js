@@ -298,15 +298,12 @@ async function createPasswordResetToken(
       role: "system_admin",
       schoolId: user.school_id || null,
     },
-    async () => {
-      await query(
-        `UPDATE password_reset_tokens
-         SET used_at = NOW()
-         WHERE user_id = $1 AND used_at IS NULL`,
-        [user.id],
-      );
-
-      await query(
+    // Links already sent stay usable until they expire. Email can take a while,
+    // and people press "send" again meanwhile; cancelling the earlier link here
+    // made whichever email they opened first fail. Using any one of them
+    // cancels the rest (confirmPasswordReset).
+    () =>
+      query(
         `INSERT INTO password_reset_tokens (
            user_id, token_hash, requested_by_user_id, expires_at, ip_address, user_agent
          )
@@ -319,8 +316,7 @@ async function createPasswordResetToken(
           ipAddress || null,
           userAgent || null,
         ],
-      );
-    },
+      ),
   );
 
   return {
@@ -483,12 +479,15 @@ async function confirmPasswordReset(token, newPassword) {
     [hashedPassword, reset.user_id],
   );
   await revokeTrustedMfaDevices(reset.user_id);
+  // This link is used up, and so is every other one still open for the
+  // account: several may be live if the person asked more than once.
   await runWithDbContext(
     { userId: reset.user_id, role: "system_admin", schoolId: null },
     () =>
-      query("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1", [
-        reset.id,
-      ]),
+      query(
+        "UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL",
+        [reset.user_id],
+      ),
   );
   await query(
     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values)
