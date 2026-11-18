@@ -69,7 +69,9 @@ function LearnerDashboard() {
   const navigate = useNavigate();
   const coursesView = useLocation().pathname === "/learner/courses";
   const [search, setSearch] = useState("");
-  const [courseFilter, setCourseFilter] = useState("all");
+  // Opens on what the learner is working on; finished courses wait under
+  // Completed instead of crowding the list.
+  const [courseFilter, setCourseFilter] = useState("active");
   const requestVersion = useRef(0);
   const cached = learnerDashboardCache?.userId === user?.id ? learnerDashboardCache.data : null;
   const [allocations, setAllocations] = useState(cached?.allocations || []);
@@ -101,6 +103,13 @@ function LearnerDashboard() {
           ? allocation.status === "completed"
           : ["active", "in_progress"].includes(allocation.status)))
   );
+  // Nothing left to learn, with the list on "Learning now" and no search typed:
+  // say so, and point to Completed, rather than "no courses match".
+  const allDone =
+    courseFilter === "active" &&
+    !search.trim() &&
+    allocations.length > 0 &&
+    allocations.every((allocation) => allocation.status === "completed");
 
   useEffect(() => {
     if (!isLearner()) {
@@ -637,9 +646,9 @@ function LearnerDashboard() {
             </MDBox>
             <MDBox display="flex" gap={1} mb={2.5} flexWrap="wrap">
               {[
-                ["all", "All courses"],
                 ["active", "Learning now"],
                 ["completed", "Completed"],
+                ["all", "All courses"],
               ].map(([value, label]) => (
                 <MDButton
                   key={value}
@@ -671,12 +680,16 @@ function LearnerDashboard() {
             <MDBox p={2.5} textAlign="center">
               <LearningArt kind="robot" size={96} />
               <MDTypography variant="h6">
-                {allocations.length
+                {allDone
+                  ? "You have finished all your courses"
+                  : allocations.length
                   ? "No courses match just yet"
                   : "Your adventure is getting ready"}
               </MDTypography>
               <MDTypography variant="body2" color="text" mt={1}>
-                {allocations.length
+                {allDone
+                  ? "Well done! Your finished courses are under Completed. Your teacher will add your next one."
+                  : allocations.length
                   ? "Try another search or choose a different filter."
                   : "Your teacher will help you join your first course. You can try typing practice while you wait."}
               </MDTypography>
@@ -684,13 +697,16 @@ function LearnerDashboard() {
                 color="info"
                 variant="contained"
                 sx={{ mt: 2 }}
-                onClick={() =>
-                  allocations.length
-                    ? (setSearch(""), setCourseFilter("all"), setSelectedPeriod("all"))
-                    : navigate("/learner/my-typing-tutor")
-                }
+                onClick={() => {
+                  if (allDone) setCourseFilter("completed");
+                  else if (allocations.length) {
+                    setSearch("");
+                    setCourseFilter("all");
+                    setSelectedPeriod("all");
+                  } else navigate("/learner/my-typing-tutor");
+                }}
               >
-                {allocations.length ? "Clear filters" : "Try Typing"}
+                {allDone ? "See completed" : allocations.length ? "Clear filters" : "Try Typing"}
               </MDButton>
             </MDBox>
           </Card>
