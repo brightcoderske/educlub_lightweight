@@ -83,6 +83,22 @@ export const AuthProvider = ({ children }) => {
     return null;
   };
 
+  // A sign-in answer counts only if it carries a session. A host error page or a
+  // school network's filter page can come back as 200 with no JSON, and taking
+  // that as success broke the page with "reading 'role'" instead of saying why.
+  const startSession = (response, data, failureMessage) => {
+    if (!response.ok) {
+      throw new Error(data.error || failureMessage);
+    }
+    if (!data.token || !data.user?.role) {
+      throw new Error(
+        "eduClub did not answer the sign-in properly. Check your internet connection, then try again."
+      );
+    }
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+  };
+
   const continueAfterAuth = (nextUser) => {
     const onboardingPath = getOnboardingPath(nextUser);
     if (onboardingPath) {
@@ -184,18 +200,12 @@ export const AuthProvider = ({ children }) => {
 
       const data = await parseApiResponse(response);
 
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed");
-      }
-
-      if (data.mfaRequired) {
+      if (response.ok && data.mfaRequired && data.tempToken) {
         // Return temp token for MFA verification
         return { mfaRequired: true, tempToken: data.tempToken };
       }
 
-      // Store token and user data
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      startSession(response, data, "Login failed");
       setUser(data.user);
 
       return continueAfterAuth(data.user);
@@ -215,13 +225,7 @@ export const AuthProvider = ({ children }) => {
 
       const data = await parseApiResponse(response);
 
-      if (!response.ok) {
-        throw new Error(data.error || "2FA verification failed");
-      }
-
-      // Store token and user data
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      startSession(response, data, "2FA verification failed");
       if (data.trustedDeviceToken) {
         localStorage.setItem("trustedDeviceToken", data.trustedDeviceToken);
         localStorage.setItem("trustedDeviceExpiresAt", data.trustedDeviceExpiresAt);
