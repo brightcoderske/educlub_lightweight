@@ -1,0 +1,1 @@
+var e=`/assets/bg-reset-cover-DZrbUa-s.jpeg`;export{e as t};

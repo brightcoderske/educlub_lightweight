@@ -1,0 +1,1 @@
+import{Nt as e,Ot as t,jt as n,tt as r}from"./MDTypography-Ie5fCSBB.js";t(),r();function i(t){return e(`MuiDivider`,t)}var a=n(`MuiDivider`,[`root`,`absolute`,`fullWidth`,`inset`,`middle`,`flexItem`,`light`,`vertical`,`withChildren`,`withChildrenVertical`,`textAlignRight`,`textAlignLeft`,`wrapper`,`wrapperVertical`]);export{i as n,a as t};
