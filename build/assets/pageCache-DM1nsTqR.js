@@ -1,0 +1,1 @@
+var e=new Map;function t(t){return e.get(t)}function n(t,n){return e.set(t,{value:n,savedAt:Date.now()}),n}export{n,t};

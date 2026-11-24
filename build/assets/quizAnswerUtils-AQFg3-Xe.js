@@ -1,0 +1,1 @@
+function e(e){let t=(Array.isArray(e)?e:[e]).map(e=>String(e??``));return t.length?t:[``]}function t(t){return[...e(t),``]}function n(t,n,r){return e(t).map((e,t)=>t===n?r:e)}function r(t,n){let r=e(t).filter((e,t)=>t!==n);return r.length?r:[``]}export{n as i,e as n,r,t};

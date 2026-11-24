@@ -1,0 +1,1 @@
+import{t as e}from"./api-D2mBMgao.js";async function t(){let t=await e.get(`/learners`);return Array.isArray(t)&&t[0]||null}export{t};

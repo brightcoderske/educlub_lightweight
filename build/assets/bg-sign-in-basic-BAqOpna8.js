@@ -1,0 +1,1 @@
+var e=`/assets/bg-sign-in-basic-D6CV0RLy.jpeg`;export{e as t};

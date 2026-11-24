@@ -1,0 +1,1 @@
+var e=new Set;function t(t){return e.add(t),()=>e.delete(t)}async function n(t=3e3){if(!e.size)return;let n=Promise.allSettled([...e].map(e=>e()));await Promise.race([n,new Promise(e=>setTimeout(e,t))])}export{t as n,n as t};

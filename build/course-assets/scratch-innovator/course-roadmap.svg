@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="t d">
+<title id="t">Scratch Innovator roadmap</title><desc id="d">A ten-node network from software design through data and AI to a future innovator capstone.</desc>
+<rect width="1200" height="675" fill="#111827"/><text x="70" y="82" font-family="Arial" font-size="48" font-weight="700" fill="#f8fafc">Innovator Systems Map</text>
+<g stroke="#4c1d95" stroke-width="8"><path d="M120 200L350 150 575 225 810 150 1060 210 950 450 710 510 475 445 250 510 120 200" fill="none"/><path d="M350 150l125 295M575 225l135 285M810 150L475 445M1060 210L710 510" opacity=".7"/></g>
+<g font-family="Arial" font-size="22" font-weight="700" text-anchor="middle">
+<g fill="#22d3ee"><circle cx="120" cy="200" r="48"/><circle cx="350" cy="150" r="48"/><circle cx="575" cy="225" r="48"/><circle cx="810" cy="150" r="48"/><circle cx="1060" cy="210" r="48"/></g>
+<g fill="#a78bfa"><circle cx="950" cy="450" r="48"/><circle cx="710" cy="510" r="48"/><circle cx="475" cy="445" r="48"/><circle cx="250" cy="510" r="48"/></g><circle cx="590" cy="345" r="58" fill="#f472b6"/>
+<g fill="#111827"><text x="120" y="208">1</text><text x="350" y="158">2</text><text x="575" y="233">3</text><text x="810" y="158">4</text><text x="1060" y="218">5</text><text x="950" y="458">6</text><text x="710" y="518">7</text><text x="475" y="453">8</text><text x="250" y="518">9</text><text x="590" y="353">10</text></g></g>
+<text x="70" y="620" font-family="Arial" font-size="27" fill="#c4b5fd">Every system connects technical evidence, people, and responsibility.</text>
+</svg>

@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-B0Z9INg1.js";import{Ot as t,tn as n}from"./MDTypography-Ie5fCSBB.js";var r,i=e((()=>{t(),r=n}));export{r as n,i as t};

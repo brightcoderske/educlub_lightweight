@@ -1,0 +1,1 @@
+import"./rolldown-runtime-B0Z9INg1.js";import{Dt as e,Mn as t,X as n,Y as r,gt as i,nt as a}from"./MDTypography-Ie5fCSBB.js";t(),a(),n(),e();function o(){let e=i(r);return e.$$material||e}export{o as t};
