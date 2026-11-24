@@ -37,6 +37,11 @@ jest.mock("routes", () => {
       component: React.createElement("p", null, "A working page"),
     },
     {
+      key: "module-preview",
+      route: "/school-admin/courses/:courseId/preview/modules/:moduleId/learn",
+      component: React.createElement("p", null, "Lesson content"),
+    },
+    {
       key: "missing",
       route: "*",
       public: true,
@@ -95,5 +100,15 @@ test("going to another screen from there works without reloading", async () => {
 
   expect(container.textContent).toContain("A working page");
   expect(container.textContent).not.toMatch(/This page did not load properly/);
+  await unmount();
+});
+
+// A teacher or school admin previewing a module gets the learner's full-width
+// page: the dashboard sidebar would otherwise sit over the lesson.
+test("a staff module preview has no dashboard sidebar over the lesson", async () => {
+  const { container, unmount } = await openAt("/school-admin/courses/4/preview/modules/9/learn");
+
+  expect(container.textContent).toContain("Lesson content");
+  expect(container.textContent).not.toContain("Sidebar");
   await unmount();
 });

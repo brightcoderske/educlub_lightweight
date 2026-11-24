@@ -36,7 +36,12 @@ function AppContent() {
   const publicRoute = Boolean(matchedRoute?.public);
   const authRoute =
     publicRoute || pathname.startsWith("/authentication/") || pathname === "/privacy-consent";
-  const focusedLearningRoute = /^\/learner\/courses\/[^/]+\/modules\/[^/]+\/learn$/.test(pathname);
+  // A staff preview of a module is the same full-width page a learner gets, so
+  // the dashboard sidenav must not sit over it either.
+  const focusedLearningRoute =
+    /^\/(learner\/courses\/[^/]+|(school|system)-admin\/courses\/[^/]+\/preview)\/modules\/[^/]+\/learn$/.test(
+      pathname
+    );
   const showSidenav = Boolean(user) && !authRoute && !focusedLearningRoute;
   const sidenavRoutes = routes.filter(
     (route) => !route.hidden && (!route.roles || route.roles.includes(user?.role))

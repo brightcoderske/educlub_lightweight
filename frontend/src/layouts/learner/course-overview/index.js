@@ -5,7 +5,6 @@ import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
 import Grid from "@mui/material/Grid";
 import Icon from "@mui/material/Icon";
-import IconButton from "@mui/material/IconButton";
 
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
@@ -454,7 +453,22 @@ function CourseOverview() {
                         flexWrap={{ xs: "wrap", md: "nowrap" }}
                         gap={2}
                       >
-                        <MDBox flex={1} minWidth={0}>
+                        {/* The module name is the toggle, so every module opens
+                            to its activities: finished ones, ones being
+                            revisited, and ones still locked. */}
+                        <MDBox
+                          component="button"
+                          type="button"
+                          flex={1}
+                          minWidth={0}
+                          p={0}
+                          border={0}
+                          textAlign="left"
+                          aria-expanded={Boolean(openModules[courseModule.id])}
+                          aria-controls={`module-activities-${courseModule.id}`}
+                          onClick={() => toggleModule(courseModule.id)}
+                          sx={{ bgcolor: "transparent", cursor: "pointer", font: "inherit" }}
+                        >
                           <MDBox display="flex" alignItems="center" gap={1} mb={0.5}>
                             <Chip
                               size="small"
@@ -465,9 +479,14 @@ function CourseOverview() {
                               <Chip size="small" label="Complete" color="success" />
                             )}
                           </MDBox>
-                          <MDTypography variant="h6" fontWeight="bold">
-                            {courseModule.title}
-                          </MDTypography>
+                          <MDBox display="flex" alignItems="center" gap={0.5}>
+                            <MDTypography variant="h6" fontWeight="bold">
+                              {courseModule.title}
+                            </MDTypography>
+                            <Icon aria-hidden="true" sx={{ flexShrink: 0 }}>
+                              {openModules[courseModule.id] ? "expand_less" : "expand_more"}
+                            </Icon>
+                          </MDBox>
                           <MDTypography variant="body2" color="text">
                             {courseModule.description || "Activities for this module."}
                           </MDTypography>
@@ -485,8 +504,8 @@ function CourseOverview() {
                             {courseModule.score_percent}% marks
                           </MDTypography>
                         </MDBox>
-                        <MDBox display="flex" alignItems="center" gap={0.75}>
-                          {previewMode && (
+                        {previewMode && (
+                          <MDBox display="flex" alignItems="center">
                             <MDButton
                               size="small"
                               variant="outlined"
@@ -499,22 +518,17 @@ function CourseOverview() {
                                 ? "Preparing..."
                                 : "Download PDF"}
                             </MDButton>
-                          )}
-                          <IconButton
-                            size="small"
-                            aria-label={`Toggle activities for ${courseModule.title}`}
-                            aria-expanded={Boolean(openModules[courseModule.id])}
-                            onClick={() => toggleModule(courseModule.id)}
-                          >
-                            <Icon>
-                              {openModules[courseModule.id] ? "expand_less" : "expand_more"}
-                            </Icon>
-                          </IconButton>
-                        </MDBox>
+                          </MDBox>
+                        )}
                       </MDBox>
 
                       <Collapse in={Boolean(openModules[courseModule.id])}>
-                        <MDBox mt={2} borderTop={`1px solid ${palette.border}`} pt={1.5}>
+                        <MDBox
+                          id={`module-activities-${courseModule.id}`}
+                          mt={2}
+                          borderTop={`1px solid ${palette.border}`}
+                          pt={1.5}
+                        >
                           {courseModule.activities.length === 0 ? (
                             <MDTypography variant="caption" color="text">
                               No activities have been added yet.
