@@ -5,9 +5,11 @@ import {
   isPythonRunnerMessage,
   learnerFacingError,
   PYTHON_MAX_SOURCE_LENGTH,
+  createPythonConsole,
   pythonRunnerMessage,
   sanitizeClicked,
   sanitizePageFields,
+  sanitizeSeed,
 } from "./protocol";
 
 const PYODIDE_VERSION = "314.0.6";
@@ -52,7 +54,7 @@ del _educlub_make_import_guard
   return pyodidePromise;
 }
 
-async function runPython({ code, inputs = [], page, clicked }) {
+async function runPython({ code, inputs = [], seed, page, clicked }) {
   const source = String(code || "");
   if (!source.trim()) throw new Error("Add some Python code before selecting Run Python.");
   if (source.length > PYTHON_MAX_SOURCE_LENGTH) {
@@ -62,16 +64,30 @@ async function runPython({ code, inputs = [], page, clicked }) {
   }
 
   const pyodide = await initializePyodide();
-  const inputQueue = Array.isArray(inputs) ? inputs.map((value) => String(value)) : [];
   let stdout = "";
   let stderr = "";
+  // Plain programs get a terminal-like console where input() waits for the
+  // learner. Python + HTML pages have no console: their input comes from `page`.
+  const terminal = page === undefined ? createPythonConsole(inputs) : null;
 
-  pyodide.setStdout({ batched: (text) => (stdout = appendOutput(stdout, text)) });
+  if (terminal) {
+    const decoder = new TextDecoder();
+    pyodide.setStdout({
+      write: (buffer) => {
+        terminal.write(decoder.decode(buffer, { stream: true }));
+        return buffer.length;
+      },
+    });
+  } else {
+    pyodide.setStdout({ batched: (text) => (stdout = appendOutput(stdout, text)) });
+  }
   pyodide.setStderr({ batched: (text) => (stderr = appendOutput(stderr, text)) });
-  pyodide.setStdin({
-    stdin: () => (inputQueue.length ? inputQueue.shift() : null),
-    autoEOF: true,
-  });
+  pyodide.setStdin({ stdin: () => (terminal ? terminal.readLine() : null), autoEOF: true });
+
+  // Each answer replays the program from the top; the same seed makes random
+  // pick the same numbers again, so the replay matches what the learner saw.
+  const randomSeed = sanitizeSeed(seed);
+  if (randomSeed !== null) pyodide.runPython(`import random\nrandom.seed(${randomSeed})`);
 
   const globals = pyodide.globals.get("dict")();
   globals.set("__name__", "__main__");
@@ -84,20 +100,36 @@ async function runPython({ code, inputs = [], page, clicked }) {
     globals.set("page", pageDict);
     globals.set("clicked", sanitizeClicked(clicked));
   }
+  let result;
+  let failure;
   try {
-    const result = await pyodide.runPythonAsync(source, {
+    result = await pyodide.runPythonAsync(source, {
       globals,
       locals: globals,
       filename: "learner.py",
     });
-    let displayResult = "";
-    if (result !== undefined && result !== null) displayResult = boundedPythonText(String(result));
-    if (result && typeof result.destroy === "function") result.destroy();
-    return { stdout, stderr, result: displayResult };
+  } catch (error) {
+    failure = error;
   } finally {
+    // The console's stdout is buffered; flush it so the last print is shown.
+    pyodide.runPython("import sys\nsys.stdout.flush()\nsys.stderr.flush()");
     pageDict?.destroy();
     globals.destroy();
   }
+
+  let displayResult = "";
+  if (result !== undefined && result !== null) displayResult = boundedPythonText(String(result));
+  if (result && typeof result.destroy === "function") result.destroy();
+  if (terminal?.awaitingInput) {
+    // Waiting for an answer is not an error, even though Python saw EOFError.
+    return { stdout: terminal.text, stderr, result: "", awaitingInput: true };
+  }
+  if (failure) {
+    // What the program printed before the error stays on screen above it.
+    failure.stdout = terminal ? terminal.text : stdout;
+    throw failure;
+  }
+  return { stdout: terminal ? terminal.text : stdout, stderr, result: displayResult };
 }
 
 self.addEventListener("message", async (event) => {
@@ -119,6 +151,7 @@ self.addEventListener("message", async (event) => {
       pythonRunnerMessage("result", {
         id: message.id,
         ok: false,
+        stdout: typeof error?.stdout === "string" ? error.stdout : "",
         // Pyodide's own frames sit above the learner's; strip them so the
         // message a beginner reads starts at their own code.
         error: boundedPythonText(

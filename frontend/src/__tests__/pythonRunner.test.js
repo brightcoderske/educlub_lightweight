@@ -1,8 +1,10 @@
 import {
   boundedPythonText,
+  createPythonConsole,
   isPythonRunnerMessage,
   PYTHON_MAX_OUTPUT_LENGTH,
   pythonRunnerMessage,
+  sanitizeSeed,
 } from "../python-runner/protocol";
 import {
   disposePythonRunner,
@@ -70,5 +72,43 @@ describe("Python runner protocol", () => {
       pythonRunnerMessage("result", { id: request.id, ok: true, stdout: "hello" })
     );
     await expect(runPromise).resolves.toMatchObject({ ok: true, output: "hello" });
+  });
+});
+
+describe("Python console (live input)", () => {
+  test("stops at the first unanswered input() and echoes answers after their prompt", () => {
+    const terminal = createPythonConsole(["Ada"]);
+    terminal.write("Name? ");
+    expect(terminal.readLine()).toBe("Ada");
+    terminal.write("Hi Ada\nAge? ");
+    expect(terminal.readLine()).toBeNull();
+    expect(terminal.awaitingInput).toBe(true);
+    expect(terminal.text).toBe("Name? Ada\nHi Ada\nAge? ");
+  });
+
+  test("ignores anything printed after the program starts waiting", () => {
+    const terminal = createPythonConsole([]);
+    terminal.write("Number? ");
+    expect(terminal.readLine()).toBeNull();
+    // A program that catches the EOFError and prints on is cut at the question.
+    terminal.write("bad number\n");
+    expect(terminal.readLine()).toBeNull();
+    expect(terminal.text).toBe("Number? ");
+  });
+
+  test("a program with every answer runs to the end", () => {
+    const terminal = createPythonConsole(["2", "3"]);
+    terminal.readLine();
+    terminal.readLine();
+    terminal.write("5\n");
+    expect(terminal.awaitingInput).toBe(false);
+    expect(terminal.text).toBe("2\n3\n5\n");
+  });
+
+  test("only a whole, non-negative number is used as the random seed", () => {
+    expect(sanitizeSeed(42)).toBe(42);
+    expect(sanitizeSeed(-1)).toBeNull();
+    expect(sanitizeSeed(1.5)).toBeNull();
+    expect(sanitizeSeed("7); import os")).toBeNull();
   });
 });

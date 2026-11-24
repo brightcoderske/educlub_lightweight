@@ -599,6 +599,42 @@ DiscussionReplyCard.propTypes = {
   }).isRequired,
 };
 
+/** The learner's answer to input(), typed where the program asked for it. */
+function ConsoleAnswer({ disabled, onSubmit }) {
+  const [value, setValue] = useState("");
+  return (
+    <input
+      // The learner has just been asked a question: put the cursor there.
+      // eslint-disable-next-line jsx-a11y/no-autofocus
+      autoFocus
+      aria-label="Your answer"
+      value={value}
+      disabled={disabled}
+      onChange={(event) => setValue(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" || disabled) return;
+        event.preventDefault();
+        onSubmit(value);
+      }}
+      style={{
+        font: "inherit",
+        color: "inherit",
+        background: "#eef6ff",
+        border: "none",
+        borderBottom: "2px solid #1a73e8",
+        outline: "none",
+        minWidth: "12ch",
+        padding: "0 4px",
+      }}
+    />
+  );
+}
+
+ConsoleAnswer.propTypes = {
+  disabled: PropTypes.bool.isRequired,
+  onSubmit: PropTypes.func.isRequired,
+};
+
 function ActivityBody({
   activity,
   answers,
@@ -609,8 +645,8 @@ function ActivityBody({
   submissionText,
   submissionFile,
   codeDraft,
-  codeInput,
   codeRunning,
+  pythonAwaiting,
   htmlDraft,
   cssDraft,
   jsDraft,
@@ -621,7 +657,7 @@ function ActivityBody({
   saving,
   onAnswerChange,
   onCodeChange,
-  onCodeInputChange,
+  onPythonAnswer,
   onHtmlChange,
   onCssChange,
   onJsChange,
@@ -1182,7 +1218,9 @@ function ActivityBody({
           </MDTypography>
           {pythonActivity && (
             <MDTypography variant="caption" color="text" display="block" mt={0.5} mb={1}>
-              Write your complete Python program in this single editor, then run it below.
+              Write your complete Python program in this single editor, then run it below. When
+              your program asks a question with input(), type your answer in the output and press
+              Enter.
             </MDTypography>
           )}
           {pythonWeb && (
@@ -1256,18 +1294,6 @@ function ActivityBody({
               </MDBox>
             )}
           </Suspense>
-          {pythonActivity && (
-            <MDInput
-              label="Program input (optional)"
-              placeholder="One input() answer per line"
-              multiline
-              rows={3}
-              fullWidth
-              value={codeInput}
-              onChange={(event) => onCodeInputChange(event.target.value)}
-              sx={{ mt: 1.5 }}
-            />
-          )}
           <MDBox mt={1.5} display="flex" gap={1} flexWrap="wrap">
             <MDButton
               variant="gradient"
@@ -1301,13 +1327,23 @@ function ActivityBody({
               overflow: "auto",
               fontSize: 13,
               lineHeight: 1.6,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
             }}
           >
             {codeOutput ||
               (pythonActivity || pythonWeb
                 ? "Select Run Python to see your program output."
                 : "Select Run Code to reveal the output.")}
+            {pythonActivity && pythonAwaiting && (
+              <ConsoleAnswer disabled={codeRunning} onSubmit={onPythonAnswer} />
+            )}
           </MDBox>
+          {pythonActivity && pythonAwaiting && (
+            <MDTypography variant="caption" color="info" display="block" mt={0.5}>
+              Your program is waiting for an answer. Type it in the output and press Enter.
+            </MDTypography>
+          )}
           {codePreviewHtml && (
             <MDBox
               component="iframe"
@@ -1392,7 +1428,7 @@ ActivityBody.propTypes = {
   discussion: PropTypes.object,
   discussionReply: PropTypes.string.isRequired,
   codeDraft: PropTypes.string.isRequired,
-  codeInput: PropTypes.string.isRequired,
+  pythonAwaiting: PropTypes.bool.isRequired,
   codeRunning: PropTypes.bool.isRequired,
   htmlDraft: PropTypes.string.isRequired,
   cssDraft: PropTypes.string.isRequired,
@@ -1401,7 +1437,7 @@ ActivityBody.propTypes = {
   codePreviewHtml: PropTypes.string.isRequired,
   onPythonWebRun: PropTypes.func.isRequired,
   onCodeChange: PropTypes.func.isRequired,
-  onCodeInputChange: PropTypes.func.isRequired,
+  onPythonAnswer: PropTypes.func.isRequired,
   onHtmlChange: PropTypes.func.isRequired,
   onCssChange: PropTypes.func.isRequired,
   onJsChange: PropTypes.func.isRequired,
@@ -1951,7 +1987,10 @@ function ModuleLearn() {
   const [submissionText, setSubmissionText] = useState("");
   const [submissionFile, setSubmissionFile] = useState(null);
   const [codeDraft, setCodeDraft] = useState("");
-  const [codeInput, setCodeInput] = useState("");
+  // The live console: every answer typed so far, and the random seed that
+  // keeps each replay of the program the same as the run the learner is in.
+  const pythonSessionRef = useRef({ answers: [], seed: 0 });
+  const [pythonAwaiting, setPythonAwaiting] = useState(false);
   const [codeRunning, setCodeRunning] = useState(false);
   const [htmlDraft, setHtmlDraft] = useState("");
   const [cssDraft, setCssDraft] = useState("");
@@ -2136,7 +2175,7 @@ function ModuleLearn() {
     setSubmissionFile(null);
     const starter = starterWorkspace(activeActivity?.content || {});
     setCodeDraft(starter.code);
-    setCodeInput(starter.input);
+    setPythonAwaiting(false);
     pythonRunSequenceRef.current += 1;
     cancelPythonExecution();
     setCodeRunning(false);
@@ -2180,7 +2219,6 @@ function ModuleLearn() {
     if (work.html !== undefined) setHtmlDraft(work.html);
     if (work.css !== undefined) setCssDraft(work.css);
     if (work.js !== undefined) setJsDraft(work.js);
-    if (work.input !== undefined) setCodeInput(work.input);
     if (work.text !== undefined) setSubmissionText(work.text);
   };
   const activityDraft = useActivityDraft({
@@ -2189,7 +2227,7 @@ function ModuleLearn() {
     learnerId: data?.learner?.id,
     enabled: !previewMode,
     work: codingActivity
-      ? { code: codeDraft, html: htmlDraft, css: cssDraft, js: jsDraft, input: codeInput }
+      ? { code: codeDraft, html: htmlDraft, css: cssDraft, js: jsDraft }
       : { text: submissionText },
     starter: draftStarter,
     applyWork: applyDraftWork,
@@ -2392,27 +2430,46 @@ function ModuleLearn() {
       return;
     }
     if (isPythonActivity(activeActivity.content || {})) {
-      const runSequence = ++pythonRunSequenceRef.current;
-      setCodeRunning(true);
+      pythonSessionRef.current = { answers: [], seed: Math.floor(Math.random() * 2 ** 31) };
       setCodeOutput("Preparing Python—this first load happens only once…");
-      try {
-        const result = await runPythonInBrowser(codeDraft, {
-          inputs: codeInput.split(/\r?\n/),
-          onStatus: (status) => {
-            if (pythonRunSequenceRef.current === runSequence) setCodeOutput(status);
-          },
-        });
-        if (pythonRunSequenceRef.current === runSequence) setCodeOutput(result.output);
-      } catch (runError) {
-        if (pythonRunSequenceRef.current === runSequence) {
-          setCodeOutput(runError?.message || "Python could not run this program.");
-        }
-      } finally {
-        if (pythonRunSequenceRef.current === runSequence) setCodeRunning(false);
-      }
+      await runPythonSession(true);
       return;
     }
     setCodeOutput(`${language} remains teacher-reviewed in this release.`);
+  };
+
+  // One run of the learner's program with every answer typed so far. It stops
+  // at the next unanswered input(), and the console waits for the learner.
+  const runPythonSession = async (showStatus) => {
+    const runSequence = ++pythonRunSequenceRef.current;
+    const { answers, seed } = pythonSessionRef.current;
+    setCodeRunning(true);
+    setPythonAwaiting(false);
+    try {
+      const result = await runPythonInBrowser(codeDraft, {
+        inputs: answers,
+        seed,
+        onStatus: (status) => {
+          if (showStatus && pythonRunSequenceRef.current === runSequence) setCodeOutput(status);
+        },
+      });
+      if (pythonRunSequenceRef.current !== runSequence) return;
+      setCodeOutput(result.awaitingInput ? result.stdout : result.output);
+      setPythonAwaiting(Boolean(result.awaitingInput));
+    } catch (runError) {
+      if (pythonRunSequenceRef.current === runSequence) {
+        setCodeOutput(runError?.message || "Python could not run this program.");
+      }
+    } finally {
+      if (pythonRunSequenceRef.current === runSequence) setCodeRunning(false);
+    }
+  };
+
+  const answerPythonInput = (answer) => {
+    pythonSessionRef.current.answers.push(answer);
+    // Show the answer straight away; the replay brings back the same text.
+    setCodeOutput((current) => `${current}${answer}\n`);
+    runPythonSession(false);
   };
 
   // A Python + HTML page wants its program run: a button was clicked, or the
@@ -2869,7 +2926,7 @@ function ModuleLearn() {
                       submissionText={submissionText}
                       submissionFile={submissionFile}
                       codeDraft={codeDraft}
-                      codeInput={codeInput}
+                      pythonAwaiting={pythonAwaiting}
                       codeRunning={codeRunning}
                       htmlDraft={htmlDraft}
                       cssDraft={cssDraft}
@@ -2879,7 +2936,7 @@ function ModuleLearn() {
                       replyTarget={replyTarget}
                       onAnswerChange={updateAnswer}
                       onCodeChange={setCodeDraft}
-                      onCodeInputChange={setCodeInput}
+                      onPythonAnswer={answerPythonInput}
                       onHtmlChange={setHtmlDraft}
                       onCssChange={setCssDraft}
                       onJsChange={setJsDraft}

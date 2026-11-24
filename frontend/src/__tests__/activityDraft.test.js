@@ -75,13 +75,11 @@ it("starts every editor from the activity's starter content", () => {
       starter_html: "<h1>Hi</h1>",
       starter_css: "h1{}",
       starter_js: "",
-      sample_input: ["3", "4"],
     })
   ).toEqual({
     code: "<h1>Hi</h1>\n<style>\nh1{}\n</style>",
     html: "<h1>Hi</h1>",
     css: "h1{}",
     js: "",
-    input: "3\n4",
   });
 });

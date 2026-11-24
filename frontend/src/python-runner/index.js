@@ -71,7 +71,7 @@ function startWorker() {
   });
 }
 
-function executePython({ id, code, inputs = [], page, clicked }) {
+function executePython({ id, code, inputs = [], seed, page, clicked }) {
   if (activeRun) {
     return Promise.resolve(
       pythonRunnerMessage("result", {
@@ -107,7 +107,7 @@ function executePython({ id, code, inputs = [], page, clicked }) {
       startWorker();
     }, PYTHON_EXECUTION_TIMEOUT_MS);
     activeRun = { id, resolve, timer };
-    const payload = { id, code, inputs };
+    const payload = { id, code, inputs, seed };
     // Python + HTML pages send their field values; the worker sanitizes them again.
     if (page !== undefined) {
       payload.page = page;
@@ -153,6 +153,6 @@ startWorker();
 // A local-only hook lets browser verification exercise the real WASM runtime
 // without exposing a production debugging API.
 if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
-  globalThis.__educlubPythonRun = (code, inputs = []) =>
-    executePython({ id: `debug-${Date.now()}`, code, inputs });
+  globalThis.__educlubPythonRun = (code, inputs = [], seed) =>
+    executePython({ id: `debug-${Date.now()}`, code, inputs, seed });
 }

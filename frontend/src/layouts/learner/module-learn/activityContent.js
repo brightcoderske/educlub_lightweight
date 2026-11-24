@@ -59,13 +59,11 @@ export function starterParts(content = {}) {
 /** What every editor of a coding activity holds before the learner types. */
 export function starterWorkspace(content = {}) {
   const parts = starterParts(content);
-  const input = content.sample_input || content.stdin || "";
   return {
     code: starterCode(content),
     html: parts.html,
     css: parts.css,
     js: parts.js || "",
-    input: Array.isArray(input) ? input.join("\n") : String(input),
   };
 }
 

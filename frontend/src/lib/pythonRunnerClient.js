@@ -94,14 +94,22 @@ export function formatPythonResult(message) {
   );
 }
 
-export async function runPythonInBrowser(code, { inputs = [], page, clicked, onStatus } = {}) {
+/**
+ * Runs a program once. A plain program stops at the first input() with no
+ * answer in `inputs` and comes back with `awaitingInput: true`; the caller asks
+ * the learner, then runs it again with that answer added (and the same `seed`).
+ */
+export async function runPythonInBrowser(
+  code,
+  { inputs = [], seed, page, clicked, onStatus } = {}
+) {
   const activeRunner = getRunner();
   onStatus?.("Preparing Python—this first load happens only once…");
   await activeRunner.ready;
   onStatus?.("Running Python safely…");
   const id = `python-${Date.now()}-${nextRequestId++}`;
   const resultPromise = new Promise((resolve) => activeRunner.pending.set(id, { resolve }));
-  const payload = { id, code: String(code || ""), inputs };
+  const payload = { id, code: String(code || ""), inputs, seed };
   // Only Python + HTML runs carry page fields; plain Python runs stay unchanged.
   if (page !== undefined) {
     payload.page = Object.fromEntries(sanitizePageFields(page));

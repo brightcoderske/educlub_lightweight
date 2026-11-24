@@ -34,6 +34,50 @@ export function sanitizeClicked(value) {
   return String(value).slice(0, PYTHON_PAGE_MAX_NAME_LENGTH);
 }
 
+/**
+ * The console a plain Python program talks to, so `input()` works like a real
+ * terminal: the program stops at the first question nobody has answered yet,
+ * the learner types the answer, and the program is run again from the top with
+ * every answer so far. Answers are echoed after their prompt, as a terminal
+ * would show them.
+ *
+ * Once the program is waiting, anything it prints afterwards is ignored - so a
+ * program that catches the EOFError still shows exactly what it printed up to
+ * the question, and nothing it did after.
+ */
+export function createPythonConsole(answers = []) {
+  const queue = Array.isArray(answers) ? answers.map((answer) => String(answer)) : [];
+  let text = "";
+  let awaitingInput = false;
+  return {
+    write(chunk) {
+      if (!awaitingInput) text = boundedPythonText(text + chunk);
+    },
+    /** The next answer, or null (end of input) once the program needs a new one. */
+    readLine() {
+      if (awaitingInput) return null;
+      if (!queue.length) {
+        awaitingInput = true;
+        return null;
+      }
+      const answer = queue.shift();
+      text = boundedPythonText(`${text}${answer}\n`);
+      return answer;
+    },
+    get awaitingInput() {
+      return awaitingInput;
+    },
+    get text() {
+      return text;
+    },
+  };
+}
+
+/** A whole number seed for `random`, so a replayed program draws the same numbers. */
+export function sanitizeSeed(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
 export function pythonRunnerMessage(type, payload = {}) {
   return { ...payload, channel: PYTHON_RUNNER_CHANNEL, type };
 }
