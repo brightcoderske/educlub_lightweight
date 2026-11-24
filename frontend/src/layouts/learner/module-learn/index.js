@@ -600,6 +600,43 @@ DiscussionReplyCard.propTypes = {
 };
 
 /** The learner's answer to input(), typed where the program asked for it. */
+// The charts (plt.show()) and animations a Python run drew. Each is a PNG or
+// GIF data URL checked by sanitizePythonImages, shown as a plain picture.
+function PythonPictures({ images }) {
+  return (
+    <MDBox mt={1.5} display="flex" flexDirection="column" gap={1.5}>
+      {images.map((image, index) => (
+        <MDBox key={`${index}-${image.src.length}`}>
+          <MDBox
+            component="img"
+            src={image.src}
+            alt={image.kind === "animation" ? `Animation ${index + 1}` : `Chart ${index + 1}`}
+            sx={{
+              display: "block",
+              maxWidth: "100%",
+              height: "auto",
+              bgcolor: "#ffffff",
+              border: "1px solid #d8dee9",
+              borderRadius: "8px",
+            }}
+          />
+          {image.note && (
+            <MDTypography variant="caption" color="text" display="block" mt={0.5}>
+              {image.note}
+            </MDTypography>
+          )}
+        </MDBox>
+      ))}
+    </MDBox>
+  );
+}
+
+PythonPictures.propTypes = {
+  images: PropTypes.arrayOf(
+    PropTypes.shape({ kind: PropTypes.string, src: PropTypes.string, note: PropTypes.string })
+  ).isRequired,
+};
+
 function ConsoleAnswer({ disabled, onSubmit }) {
   const [value, setValue] = useState("");
   return (
@@ -651,6 +688,7 @@ function ActivityBody({
   cssDraft,
   jsDraft,
   codeOutput,
+  pythonImages,
   codePreviewHtml,
   quizResult,
   replyTarget,
@@ -1344,6 +1382,9 @@ function ActivityBody({
               Your program is waiting for an answer. Type it in the output and press Enter.
             </MDTypography>
           )}
+          {pythonActivity && pythonImages.length > 0 && (
+            <PythonPictures images={pythonImages} />
+          )}
           {codePreviewHtml && (
             <MDBox
               component="iframe"
@@ -1434,6 +1475,9 @@ ActivityBody.propTypes = {
   cssDraft: PropTypes.string.isRequired,
   jsDraft: PropTypes.string.isRequired,
   codeOutput: PropTypes.string.isRequired,
+  pythonImages: PropTypes.arrayOf(
+    PropTypes.shape({ kind: PropTypes.string, src: PropTypes.string, note: PropTypes.string })
+  ).isRequired,
   codePreviewHtml: PropTypes.string.isRequired,
   onPythonWebRun: PropTypes.func.isRequired,
   onCodeChange: PropTypes.func.isRequired,
@@ -1996,6 +2040,8 @@ function ModuleLearn() {
   const [cssDraft, setCssDraft] = useState("");
   const [jsDraft, setJsDraft] = useState("");
   const [codeOutput, setCodeOutput] = useState("");
+  // Charts and animations from the last Python run: PNG/GIF data URLs only.
+  const [pythonImages, setPythonImages] = useState([]);
   const [codePreviewHtml, setCodePreviewHtml] = useState("");
   const [quizResult, setQuizResult] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2408,6 +2454,7 @@ function ModuleLearn() {
     if (!activeActivity) return;
     const language = activeActivity.content?.language || "javascript";
     setCodePreviewHtml("");
+    setPythonImages([]);
     if (isPythonWebActivity(activeActivity.content || {})) {
       // The page runs the Python itself - once as it loads, then on every click.
       setCodePreviewHtml(pythonWebPreview(htmlDraft, cssDraft, ++pythonRunSequenceRef.current));
@@ -2454,7 +2501,8 @@ function ModuleLearn() {
         },
       });
       if (pythonRunSequenceRef.current !== runSequence) return;
-      setCodeOutput(result.awaitingInput ? result.stdout : result.output);
+      setCodeOutput(result.output);
+      setPythonImages(result.images || []);
       setPythonAwaiting(Boolean(result.awaitingInput));
     } catch (runError) {
       if (pythonRunSequenceRef.current === runSequence) {
@@ -2932,6 +2980,7 @@ function ModuleLearn() {
                       cssDraft={cssDraft}
                       jsDraft={jsDraft}
                       codeOutput={codeOutput}
+                      pythonImages={pythonImages}
                       codePreviewHtml={codePreviewHtml}
                       replyTarget={replyTarget}
                       onAnswerChange={updateAnswer}

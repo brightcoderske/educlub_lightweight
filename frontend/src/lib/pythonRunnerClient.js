@@ -4,7 +4,9 @@ import {
   PYTHON_STARTUP_TIMEOUT_MS,
   pythonRunnerMessage,
   sanitizeClicked,
+  sanitizeNotices,
   sanitizePageFields,
+  sanitizePythonImages,
 } from "../python-runner/protocol";
 
 let runner;
@@ -53,6 +55,14 @@ function createRunner() {
       readyReject(new Error(boundedPythonText(message.error)));
       return;
     }
+    if (message.type === "status") {
+      // "Loading numpy… (first time only)" while a library downloads.
+      const request = pending.get(message.id);
+      if (request?.onStatus && typeof message.text === "string") {
+        request.onStatus(boundedPythonText(message.text, 200));
+      }
+      return;
+    }
     if (message.type !== "result") return;
     const request = pending.get(message.id);
     if (!request) return;
@@ -83,15 +93,23 @@ function getRunner() {
   return runner;
 }
 
+/**
+ * What the output box shows. Notes (a skipped `pip install` line, a chart that
+ * was cut short) come first. A program waiting at input() shows exactly what
+ * it printed so far, so the answer box sits right after the question.
+ */
 export function formatPythonResult(message) {
-  const sections = [];
-  if (message.stdout) sections.push(message.stdout);
-  if (message.stderr) sections.push(message.stderr);
-  if (message.result) sections.push(message.result);
-  if (message.error) sections.push(message.error);
-  return boundedPythonText(
-    sections.filter(Boolean).join("\n") || "Program finished with no output."
-  );
+  const notices = sanitizeNotices(message.notices);
+  const noticeText = notices.length ? `${notices.join("\n")}\n\n` : "";
+  if (message.awaitingInput) return boundedPythonText(`${noticeText}${message.stdout || ""}`);
+  const program = [message.stdout, message.stderr, message.result, message.error]
+    .filter(Boolean)
+    .join("\n");
+  if (!program && !noticeText) {
+    // A program that only draws a chart has the chart to show for itself.
+    return sanitizePythonImages(message.images).length ? "" : "Program finished with no output.";
+  }
+  return boundedPythonText(`${noticeText}${program}`.trimEnd());
 }
 
 /**
@@ -108,7 +126,9 @@ export async function runPythonInBrowser(
   await activeRunner.ready;
   onStatus?.("Running Python safely…");
   const id = `python-${Date.now()}-${nextRequestId++}`;
-  const resultPromise = new Promise((resolve) => activeRunner.pending.set(id, { resolve }));
+  const resultPromise = new Promise((resolve) =>
+    activeRunner.pending.set(id, { resolve, onStatus })
+  );
   const payload = { id, code: String(code || ""), inputs, seed };
   // Only Python + HTML runs carry page fields; plain Python runs stay unchanged.
   if (page !== undefined) {
@@ -120,7 +140,11 @@ export async function runPythonInBrowser(
     activeRunner.origin
   );
   const result = await resultPromise;
-  return { ...result, output: formatPythonResult(result) };
+  return {
+    ...result,
+    images: sanitizePythonImages(result.images),
+    output: formatPythonResult(result),
+  };
 }
 
 export function cancelPythonExecution() {

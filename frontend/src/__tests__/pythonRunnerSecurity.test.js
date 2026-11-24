@@ -30,16 +30,21 @@ describe("Python runner security and performance boundaries", () => {
 
   test("the worker restricts JavaScript bridges and package/network imports", () => {
     const worker = read("src/python-runner/python.worker.mjs");
+    const runtime = read("src/python-runner/pythonRuntime.js");
     expect(worker).toContain("jsglobals: safeJavaScriptGlobals");
-    expect(worker).toContain('"js"');
-    expect(worker).toContain('"micropip"');
-    expect(worker).toContain('"pyodide.http"');
-    expect(worker).not.toContain("loadPackagesFromImports");
+    expect(worker).toContain("importGuardPython()");
+    expect(runtime).toContain('"js"');
+    expect(runtime).toContain('"micropip"');
+    expect(runtime).toContain('"pyodide.http"');
+    // Libraries are loaded by the runner's own code from the Pyodide index,
+    // never through micropip, and never for a name on the blocked list.
+    expect(worker).toContain("NEVER_LOADED_IMPORTS.has(name)");
+    expect(worker).not.toMatch(/micropip\.install/);
   });
 
   test("the worker shows learners their own frames, not Pyodide's", () => {
     expect(read("src/python-runner/python.worker.mjs")).toContain(
-      "learnerFacingError(error?.message)"
+      "friendlyPythonError(error?.message)"
     );
   });
 
